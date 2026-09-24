@@ -1,0 +1,145 @@
+@import (reference) '../variables.less';
+@import (reference) '../mixins.less';
+@import (reference) '../motion.less';
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  // 作为 grid 子项需允许收缩，否则内容会把整列撑高
+  min-height: 0;
+  background: var(--bg);
+}
+
+// 顶栏、正文、输入条共用同一条中轴，三者的左右边界由此对齐
+.chat__head {
+  .content-gutter();
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+// 模型名是这里最常被确认的信息，固定为等宽小字
+.chat__model {
+  font-family: @font-mono;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.chat__list {
+  .content-gutter();
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 26px;
+  overflow-y: auto;
+  padding-top: 28px;
+  padding-bottom: 32px;
+  // 稳定滚动条会固定占用 10px，右内边距相应减少，正文右边界才能与顶栏、输入条对齐
+  padding-right: ~'max(14px, calc((100% - @{content-max}) / 2 - 10px))';
+  // flex 子项默认 min-height:auto 会拒绝收缩，导致滚动条落到 body 上
+  min-height: 0;
+  // 滚动到两端时避免子元素被卡片边缘裁切
+  scrollbar-gutter: stable;
+  // 工作纸底纹：极淡的点阵仅出现在对话区，暗示这是一块“可书写的面”
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+// 空状态：衬线标题配一行说明，像一张空白文档的开头
+.chat__placeholder {
+  .enter();
+  margin: auto;
+  max-width: 420px;
+  text-align: center;
+}
+
+.chat__placeholder-title {
+  margin: 0 0 10px;
+  font-family: @font-display;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.chat__placeholder-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+// 错误提示：左侧细色条代替整块圆角底，与其他“行内提示”区分
+.chat__error {
+  .content-gutter(margin);
+  padding: 9px 14px;
+  border-left: 2px solid var(--danger);
+  border-radius: 0 @radius-sm @radius-sm 0;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.chat__foot {
+  .content-gutter();
+  flex: none;
+  padding-top: 14px;
+  padding-bottom: 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+// 输入条：文本域与操作按钮共用一个外框，聚焦时整条一起高亮，
+// 避免出现“一个方框加一个孤零零按钮”的拼接感。
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px 10px 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+
+  &:focus-within {
+    .focus-ring();
+  }
+}
+
+.composer__input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.65;
+  resize: none;
+  // 聚焦态由外层 .composer 统一表达
+  outline: none;
+
+  &::placeholder {
+    color: var(--text-faint);
+  }
+}
+
+// 输入条内的按钮：胶囊形，与外框圆角形成内嵌关系
+.composer .btn {
+  padding: 9px 22px;
+  border-radius: @radius-pill;
+  font-size: 13px;
+  // 两字按钮加一点字距，避免拥挤
+  letter-spacing: 0.08em;
+}

@@ -1,0 +1,59 @@
+@import (reference) 'variables.less';
+@import (reference) 'mixins.less';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: @font-sans;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--bg);
+  // 窗口级滚动会把输入框一起滚走，滚动全部收敛到各面板内部
+  overflow: hidden;
+  // 字体渲染交给系统，避免细体在小字号下发虚
+  -webkit-font-smoothing: antialiased;
+}
+
+// 选中文字沿用强调色的柔和变体，与界面配色同源
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+// 细化滚动条：用透明边框做出内缩效果，不占满贴边
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: @radius-pill;
+  background: var(--scrollbar);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}

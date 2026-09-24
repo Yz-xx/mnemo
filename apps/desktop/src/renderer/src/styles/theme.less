@@ -1,0 +1,102 @@
+@import (reference) 'variables.less';
+
+// 主题色板：两套色板封装为 mixin，供 [data-theme] 与系统偏好兜底共同引用，
+// 避免同一组颜色在多处重复定义。
+
+// 深色主题：墨底配青绿强调色，中性色带一点冷调，避免纯灰的廉价感
+.theme-dark() {
+  color-scheme: dark;
+
+  --bg: #0d1011;
+  --bg-panel: #14181a;
+  --bg-elevated: #1c2123;
+  --border: #262c2e;
+  --border-strong: #364042;
+  --text: #e9ebe8;
+  --text-muted: #939c98;
+  --text-faint: #6e7873;
+  --accent: #35c4b5;
+  --accent-soft: rgba(53, 196, 181, 0.14);
+  // 青绿底上用深墨字而非白字，对比更足也更耐看
+  --on-accent: #05201d;
+  --danger: #ef6b6b;
+  --danger-soft: rgba(239, 107, 107, 0.12);
+  --success: #4cc38a;
+  --code-bg: rgba(255, 255, 255, 0.06);
+  --pre-bg: #101415;
+  --scrollbar: #2b3334;
+  --scrollbar-hover: #3d4849;
+  --mask: rgba(4, 8, 9, 0.6);
+  // 对话区背景的点阵纹理
+  --grid-dot: rgba(233, 235, 232, 0.045);
+}
+
+// 亮色主题：纸感底色配深青绿，整体偏暖，与深色的墨底形成“同一套版面的昼夜两面”
+.theme-light() {
+  color-scheme: light;
+
+  --bg: #f7f5f1;
+  --bg-panel: #fffefb;
+  --bg-elevated: #efebe4;
+  --border: #e2ddd4;
+  --border-strong: #cbc3b6;
+  --text: #171b1a;
+  --text-muted: #667069;
+  --text-faint: #969e97;
+  --accent: #0f8f84;
+  --accent-soft: rgba(15, 143, 132, 0.12);
+  // 纸面上强调色较深，配白字保证对比度
+  --on-accent: #ffffff;
+  --danger: #c93a3a;
+  --danger-soft: rgba(201, 58, 58, 0.1);
+  --success: #1a9e6a;
+  --code-bg: rgba(23, 27, 26, 0.06);
+  --pre-bg: #f1ede6;
+  --scrollbar: #d0c9be;
+  --scrollbar-hover: #b6ada0;
+  --mask: rgba(23, 27, 26, 0.28);
+  // 对话区背景的点阵纹理
+  --grid-dot: rgba(23, 27, 26, 0.05);
+}
+
+// 深色为默认值
+:root {
+  .theme-dark();
+}
+
+[data-theme='light'] {
+  .theme-light();
+}
+
+// 首帧兜底：data-theme 由渲染进程脚本写入，在此之前跟随系统偏好；
+// 主进程已按持久化设置设定 nativeTheme.themeSource，因此这里的结果与用户选择一致。
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    .theme-light();
+  }
+}
+
+// 需要随主题渐变的表面元素：只列大面积色块，文字颜色不参与过渡。
+// 深/亮互换时前景色与背景色若同时插值，亮度必然在中途交叉，文字会短暂失去
+// 对比度；对全部元素（*）做颜色过渡还会让每个文本片段反复重算字体抗锯齿，
+// 两者都会表现为“字闪一下”。
+@theme-surfaces: ~'body, .sidebar, .chat, .chat__error, .composer, .message__avatar, .message__content, .markdown pre, .markdown code, .drawer__panel, .drawer__mask, .field__input, .doc, .session, .tab--active, .btn, .icon-btn, .chip';
+
+// 主题切换时的临时过渡：由 useTheme 在切换瞬间挂到根节点，动画结束即移除。
+.theme-transition {
+  @{theme-surfaces} {
+    // 用 ease-out 让背景尽快贴近目标色，缩短文字与背景同色的时间
+    transition:
+      background-color @theme-transition ease-out,
+      border-color @theme-transition ease-out;
+  }
+}
+
+// 尊重系统的“减弱动效”设置
+@media (prefers-reduced-motion: reduce) {
+  .theme-transition {
+    @{theme-surfaces} {
+      transition: none;
+    }
+  }
+}

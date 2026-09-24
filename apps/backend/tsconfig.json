@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Node 原生 ESM：使用 NodeNext 模块解析，导入需带 .js 后缀
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false,
+    "declaration": false
+  },
+  "include": ["src/**/*.ts"],
+  // 单元测试由 vitest 直接运行，不参与编译产物
+  "exclude": ["src/**/*.test.ts"]
+}

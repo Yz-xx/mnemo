@@ -1,0 +1,20 @@
+{
+  "name": "@repo/frontend",
+  "version": "0.0.0",
+  "private": true,
+  "description": "前端应用（Vue 3 + Vite + TypeScript）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@repo/components": "workspace:*",
+    "@repo/shared": "workspace:*",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "vue-tsc": "^3.3.11"
+  }
+}

@@ -1,0 +1,15 @@
+# pnpm 工作区：公共包与业务应用分别收纳
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# 允许执行安装脚本的依赖（pnpm 11+ 用 allowBuilds 取代 onlyBuiltDependencies）
+# esbuild 需要 postinstall 校验平台原生二进制（tsx / Vite 均依赖它）
+# electron 需要 postinstall 下载对应平台的 Electron 运行时二进制
+allowBuilds:
+  esbuild: true
+  electron: true
+  electron-winstaller: true
+
+minimumReleaseAgeExclude:
+  - electron@44.4.5

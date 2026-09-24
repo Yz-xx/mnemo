@@ -1,0 +1,11 @@
+# Prettier 忽略目录与产物
+node_modules
+dist
+out
+release
+coverage
+pnpm-lock.yaml
+*.tsbuildinfo
+
+# IDE 技能描述目录，不纳入仓库格式规范
+.SKILLS

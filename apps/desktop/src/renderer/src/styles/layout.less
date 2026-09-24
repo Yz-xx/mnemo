@@ -1,0 +1,8 @@
+@import (reference) 'variables.less';
+
+// 应用骨架：左侧会话栏固定宽度，右侧对话区自适应
+.shell {
+  display: grid;
+  grid-template-columns: @sidebar-width 1fr;
+  height: 100vh;
+}

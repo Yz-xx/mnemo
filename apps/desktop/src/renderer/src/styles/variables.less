@@ -1,0 +1,22 @@
+// 与主题无关的设计令牌：尺寸、时长、字体在此统一维护
+
+// 尺寸与形状
+@sidebar-width: 272px;
+// 对话正文最大行宽：过宽的一行会明显降低长文阅读效率
+@content-max: 780px;
+@radius: 8px;
+@radius-sm: 4px;
+@radius-pill: 999px;
+
+// 动效时长；主题切换值需与 useTheme.ts 中的 TRANSITION_MS 保持一致
+@theme-transition: 240ms;
+@enter: 320ms;
+@enter-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+// 字体分工：显示字体承担品牌与标题，无衬线承担正文，等宽承担“机器信息”
+// （模型名、时间、片段数、代码）。三者都是系统已装字体，无需外部下载。
+@font-display: 'Iowan Old Style', 'Palatino Linotype', Constantia, 'Source Han Serif SC',
+  'Noto Serif SC', 'Songti SC', SimSun, Georgia, serif;
+@font-sans: 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
+  system-ui, sans-serif;
+@font-mono: 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;

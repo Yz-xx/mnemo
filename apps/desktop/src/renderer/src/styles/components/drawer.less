@@ -1,0 +1,168 @@
+@import (reference) '../variables.less';
+@import (reference) '../mixins.less';
+
+// 设置抽屉：右侧滑出面板，遮罩点击关闭
+.drawer {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer__mask {
+  position: absolute;
+  inset: 0;
+  background: var(--mask);
+  animation: fade 0.18s ease-out backwards;
+}
+
+.drawer__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  max-width: 90vw;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.22);
+  animation: slide-in 0.24s @enter-ease backwards;
+}
+
+// 抽屉专用：从右侧滑入，与遮罩的淡入一起构成一次完整的打开动效
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.drawer__head {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.drawer__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.tabs {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+}
+
+.tab {
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: @radius-pill;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+
+  &:hover {
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+
+  // 选中态用强调色的柔和底而非描边，与列表选中项的克制风格一致
+  &--active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.field__label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.field__input {
+  // 抽屉底色比面板浅，输入框改用窗口底色形成层次
+  .surface(var(--bg));
+  padding: 10px 12px;
+  font-size: 14px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+
+  &:focus {
+    .focus-ring();
+  }
+
+  &--area {
+    resize: vertical;
+    line-height: 1.65;
+  }
+}
+
+.doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: @radius-sm;
+  background: var(--bg-panel);
+  transition: border-color 0.16s ease;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+}
+
+.doc__title {
+  .ellipsis();
+  font-size: 14px;
+}
+
+.doc__meta {
+  .ellipsis();
+  flex: none;
+  max-width: 45%;
+  color: var(--text-faint);
+  font-family: @font-mono;
+  font-size: 11px;
+}

@@ -1,0 +1,18 @@
+# Windows 桌面端打包配置（electron-builder）
+appId: com.repo.agent.desktop
+productName: AgentDesktop
+directories:
+  output: release
+# 只打包构建产物与包描述，源码不进入安装包
+files:
+  - out/**
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true

@@ -1,0 +1,63 @@
+@import (reference) 'variables.less';
+
+// 动效集中在此：入场位移刻意做得很小，长文界面里大幅运动会干扰阅读。
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+// 状态点呼吸：用 currentColor 取用状态点自身的颜色，扩散到透明即完成一次脉冲
+@keyframes breathe {
+  from {
+    box-shadow: 0 0 0 0 currentColor;
+  }
+
+  to {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+// 等待首个 token 时的三点脉冲
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/** 入场：加在需要“淡入上移”的容器上 */
+.enter() {
+  animation: rise @enter @enter-ease backwards;
+}
+
+// 尊重系统的“减弱动效”设置
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // 主进程需要 Node 类型，渲染进程的 DOM 类型由基础配置统一提供
+    "types": ["node"],
+    "noEmit": true,
+    "paths": {
+      "@renderer/*": ["./src/renderer/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "electron.vite.config.ts"]
+}
