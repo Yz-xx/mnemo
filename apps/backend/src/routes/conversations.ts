@@ -1,16 +1,17 @@
 import { Router } from 'express';
+import { currentUserId } from '../auth/middleware.js';
 import type { ConversationStore } from '../conversation/store.js';
 
-/** 会话管理接口 */
+/** 会话管理接口：全部按当前登录用户隔离 */
 export function createConversationRouter(conversations: ConversationStore): Router {
   const router = Router();
 
-  router.get('/', (_req, res) => {
-    res.json(conversations.list());
+  router.get('/', async (_req, res) => {
+    res.json(await conversations.list(currentUserId(res)));
   });
 
-  router.get('/:id', (req, res) => {
-    const conversation = conversations.get(req.params.id);
+  router.get('/:id', async (req, res) => {
+    const conversation = await conversations.get(currentUserId(res), req.params.id);
     if (!conversation) {
       res.status(404).json({ message: '会话不存在' });
       return;
@@ -18,8 +19,8 @@ export function createConversationRouter(conversations: ConversationStore): Rout
     res.json(conversation);
   });
 
-  router.delete('/:id', (req, res) => {
-    if (!conversations.remove(req.params.id)) {
+  router.delete('/:id', async (req, res) => {
+    if (!(await conversations.remove(currentUserId(res), req.params.id))) {
       res.status(404).json({ message: '会话不存在' });
       return;
     }

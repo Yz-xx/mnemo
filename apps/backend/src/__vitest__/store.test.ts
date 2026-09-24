@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Embeddings } from '@langchain/core/embeddings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { KnowledgeStore } from './store.js';
+import { KnowledgeStore } from '../rag/store.js';
 
 // 部分环境对系统临时目录的文件删除受限，统一使用项目内的临时目录
 const TEST_ROOT = path.resolve(process.cwd(), '.tmp');

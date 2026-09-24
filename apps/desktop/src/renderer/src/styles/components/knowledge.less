@@ -1,0 +1,42 @@
+@import (reference) '../variables.less';
+@import (reference) '../mixins.less';
+
+// 知识库面板：已入库文档列表
+.doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: @radius-sm;
+  background: var(--bg-panel);
+  transition: border-color 0.16s ease;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+}
+
+.doc__title {
+  .ellipsis();
+  font-size: 14px;
+}
+
+.doc__meta {
+  .ellipsis();
+  flex: none;
+  max-width: 45%;
+  color: var(--text-faint);
+  font-family: @font-mono;
+  font-size: 11px;
+}

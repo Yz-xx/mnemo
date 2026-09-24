@@ -24,6 +24,18 @@ export interface Conversation extends ConversationSummary {
   messages: ChatMessage[];
 }
 
+/** 登录用户（服务端不会返回密码字段） */
+export interface AuthUser {
+  id: number;
+  username: string;
+}
+
+/** 登录/注册成功后的会话信息：令牌用于后续请求鉴权 */
+export interface AuthSession {
+  token: string;
+  user: AuthUser;
+}
+
 /** 知识库文档摘要 */
 export interface KnowledgeDocument {
   id: string;

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
-import { AgentApi, type HealthInfo } from '../api/client';
-import type { ChatMessage, ConversationSummary } from '../types';
+import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client';
+import type { ChatMessage, ChatStreamEvent, ConversationSummary } from '../types';
+import { useAuth } from './useAuth';
 
 const DEFAULT_BACKEND_URL = 'http://localhost:3000';
 
@@ -8,8 +9,10 @@ export type ConnectionState = 'idle' | 'online' | 'offline';
 
 /** 桌面端会话状态与流式对话逻辑 */
 export function useChat() {
+  const { token, clear } = useAuth();
   const backendUrl = ref(DEFAULT_BACKEND_URL);
-  const api = computed(() => new AgentApi(backendUrl.value));
+  // 令牌变化时自动重建客户端，保证每次请求都携带当前登录态
+  const api = computed(() => new AgentApi(backendUrl.value, token.value));
 
   const connection = ref<ConnectionState>('idle');
   const health = ref<HealthInfo | null>(null);
@@ -23,6 +26,28 @@ export function useChat() {
   let controller: AbortController | null = null;
 
   const canSend = computed(() => connection.value === 'online' && !streaming.value);
+
+  /** 统一的请求错误处理：令牌失效时清理登录态，界面自动回到登录页 */
+  function handleError(error: unknown): void {
+    if (isUnauthorized(error)) {
+      errorMessage.value = '登录已失效，请重新登录';
+      void clear();
+      return;
+    }
+    errorMessage.value = toMessage(error);
+  }
+
+  /** 退出登录或令牌失效时清空本地会话数据，避免上一个账号的内容残留在界面上 */
+  function reset(): void {
+    controller?.abort();
+    controller = null;
+    activeId.value = null;
+    conversations.value = [];
+    messages.value = [];
+    errorMessage.value = '';
+    connection.value = 'idle';
+    health.value = null;
+  }
 
   /** 探测后端可用性，同时刷新当前模型信息 */
   async function refreshHealth(): Promise<void> {
@@ -39,8 +64,9 @@ export function useChat() {
   async function refreshConversations(): Promise<void> {
     try {
       conversations.value = await api.value.listConversations();
-    } catch {
+    } catch (error) {
       conversations.value = [];
+      if (isUnauthorized(error)) await clear();
     }
   }
 
@@ -61,7 +87,7 @@ export function useChat() {
       activeId.value = detail.id;
       messages.value = detail.messages;
     } catch (error) {
-      errorMessage.value = toMessage(error);
+      handleError(error);
     } finally {
       loadingConversation.value = false;
     }
@@ -73,7 +99,7 @@ export function useChat() {
       if (id === activeId.value) startNewConversation();
       await refreshConversations();
     } catch (error) {
-      errorMessage.value = toMessage(error);
+      handleError(error);
     }
   }
 
@@ -94,23 +120,23 @@ export function useChat() {
     controller = currentController;
 
     try {
-      const stream = api.value.streamChat(
-        { conversationId: activeId.value ?? undefined, message: content },
-        currentController.signal,
+      await consumeChatStream(
+        api.value.streamChat(
+          { conversationId: activeId.value ?? undefined, message: content },
+          currentController.signal,
+        ),
+        assistant.value,
+        {
+          // done 事件由后端确认会话 ID，随后刷新列表以更新标题与排序
+          onDone: async (conversationId) => {
+            activeId.value = conversationId;
+            await refreshConversations();
+          },
+          onError: (message) => {
+            errorMessage.value = message;
+          },
+        },
       );
-      for await (const event of stream) {
-        if (event.type === 'token') {
-          assistant.value.content += event.content;
-        } else if (event.type === 'tool') {
-          const label = event.status === 'start' ? `调用工具 ${event.name}` : `完成 ${event.name}`;
-          assistant.value.steps = [...(assistant.value.steps ?? []), label];
-        } else if (event.type === 'done') {
-          activeId.value = event.conversationId;
-          await refreshConversations();
-        } else if (event.type === 'error') {
-          errorMessage.value = event.message;
-        }
-      }
     } catch (error) {
       // 用户主动中断不算错误
       if (!currentController.signal.aborted) errorMessage.value = toMessage(error);
@@ -157,6 +183,7 @@ export function useChat() {
     errorMessage,
     canSend,
     init,
+    reset,
     refreshHealth,
     sendMessage,
     stopStreaming,
@@ -173,4 +200,35 @@ function createMessage(role: ChatMessage['role'], content: string): ChatMessage 
 
 function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** 消费流式事件时需要回传给会话层的副作用 */
+interface ChatStreamHandlers {
+  /** 本轮结束，携带后端确认的会话 ID */
+  onDone: (conversationId: string) => Promise<void>;
+  /** 后端返回的可读错误信息 */
+  onError: (message: string) => void;
+}
+
+/**
+ * 逐条消费 SSE 事件并合并进助手消息：token 累加正文，tool 追加为执行轨迹；
+ * 会话级副作用（切换会话、报错提示）通过回调交回调用方，保持此处逻辑纯粹。
+ */
+async function consumeChatStream(
+  stream: AsyncIterable<ChatStreamEvent>,
+  message: ChatMessage,
+  handlers: ChatStreamHandlers,
+): Promise<void> {
+  for await (const event of stream) {
+    if (event.type === 'token') {
+      message.content += event.content;
+    } else if (event.type === 'tool') {
+      const label = event.status === 'start' ? `调用工具 ${event.name}` : `完成 ${event.name}`;
+      message.steps = [...(message.steps ?? []), label];
+    } else if (event.type === 'done') {
+      await handlers.onDone(event.conversationId);
+    } else {
+      handlers.onError(event.message);
+    }
+  }
 }

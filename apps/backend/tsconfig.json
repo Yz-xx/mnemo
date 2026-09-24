@@ -13,5 +13,5 @@
   },
   "include": ["src/**/*.ts"],
   // 单元测试由 vitest 直接运行，不参与编译产物
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/__vitest__"]
 }

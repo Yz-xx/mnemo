@@ -7,9 +7,19 @@ export type LlmProvider = 'ollama' | 'deepseek';
 /** 向量化提供方：DeepSeek 不提供 embedding 接口，故与对话模型独立配置 */
 export type EmbeddingProvider = 'ollama' | 'openai';
 
+/** MySQL 连接参数：用户与对话记录持久化在此库中 */
+export interface MysqlConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+}
+
 export interface AppConfig {
   port: number;
   dataDir: string;
+  mysql: MysqlConfig;
   llm: {
     provider: LlmProvider;
     temperature: number;
@@ -47,6 +57,13 @@ export function loadConfig(): AppConfig {
   return {
     port: toNumber(process.env.PORT, 3000),
     dataDir: process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data'),
+    mysql: {
+      host: process.env.MYSQL_HOST ?? '127.0.0.1',
+      port: toNumber(process.env.MYSQL_PORT, 3306),
+      user: process.env.MYSQL_USER ?? 'root',
+      password: process.env.MYSQL_PASSWORD ?? '123456',
+      database: process.env.MYSQL_DATABASE ?? 'agent_data',
+    },
     llm: {
       provider: process.env.LLM_PROVIDER === 'deepseek' ? 'deepseek' : 'ollama',
       temperature: toNumber(process.env.LLM_TEMPERATURE, 0.3),

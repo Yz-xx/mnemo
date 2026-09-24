@@ -1,9 +1,11 @@
 # AI 智能体桌面应用（my-monorepo）
 
-一个可本地运行的 AI 智能体应用：**Electron 桌面端**负责交互，**Express + LangChain 后端**负责推理与工具调用，并内置一套**轻量 RAG 知识库**。整个仓库由 pnpm workspace 统一管理，一条命令即可拉起全链路。
+一个可本地运行的 AI 智能体应用：**Electron 桌面端**负责交互，**Express + LangChain 后端**负责推理与工具调用，账号与对话记录持久化在 **MySQL**，并内置一套**轻量 RAG 知识库**。整个仓库由 pnpm workspace 统一管理，一条命令即可拉起全链路。
 
 - 桌面端：Electron 44 + Vue 3 + TypeScript + Less（electron-vite 构建）
-- 后端：Express 5 + LangChain 1.x（`@langchain/ollama` / `@langchain/openai`）+ zod
+- 后端：Express 5 + LangChain 1.x（`@langchain/ollama` / `@langchain/openai`）+ zod + mysql2
+- 存储：MySQL 保存用户、登录会话与对话记录；知识库仍为本地 JSON
+- 账号：注册 / 登录 / 登出，密码经 DES 加密后入库，接口以 Bearer 令牌鉴权
 - 模型：默认本地 Ollama（`qwen2.5:7b` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
 ---
@@ -15,25 +17,43 @@ my-monorepo/
 ├── apps/
 │   ├── backend/              # 智能体后端服务（Express + LangChain）
 │   │   ├── src/
-│   │   │   ├── index.ts              # 组合根：装配依赖并启动服务
+│   │   │   ├── index.ts              # 组合根：装配依赖、启动清理会话并监听端口
 │   │   │   ├── config.ts             # 环境变量 → AppConfig
-│   │   │   ├── app.ts                # createApp：中间件与路由挂载
+│   │   │   ├── app.ts                # createApp：组装中间件、注册路由与错误兜底
+│   │   │   ├── dependencies.ts       # AppDependencies：路由层依赖契约（避免反向依赖）
+│   │   │   ├── middleware/
+│   │   │   │   ├── cors.ts           # 跨域放行（桌面端 file:// 场景）
+│   │   │   │   └── errorHandler.ts   # 兜底错误处理
+│   │   │   ├── auth/
+│   │   │   │   ├── credentials.ts    # 用户名/密码格式校验
+│   │   │   │   ├── userStore.ts      # 用户表读写（密码 DES 加密入库）
+│   │   │   │   ├── sessionStore.ts   # 登录会话表（签发 / 校验 / 单端登录清理）
+│   │   │   │   └── middleware.ts     # Bearer 令牌鉴权中间件
+│   │   │   ├── db/
+│   │   │   │   ├── pool.ts           # mysql2 连接池
+│   │   │   │   └── schema.ts         # 启动自动建库建表
 │   │   │   ├── llm/
 │   │   │   │   ├── model.ts          # 对话模型 / 向量模型工厂
 │   │   │   │   ├── agent.ts          # AgentService：ReAct 智能体与流式桥接
 │   │   │   │   └── tools.ts          # 三个工具：检索 / 时间 / 计算
 │   │   │   ├── rag/store.ts          # 知识库：切分 + 向量化 + 余弦检索
-│   │   │   ├── conversation/store.ts # 会话持久化（一会话一 JSON）
-│   │   │   └── routes/               # chat / conversations / knowledge
-│   │   └── data/                     # 运行时数据（会话与知识库，已被 gitignore）
+│   │   │   ├── conversation/store.ts # 会话与消息持久化（MySQL，按用户隔离）
+│   │   │   ├── services/chatStream.ts # SSE 流式回复编排（推送事件 + 落库）
+│   │   │   ├── routes/               # 各接口路由，index.ts 统一注册（含健康检查）
+│   │   │   └── __vitest__/           # 单元测试（vitest 运行，不参与编译）
+│   │   └── data/                     # 运行时数据（知识库 JSON，已被 gitignore）
 │   ├── desktop/              # Electron 桌面端
 │   │   └── src/
-│   │       ├── main/index.ts         # 主进程：窗口、设置、主题、IPC
+│   │       ├── main/                 # 主进程：index.ts 只留生命周期，其余按职责分模块
+│   │       │   ├── settings.ts       # settings.json 读写与默认值
+│   │       │   ├── theme.ts          # 主题同步与窗口底色
+│   │       │   ├── window.ts         # 主窗口创建
+│   │       │   └── ipc.ts            # IPC 处理器注册
 │   │       ├── preload/              # 预加载层：contextBridge 白名单 API
 │   │       └── renderer/             # 渲染进程：Vue 3 界面与状态
 │   └── frontend/             # 示例 Web 前端（脚手架预留）
 ├── packages/
-│   ├── shared/               # 通用工具库（capitalize / truncate 等）
+│   ├── shared/               # 通用工具库（DES 加解密 / capitalize / truncate 等）
 │   └── components/           # 公共 Vue 组件库（Vite 库模式）
 ├── scripts/                  # dev / build / lint / test 编排脚本
 ├── pnpm-workspace.yaml
@@ -47,14 +67,18 @@ my-monorepo/
 ```text
 ┌──────────────────────────── 桌面端（Electron） ────────────────────────────┐
 │  主进程                       preload                    渲染进程 (Vue 3)   │
-│  ├ 窗口创建 / 主题同步   ←──→ IPC 白名单 ←──→  useChat / useTheme          │
-│  ├ settings.json 持久化        desktopApi                SessionSidebar     │
-│  └ nativeTheme.themeSource                               ChatWindow         │
+│  ├ 窗口创建 / 主题同步   ←──→ IPC 白名单 ←──→  useAuth / useChat / useTheme │
+│  ├ settings.json 持久化        desktopApi                LoginView          │
+│  └ nativeTheme.themeSource    （含登录令牌）              SessionSidebar     │
+│                                                          ChatWindow         │
 └────────────────────────────────┬───────────────────────────────────────────┘
-                                 │ HTTP + SSE（默认 http://localhost:3000）
+                                 │ HTTP + SSE，Authorization: Bearer <token>
 ┌────────────────────────────────▼───────────────────────────────────────────┐
 │                          后端（Express 5）                                  │
-│  /api/health   /api/chat (SSE)   /api/conversations   /api/knowledge       │
+│  /api/health（公开）        /api/auth/*（注册/登录公开，登出/me 需登录）     │
+│  /api/chat (SSE)   /api/conversations   /api/knowledge   ← 均需登录         │
+│                                    │                                        │
+│           requireAuth：校验 Bearer 令牌 → 注入 userId 到 res.locals         │
 │                                    │                                        │
 │                          AgentService（LangChain createAgent）              │
 │                          ├ system prompt 约束                               │
@@ -62,19 +86,24 @@ my-monorepo/
 │                          │        calculator                                │
 │                          └ 流式：streamMode = 'messages'                    │
 │                                    │                                        │
-│         ConversationStore（JSON）        KnowledgeStore（切分+向量+余弦）    │
+│            KnowledgeStore（切分+向量+余弦）      UserStore / SessionStore /  │
+│                       ↓                          ConversationStore           │
+│              data/knowledge/store.json                      ↓               │
+│                                                    MySQL（agent_data）      │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 一次对话的完整数据流
 
-1. 用户在 `ChatWindow` 输入内容，`useChat.sendMessage` 立即把用户消息与一条**空的助手消息**插入列表（占位，用于承载流式 token）。
-2. `AgentApi.streamChat` 以 `POST /api/chat` 建立连接，用 `AbortController` 支持随时停止。
-3. 后端把用户消息追加进会话文件（首次提问时自动创建会话并以首条消息生成标题）。
-4. `AgentService` 把历史消息还原为 LangChain 消息对象，交给 `agent.stream(..., { streamMode: 'messages' })`。
-5. 智能体按需调用工具：需要事实 → 检索/时间/计算；每次工具调用会被转成 `tool` 事件推给前端，形成消息下方的“调用工具 xxx / 完成 xxx”标签。
-6. 模型增量输出被转成 `token` 事件，前端逐字追加渲染；流结束后后端把完整答复落库，再下发 `done`（携带 `conversationId` 与 `title`）。
-7. 前端收到 `done` 后记录会话 ID 并刷新会话列表；若中途被用户中断，`signal` 会同步取消模型调用，避免继续消耗算力。
+1. 未登录时先渲染 `LoginView`；登录/注册成功后后端签发令牌（UUID），桌面端把令牌写入 `settings.json` 的 `authToken`，之后所有请求都带上 `Authorization: Bearer <token>`。
+2. 用户在 `ChatWindow` 输入内容，`useChat.sendMessage` 立即把用户消息与一条**空的助手消息**插入列表（占位，用于承载流式 token）。
+3. `AgentApi.streamChat` 以 `POST /api/chat` 建立连接，用 `AbortController` 支持随时停止。
+4. 后端鉴权中间件由令牌解析出 `userId`，把用户消息写入该用户名下的会话（首次提问时自动创建会话并以首条消息生成标题）。
+5. `AgentService` 把历史消息还原为 LangChain 消息对象，交给 `agent.stream(..., { streamMode: 'messages' })`。
+6. 智能体按需调用工具：需要事实 → 检索/时间/计算；每次工具调用会被转成 `tool` 事件推给前端，形成消息下方的“调用工具 xxx / 完成 xxx”标签。
+7. 模型增量输出被转成 `token` 事件，前端逐字追加渲染；流结束后后端把完整答复落库，再下发 `done`（携带 `conversationId` 与 `title`）。
+8. 前端收到 `done` 后记录会话 ID 并刷新会话列表；若中途被用户中断，`signal` 会同步取消模型调用，避免继续消耗算力。
+9. 任一请求返回 **401**（令牌过期或被新登录顶掉）时，桌面端清空本地登录态并回到登录页。
 
 ---
 
@@ -82,27 +111,62 @@ my-monorepo/
 
 ### 3.1 组合根与依赖装配
 
-`apps/backend/src/index.ts` 是唯一的组合根：先读配置，再依次创建 `ConversationStore` → `KnowledgeStore` → `AgentService`，最后交给 `createApp` 组装路由。所有依赖以参数显式注入（`AppDependencies`），路由层只依赖抽象实例，因此 `createApp` 可被单独引入做接口测试。
+`apps/backend/src/index.ts` 是唯一的组合根：先读配置，`ensureSchema` 自动建库建表并创建连接池，随后依次创建 `UserStore` → `SessionStore` → `ConversationStore` → `KnowledgeStore` → `AgentService`，最后交给 `createApp` 组装并启动监听。`createApp` 只保留「通用中间件 → 注册路由 → 错误兜底」三段骨架，接口前缀与鉴权策略集中在 `routes/index.ts` 的 `registerRoutes` 声明，新增接口只需追加一行。所有依赖以参数显式注入（`AppDependencies`，定义于 `dependencies.ts`，避免路由反向依赖 `app.ts`），因此 `createApp` 可被单独引入做接口测试。
 
-### 3.2 HTTP 接口
+启动时还会执行 `sessionStore.prune()` 做一次会话清理（详见 3.3），并把清理条数打进启动日志。
 
-| 方法     | 路径                           | 说明                                                 |
-| -------- | ------------------------------ | ---------------------------------------------------- |
-| `GET`    | `/api/health`                  | 健康检查，返回提供方、当前对话模型、知识库状态       |
-| `POST`   | `/api/chat`                    | 流式对话（SSE），入参 `{ conversationId?, message }` |
-| `GET`    | `/api/conversations`           | 会话摘要列表（按更新时间倒序）                       |
-| `GET`    | `/api/conversations/:id`       | 会话详情（含全部消息）                               |
-| `DELETE` | `/api/conversations/:id`       | 删除会话                                             |
-| `GET`    | `/api/knowledge/documents`     | 知识库文档列表                                       |
-| `POST`   | `/api/knowledge/documents`     | 新增文档（同步完成切分与向量化）                     |
-| `DELETE` | `/api/knowledge/documents/:id` | 删除文档及其全部片段                                 |
+### 3.2 HTTP 接口与鉴权
 
-两个约定：
+| 方法     | 路径                           | 鉴权   | 说明                                                    |
+| -------- | ------------------------------ | ------ | ------------------------------------------------------- |
+| `GET`    | `/api/health`                  | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态          |
+| `POST`   | `/api/auth/register`           | 公开   | 注册并直接签发令牌，成功返回 `201`（`{ token, user }`） |
+| `POST`   | `/api/auth/login`              | 公开   | 登录并签发令牌，凭证错误返回 `401`                      |
+| `POST`   | `/api/auth/logout`             | 需登录 | 删除当前令牌对应的会话，返回 `204`                      |
+| `GET`    | `/api/auth/me`                 | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`          |
+| `POST`   | `/api/chat`                    | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`    |
+| `GET`    | `/api/conversations`           | 需登录 | 当前账号的会话摘要列表（按更新时间倒序）                |
+| `GET`    | `/api/conversations/:id`       | 需登录 | 会话详情（含全部消息），非本人会话返回 `404`            |
+| `DELETE` | `/api/conversations/:id`       | 需登录 | 删除会话（消息随外键级联删除）                          |
+| `GET`    | `/api/knowledge/documents`     | 需登录 | 知识库文档列表                                          |
+| `POST`   | `/api/knowledge/documents`     | 需登录 | 新增文档（同步完成切分与向量化）                        |
+| `DELETE` | `/api/knowledge/documents/:id` | 需登录 | 删除文档及其全部片段                                    |
 
-- **CORS 全放开**。桌面端在打包后可能以 `file://` 加载页面（Origin 为 `null`），因此统一返回 `Access-Control-Allow-Origin: *`。
+三个约定：
+
+- **统一鉴权**：除 `/api/health` 与注册/登录外，其余路由都挂载 `requireAuth`；中间件从 `Authorization: Bearer <token>` 解析令牌，成功后将 `userId`/`token` 写入 **`res.locals`**（避免为扩展 `Express.Request` 引入全局类型声明），失败统一返回 `401 { message: '登录已失效，请重新登录' }`。
+- **CORS 全放开**。桌面端在打包后可能以 `file://` 加载页面（Origin 为 `null`），因此统一返回 `Access-Control-Allow-Origin: *`，并在 `Access-Control-Allow-Headers` 中放行 `Authorization`。
 - **兜底错误处理**。统一错误中间件透传 `error.status`（如 400/404），5xx 才打印日志并对外返回“服务内部错误”，避免异常导致连接悬挂。
 
-### 3.3 SSE 流式协议
+### 3.3 账号与鉴权实现
+
+**密码存储**：`UserStore` 直接复用 `@repo/shared` 的 `desEncrypt` 对密码加密后入库，不保存明文。采用 **ECB + PKCS7**（同一明文结果恒定），因此登录校验只需比对密文，无需解密；`authenticate` 对“用户不存在”与“密码错误”返回同一结果，由路由统一回以“用户名或密码错误”，不暴露账号是否已注册。注册走 `INSERT IGNORE`，命中 `username` 唯一索引时 `affectedRows = 0`，据此返回 `409`。
+
+**令牌与会话**：登录/注册成功后由 `SessionStore.create()` 签发 UUID 令牌并写入 `user_sessions`，有效期 7 天。会话策略为**单端登录**——每个账号同时只保留一条有效会话，新登录顶掉旧会话：
+
+```text
+create()  ：同一事务内 DELETE 该 user 的全部旧会话 → INSERT 新令牌
+            （放同一事务是为了避免中途失败时旧令牌已失效、新令牌又没落库）
+resolve() ：按 token 查询；已过期则顺手删除并返回 null
+prune()   ：启动时清理过期会话，并把历史遗留的同账号重复会话收敛为“仅保留最新一条”
+```
+
+> `prune()` 里的去重是一段自连接删除：保留每个账号 `created_at` 最新的一行（时间相同时用 `token` 兜底比较，保证结果确定）。这段逻辑是为收敛早期版本“每次登录都 INSERT 而不清理”留下的重复数据而加的。
+
+### 3.4 数据表设计
+
+`ensureSchema` 在启动时先以**不指定 database** 的连接 `CREATE DATABASE IF NOT EXISTS`，再连到该库执行建表（全部 `IF NOT EXISTS`，可重复执行）。四张表统一 `utf8mb4` / InnoDB：
+
+| 表              | 关键字段                                                                         | 说明                                               |
+| --------------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `users`         | `id` 主键、`username` 唯一、`password`（DES 密文）                               | 账号表                                             |
+| `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                       | 登录会话表，单端登录下每个账号至多一行             |
+| `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引） | 对话表，列表查询走该复合索引                       |
+| `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）         | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息 |
+
+> 之所以用自增 `seq` 而非 `created_at` 排序：同一毫秒内写入的多条消息时间戳可能相同，`seq` 能提供严格稳定的顺序。
+
+### 3.5 SSE 流式协议
 
 `POST /api/chat` 的响应为 `text/event-stream`，每个事件都是 `data: <JSON>\n\n`，共四种：
 
@@ -115,7 +179,9 @@ my-monorepo/
 
 中断处理是这段实现里最关键的一处细节：客户端关闭连接时必须立刻停下模型推理。实现上监听的是 `res` 而非 `req`——`req` 的 `close` 在请求体读取完成后就会触发，会误中断正常的流式响应；同时用 `res.writableEnded` 排除“正常结束”这一次回调，只有真正的提前断开才 `controller.abort()`。此外，仅在答复正文非空时落库，避免保存空回复。
 
-### 3.4 智能体（AgentService）
+这段编排独立在 `services/chatStream.ts` 的 `streamChatReply()` 中，`routes/chat.ts` 只保留入参校验（400 / 404）与用户消息落库，路由与流式协议解耦。
+
+### 3.6 智能体（AgentService）
 
 采用 LangChain 的 `createAgent({ model, tools, systemPrompt })` 构建 ReAct 风格智能体，并以 `streamMode: 'messages'` 消费流——该模式能同时拿到文本增量与工具调用分片，是“边想边答 + 展示工具轨迹”的基础。
 
@@ -135,7 +201,7 @@ my-monorepo/
 
 > 约束 2 是必需的：本地小模型在无强制要求时倾向于直接作答而不检索，这条规则把它拉回“先查后答”的链路。
 
-### 3.5 工具层
+### 3.7 工具层
 
 | 工具                    | 参数                 | 说明                                                       |
 | ----------------------- | -------------------- | ---------------------------------------------------------- |
@@ -147,7 +213,7 @@ my-monorepo/
 
 `calculator` 不直接 `eval` 任意代码，而是先做**白名单字符校验**（仅允许数字、运算符、括号与空白），通过后用 `new Function` 求值，并校验结果必须是有限数字；任何一步失败都返回可读提示而非抛错中断对话。
 
-### 3.6 RAG 知识库
+### 3.8 RAG 知识库
 
 为了不引入外部向量数据库，`KnowledgeStore` 采用「内存态 + JSON 落盘」的极简实现：
 
@@ -160,22 +226,28 @@ my-monorepo/
 - 向量化失败（如本地 embedding 服务未启动）时接口返回 **502** 与可读的失败原因；
 - 删除文档会级联清理其全部片段，保持索引与文档一致。
 
-### 3.7 会话持久化
+### 3.9 会话与消息持久化（MySQL）
 
-一个会话对应 `data/conversations/<uuid>.json` 一个文件，`ConversationStore` 提供 `list / get / create / append / remove`：
+会话与消息分别落在 `conversations` / `messages` 两张表，`ConversationStore` 提供 `list / get / create / append / remove`，**所有方法都带 `userId` 参数并以 `user_id` 作为查询条件**，从而保证多账号数据互不可见：读取他人会话返回 `null`（路由转成 `404`），删除他人会话影响行数为 0。
 
-- `list()` 读取目录并按 `updatedAt` 倒序返回摘要（ID、标题、更新时间、消息数）；
-- `append()` 在会话不存在时自动新建；首条用户消息会被归一化空白后截断为 24 字，作为会话标题；
-- 会话 ID 同时用作文件名，因此 `get()` 先用 UUID 正则校验，防止路径穿越。
+- `list(userId)`：按 `updated_at` 倒序返回摘要（ID、标题、更新时间、消息数），消息数由子查询统计；
+- `get(userId, id)`：先按 `id + user_id` 校验归属，再按 `seq` 升序读出全部消息；
+- `append(userId, id, role, content)`：未指定会话或会话不存在时自动 `create`；**首条用户消息**会被归一化空白后截断为 24 字作为会话标题（复用 `@repo/shared` 的 `truncate`）；写入消息后同步更新 `conversations.updated_at`；
+- `remove(userId, id)`：删除会话行，其消息由外键 `ON DELETE CASCADE` 级联清除。
 
-### 3.8 配置项
+### 3.10 配置项
 
 配置全部来自环境变量（可写在 `.env` 中），部署时无需改代码：
 
 | 变量                                                           | 默认值                      | 说明                      |
 | -------------------------------------------------------------- | --------------------------- | ------------------------- |
 | `PORT`                                                         | `3000`                      | 服务端口                  |
-| `DATA_DIR`                                                     | `<cwd>/data`                | 会话与知识库数据目录      |
+| `DATA_DIR`                                                     | `<cwd>/data`                | 知识库数据目录            |
+| `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                |
+| `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                |
+| `MYSQL_USER`                                                   | `root`                      | MySQL 用户名              |
+| `MYSQL_PASSWORD`                                               | `123456`                    | MySQL 密码                |
+| `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）  |
 | `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`    |
 | `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                  |
 | `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址               |
@@ -198,17 +270,21 @@ my-monorepo/
 
 ### 4.1 三层结构与职责
 
-| 层       | 文件                   | 职责                                                   |
-| -------- | ---------------------- | ------------------------------------------------------ |
-| 主进程   | `src/main/index.ts`    | 窗口生命周期、`settings.json` 读写、主题同步、IPC 注册 |
-| 预加载层 | `src/preload/index.ts` | `contextBridge` 暴露白名单 API，隔离 Node 能力         |
-| 渲染进程 | `src/renderer/src/**`  | Vue 界面、状态管理、SSE 消费与主题切换                 |
+| 层       | 文件                   | 职责                                                      |
+| -------- | ---------------------- | --------------------------------------------------------- |
+| 主进程   | `src/main/index.ts`    | 应用生命周期：单实例锁、`whenReady`、`activate`、退出时机 |
+|          | `src/main/settings.ts` | `settings.json` 读写与默认值                              |
+|          | `src/main/theme.ts`    | 主题同步（`themeSource` + 窗口底色）                      |
+|          | `src/main/window.ts`   | 主窗口创建与页面加载                                      |
+|          | `src/main/ipc.ts`      | IPC 处理器注册                                            |
+| 预加载层 | `src/preload/index.ts` | `contextBridge` 暴露白名单 API，隔离 Node 能力            |
+| 渲染进程 | `src/renderer/src/**`  | Vue 界面、状态管理、SSE 消费与主题切换                    |
 
 安全配置：`contextIsolation: true`、`nodeIntegration: false`，渲染进程只能访问 preload 明确暴露的 `window.desktopApi`。
 
 ### 4.2 主进程
 
-- **设置持久化**：`AppSettings`（`backendUrl`、`theme`）存放在 `app.getPath('userData')/settings.json`，避免写入安装目录导致权限问题；读取失败时回退默认值。
+- **设置持久化**：`AppSettings`（`backendUrl`、`theme`、`authToken`）存放在 `app.getPath('userData')/settings.json`，避免写入安装目录导致权限问题；读取失败时回退默认值。登录令牌也保存在这里，用于下次启动恢复登录态。
 - **窗口**：1200×800（最小 960×640）、隐藏菜单栏、`show: false` 配合 `ready-to-show` 再显示以消除白屏；外链交由系统浏览器打开；单实例锁保证重复启动时聚焦已有窗口。
 - **主题同步**：`applyTheme()` 同时设置 `nativeTheme.themeSource`（决定渲染进程的 `prefers-color-scheme`）**和**窗口 `setBackgroundColor`（决定首帧绘制前露出的颜色）——两者缺一都会在启动时闪一下。
 - **IPC 清单**：`app:info`、`settings:get`、`settings:save`、`settings:get-sync`（同步）、`window:control`（最小化/最大化/关闭）。
@@ -223,15 +299,26 @@ my-monorepo/
 
 `useChat.ts` 集中管理会话状态（`connection / health / conversations / activeId / messages / streaming / errorMessage`）与全部请求动作：
 
-- **流式渲染**：先把用户消息与一条空助手消息入列，`token` 事件直接追加到这条消息上，因此首字到达即渲染，不需要重排列表；
+- **流式渲染**：先把用户消息与一条空助手消息入列，`token` 事件直接追加到这条消息上，因此首字到达即渲染，不需要重排列表；事件消费由模块级 `consumeChatStream()` 承担，会话级副作用（切换会话、报错提示）以回调交回 composable，便于单独测试；
 - **工具轨迹**：`tool` 事件映射为“调用工具 xxx”“完成 xxx”标签，追加到该条消息的 `steps`；
 - **中断语义**：`AbortController` 保存在闭包局部变量中再另存引用——用户点“停止”会把外层引用置空，局部引用仍能判断“这次流是否被主动中断”，从而不把中断当成错误提示；
 - **空回复回滚**：流结束后若助手消息仍无内容（例如模型直接失败），就把这条占位消息移除，避免留下空气泡；
 - **连接状态**：`canSend` 要求后端在线且当前不在流式中，因此 `connection === 'offline'` 时输入区自动禁用。
+- **登录态联动**：`api` 是 `computed`，令牌变化即重建客户端，保证每个请求都携带当前令牌；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
 
-`api/client.ts` 负责 HTTP 与 SSE 解析：非 2xx 时尽量取服务端 `message` 字段作为错误文案；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
+`api/client.ts` 负责 HTTP 与 SSE 解析：`buildHeaders()` 在已登录时统一附加 `Authorization: Bearer <token>`；非 2xx 时抛出携带状态码的 `ApiError`（`isUnauthorized` 据此识别登录失效），错误文案优先取服务端 `message` 字段；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
 
-### 4.5 主题机制与防闪烁
+### 4.5 登录态与启动门禁
+
+`useAuth.ts` 把登录态做成**模块级单例**（`token` / `user` / `submitting` / `errorMessage` 定义在模块作用域）——登录页、`useChat`、设置抽屉读到的都是同一份状态，避免各组件各持副本导致不同步：
+
+- `restore()`：启动时从 `settings.json` 取回令牌，调用 `GET /api/auth/me` 校验；失败则静默清理，视为未登录；
+- `submit(mode, ...)`：登录/注册成功后写入 `token` 与 `user`，并把令牌持久化到本地设置；
+- `logout()`：先请求 `POST /api/auth/logout` 销毁服务端会话，**请求失败也继续本地清理**；`clear()` 则同时清空内存状态与本地令牌。
+
+`App.vue` 承担门禁：`booting` 期间渲染空壳（等待 `restore()`），无令牌渲染 `LoginView`，有令牌才渲染主界面；令牌变化时同步 `init()` / `reset()` 切换数据源。`LoginView` 内置后端地址输入框与连通性探测，登录前即可发现地址填错。
+
+### 4.6 主题机制与防闪烁
 
 主题真源在主进程设置中，渲染侧由 `useTheme.ts` 承接：
 
@@ -243,7 +330,7 @@ my-monorepo/
 
 > 早期的全局 `transition: all` 会让每个元素都参与颜色插值，深↔亮切换时文字色与背景色在中途交叉，出现约 100ms 的低对比度“字体闪烁”。改为“表面渐变、文字瞬时”后该现象消失。
 
-### 4.6 样式体系（Less 模块化）
+### 4.7 样式体系（Less 模块化）
 
 ```text
 renderer/src/styles/
@@ -252,7 +339,7 @@ renderer/src/styles/
 ├── mixins.less              # .ellipsis() .eyebrow() .focus-ring() .stagger() .content-gutter()
 ├── motion.less              # keyframes 与 .enter()，含 reduced-motion 兜底
 ├── base.less / layout.less  # 重置与整体布局
-├── components/              # controls / sidebar / chat / message / markdown / drawer
+├── components/              # auth / controls / sidebar / chat / message / markdown / drawer / knowledge
 └── index.less               # 入口，导入顺序即层叠顺序
 ```
 
@@ -264,15 +351,17 @@ renderer/src/styles/
 - 两侧消息骨架对称：统一 `gap`、头像尺寸与 `align-self`，AI 侧用左侧细线（线）对应用户侧的浅色块（面），并用数值探针（而非肉眼）确认头像与正文首行中心误差在 1px 内；
 - 用 `@import (reference)` 引入变量与 mixin，避免重复产出样式；`calc()` 参与运算的表达式用 `~'...'` 转义，交给浏览器求值。
 
-### 4.7 界面组成
+### 4.8 界面组成
 
-| 组件                 | 职责                                                                     |
-| -------------------- | ------------------------------------------------------------------------ |
-| `App.vue`            | 布局骨架，串联侧栏、对话窗与设置抽屉                                     |
-| `SessionSidebar.vue` | 会话列表、新建/切换/删除、连接状态与模型信息、主题切换                   |
-| `ChatWindow.vue`     | 消息列表、空状态、输入条（Enter 发送 / Shift+Enter 换行）与停止按钮      |
-| `MessageItem.vue`    | 单条消息：用户纯文本 / 助手 Markdown 渲染、工具轨迹标签、思考动画        |
-| `SettingsDrawer.vue` | 抽屉面板：「连接」页配置后端地址并探测连通性，「知识库」页上传与删除文档 |
+| 组件                 | 职责                                                                   |
+| -------------------- | ---------------------------------------------------------------------- |
+| `App.vue`            | 布局骨架与登录门禁，串联登录页、侧栏、对话窗与设置抽屉                 |
+| `LoginView.vue`      | 登录 / 注册表单，含后端地址配置与连通性探测                            |
+| `SessionSidebar.vue` | 会话列表、新建/切换/删除、连接状态与模型信息、当前账号与登出、主题切换 |
+| `ChatWindow.vue`     | 消息列表、空状态、输入条（Enter 发送 / Shift+Enter 换行）与停止按钮    |
+| `MessageItem.vue`    | 单条消息：用户纯文本 / 助手 Markdown 渲染、工具轨迹标签、思考动画      |
+| `SettingsDrawer.vue` | 抽屉外壳与标签页切换；「连接」页配置后端地址并探测连通性               |
+| `KnowledgePanel.vue` | 「知识库」页：文档入库、列表与删除（挂载时自动加载）                   |
 
 Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不用气泡），配合衬线标题与克制的青绿强调色，长文阅读更接近阅读器体验。
 
@@ -284,13 +373,13 @@ Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不�
 
 `pnpm-workspace.yaml` 收纳 `packages/*` 与 `apps/*`；根 `package.json` 的脚本不直接写长命令，而是交给 `scripts/` 下的编排脚本：
 
-| 命令          | 实际行为                                                               |
-| ------------- | ---------------------------------------------------------------------- |
-| `pnpm dev`    | 先构建 `packages/*`（后端直接消费其 `dist`），再并行跑 `apps/*` 的 dev |
-| `pnpm build`  | 先打包 `packages/*`，再构建 `apps/*`                                   |
-| `pnpm lint`   | `eslint .` + `prettier --check .`（`pnpm lint:fix` 自动修复）          |
-| `pnpm test`   | `pnpm -r run test`，递归执行各子包单测（无 test 脚本的包自动跳过）     |
-| `pnpm format` | `prettier --write .`                                                   |
+| 命令          | 实际行为                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `pnpm dev`    | 交互选择要启动的应用，先构建 `packages/*`（后端直接消费其 `dist`），再并行跑所选应用的 dev |
+| `pnpm build`  | 先打包 `packages/*`，再构建 `apps/*`                                                       |
+| `pnpm lint`   | `eslint .` + `prettier --check .`（`pnpm lint:fix` 自动修复）                              |
+| `pnpm test`   | `pnpm -r run test`，递归执行各子包单测（无 test 脚本的包自动跳过）                         |
+| `pnpm format` | `prettier --write .`                                                                       |
 
 ### 5.2 依赖与镜像
 
@@ -310,9 +399,11 @@ Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不�
 
 ### 6.1 前置条件
 
-Node.js ≥ 20、pnpm ≥ 9，以及本地 Ollama：
+Node.js ≥ 20、pnpm ≥ 9、本地 **MySQL 8**（默认 `127.0.0.1:3306`，账号 `root` / `123456`，可用环境变量覆盖，见 3.10），以及本地 Ollama：
 
 ```bash
+mysql -h 127.0.0.1 -P 3306 -u root -p   # 验证 MySQL 可连接（库表会在后端启动时自动创建）
+
 ollama pull qwen2.5:7b          # 对话模型（必须支持工具调用）
 ollama pull nomic-embed-text    # 向量模型
 ollama serve
@@ -324,8 +415,11 @@ ollama serve
 
 ```bash
 pnpm install
-pnpm dev            # 并行拉起后端与桌面端（桌面端会自行连接 http://localhost:3000）
+pnpm dev                        # 交互选择要启动的应用（默认全选，回车即启动全部）
+pnpm dev backend desktop        # 也可直接指定，支持目录名（backend）或包名（@repo/backend）
 ```
+
+`pnpm dev` 的交互菜单：`↑`/`↓` 移动光标、空格切换选中、`a` 全选/全不选、回车确认、`Esc` 取消；确认后先构建 `packages/*`，再用 `pnpm --parallel` 启动所选应用（桌面端会自行连接 http://localhost:3000）。在非交互环境（CI、输出被管道接管）下无法弹菜单，会自动启动全部应用。
 
 单独运行某个应用：
 
@@ -338,7 +432,7 @@ pnpm --filter @repo/desktop run dev     # electron-vite dev
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（含 ConversationStore / KnowledgeStore）
+pnpm test           # 各子包单元测试（shared 的 DES 加解密、后端的凭证校验与知识库检索）
 pnpm build          # 全仓构建
 ```
 
@@ -348,9 +442,12 @@ pnpm build          # 全仓构建
 
 ## 七、已知约束与设计取舍
 
+- **会话已改为 MySQL 持久化**：会话与消息按 `user_id` 隔离存储，天然支持多账号与并发访问；代价是 `append` 一次要写两张表（插入消息 + 更新会话时间），消息量极大时可考虑批量提交或异步刷写。
+- **登录为单端登录**：每个账号同时只有一条有效会话，新登录顶掉旧会话；这保证了 `user_sessions` 不会累积重复行，但也意味着同账号无法多端同时在线。令牌明文保存在本机 `settings.json` 中，并随请求以 Bearer 明文传输，仅适用于本机/内网场景。
+- **密码为 DES 加密而非哈希**：DES 为可逆对称加密，本项目按需求用它做存储加密（ECB 定值加密便于直接比对密文）；真正的生产系统应改用 bcrypt/argon2 这类加盐哈希。
+- **知识库未按用户隔离**：文档与检索结果是全局共享的，任意登录用户都能查看与管理全部文档（本期未做权限划分）。
 - **知识库为单进程内存态**：`KnowledgeStore` 在内存中维护全量片段，写入时整体覆写 `store.json`。多进程并发写会互相覆盖，因此按单实例部署；若需横向扩容，应替换为外部向量库。
 - **检索为内存暴力排序**：全部片段逐个算余弦相似度再排序，简单可靠，适合中小规模语料；数据量增长后需引入向量索引。
-- **会话为全量覆写 JSON**：一个会话一个文件，读写简单直观；消息量极大时应改为追加式存储。
 - **system prompt 强约束检索**：以“必须检索后才回答”换取准确率，代价是知识库类问题必然会多一次工具往返。
 - **主题过渡限定在表面元素**：牺牲了部分元素在切换时的平滑度，换取文字不闪烁与交互不迟钝。
 - 仓库当前尚未提交首个 commit（`git init` 已完成）。

@@ -1,4 +1,6 @@
 import type {
+  AuthSession,
+  AuthUser,
   ChatStreamEvent,
   Conversation,
   ConversationSummary,
@@ -18,16 +20,44 @@ export interface HealthInfo {
   knowledgeEnabled: boolean;
 }
 
-/** 后端智能体服务的 HTTP 客户端，含 SSE 流式对话 */
+/** 带 HTTP 状态码的请求错误：调用方据此识别 401（登录失效）等需要特殊处理的情况 */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** 是否为登录失效错误 */
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+/** 后端智能体服务的 HTTP 客户端，含 SSE 流式对话；登录后自动携带令牌 */
 export class AgentApi {
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly token = '',
+  ) {}
+
+  /** 统一构造请求头，未登录时不发送 Authorization */
+  private buildHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+      ...extra,
+    };
+  }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const res = await fetch(`${this.baseUrl}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init.headers },
+      headers: this.buildHeaders(init.headers as Record<string, string> | undefined),
     });
-    if (!res.ok) throw new Error(await this.extractError(res));
+    if (!res.ok) throw new ApiError(res.status, await this.extractError(res));
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
@@ -44,6 +74,28 @@ export class AgentApi {
 
   health(): Promise<HealthInfo> {
     return this.request<HealthInfo>('/api/health');
+  }
+
+  register(username: string, password: string): Promise<AuthSession> {
+    return this.request<AuthSession>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+  }
+
+  login(username: string, password: string): Promise<AuthSession> {
+    return this.request<AuthSession>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+  }
+
+  logout(): Promise<void> {
+    return this.request<void>('/api/auth/logout', { method: 'POST' });
+  }
+
+  currentUser(): Promise<AuthUser> {
+    return this.request<AuthUser>('/api/auth/me');
   }
 
   listConversations(): Promise<ConversationSummary[]> {
@@ -80,11 +132,11 @@ export class AgentApi {
   ): AsyncGenerator<ChatStreamEvent> {
     const res = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.buildHeaders(),
       body: JSON.stringify(payload),
       signal,
     });
-    if (!res.ok || !res.body) throw new Error(await this.extractError(res));
+    if (!res.ok || !res.body) throw new ApiError(res.status, await this.extractError(res));
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

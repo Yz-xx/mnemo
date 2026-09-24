@@ -5,6 +5,6 @@
     "outDir": "dist",
     "noEmit": false
   },
-  "include": ["src/**/*.ts", "__test__/strings.test.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/__vitest__"]
 }

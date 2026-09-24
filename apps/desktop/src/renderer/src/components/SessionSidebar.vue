@@ -1,15 +1,17 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { ConnectionState } from '../composables/useChat';
 import { useTheme } from '../composables/useTheme';
-import type { ConversationSummary } from '../types';
+import type { AuthUser, ConversationSummary } from '../types';
 
 // 主题是模块级单例状态，这里只负责读取与切换
 const { theme, toggleTheme } = useTheme();
 
-defineProps<{
+const props = defineProps<{
   conversations: ConversationSummary[];
   activeId: string | null;
   connection: ConnectionState;
+  user: AuthUser | null;
 }>();
 
 const emit = defineEmits<{
@@ -17,7 +19,11 @@ const emit = defineEmits<{
   select: [id: string];
   remove: [id: string];
   settings: [];
+  logout: [];
 }>();
+
+/** 头像用用户名首字，无需额外资源 */
+const avatarText = computed(() => props.user?.username.slice(0, 1) ?? '?');
 
 const CONNECTION_TEXT: Record<ConnectionState, string> = {
   idle: '检测中',
@@ -61,6 +67,12 @@ function formatTime(value: string): string {
     </ul>
 
     <p v-if="conversations.length === 0" class="sidebar__empty">暂无历史会话</p>
+
+    <div class="sidebar__user">
+      <span class="sidebar__avatar">{{ avatarText }}</span>
+      <span class="sidebar__name">{{ user?.username }}</span>
+      <button class="sidebar__logout" title="退出登录" @click="emit('logout')">退出</button>
+    </div>
 
     <div class="sidebar__foot">
       <span class="dot" :class="`dot--${connection}`" />

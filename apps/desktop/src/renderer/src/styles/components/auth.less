@@ -1,0 +1,139 @@
+@import (reference) '../variables.less';
+@import (reference) '../mixins.less';
+@import (reference) '../motion.less';
+
+// 登录 / 注册：整屏居中单列卡片，与主界面共用同一套设计令牌
+
+.auth {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.auth__card {
+  .enter();
+  width: 384px;
+  max-width: 100%;
+  padding: 30px 32px 20px;
+  border: 1px solid var(--border);
+  border-radius: @radius;
+  background: var(--bg-panel);
+}
+
+.auth__brand {
+  display: block;
+  font-family: @font-display;
+  font-size: 22px;
+  font-weight: 600;
+
+  // 与侧栏品牌相同的青绿小方块，登录前后品牌标记保持一致
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 10px;
+    border-radius: 2px;
+    background: var(--accent);
+    vertical-align: 2px;
+  }
+}
+
+.auth__tagline {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+// 登录 / 注册切换：下划线式标签，比胶囊按钮更贴合这套版面的编辑感
+.auth__modes {
+  display: flex;
+  gap: 22px;
+  margin: 26px 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.auth__mode {
+  position: relative;
+  padding: 0 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.16s ease;
+
+  &:hover {
+    color: var(--text-muted);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+    border-radius: @radius-sm;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    border-radius: @radius-pill;
+    background: var(--accent);
+    transform: scaleX(0);
+    transition: transform 0.18s @enter-ease;
+  }
+
+  &--active {
+    color: var(--text);
+    font-weight: 500;
+
+    &::after {
+      transform: scaleX(1);
+    }
+  }
+}
+
+.auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth__error {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: @radius-sm;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+// 底栏：服务地址可改，避免后端地址配错时因进不去主界面而无法调整
+.auth__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.auth__endpoint {
+  .surface(var(--bg));
+  .ellipsis();
+  flex: 1;
+  padding: 5px 9px;
+  color: var(--text-muted);
+  font-family: @font-mono;
+  font-size: 11px;
+
+  &:focus {
+    .focus-ring();
+  }
+}

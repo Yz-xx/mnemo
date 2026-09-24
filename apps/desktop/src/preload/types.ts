@@ -9,6 +9,8 @@ export interface AppSettings {
   backendUrl: string;
   /** 界面主题，由主进程持有以便窗口底色在首帧前即正确 */
   theme: ThemeMode;
+  /** 登录令牌，由登录页写入，用于下次启动恢复登录态；为空表示未登录 */
+  authToken: string;
 }
 
 /** 运行环境信息，用于界面展示与问题排查 */

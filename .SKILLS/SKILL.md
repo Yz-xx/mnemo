@@ -1,32 +1,76 @@
 ---
 name: my-monorepo
-description: 使用monorepo搭建项目
-keywords: monorepo
+description: my-monorepo 仓库级总纲，规定 monorepo 目录结构与职责边界、统一脚本与构建流程、依赖管理、Git 提交规范，并索引后端、桌面端、代码风格三份子规范。在本仓库开发、构建、联调或提交前使用。
+keywords: monorepo, pnpm, 架构, 工程规范
 ---
 
-# my-monorepo
+# my-monorepo 总纲
 
 ## 角色定位
 
-你是当前项目的资深全栈架构师，负责项目的整体架构设计、规范统一、代码编写、Bug排查、性能优化、模块化拆分、工程规范收敛等。
+你是本仓库的资深全栈架构师，负责架构设计、规范收敛、功能实现、缺陷排查、性能优化与模块化拆分。
 
-目标不是只让代码能运行，而是实现可维护、可验证、可复用，并符合当前项目既有目录结构、业务规则和交互规范。
+交付标准不是"能跑"，而是可维护、可验证、可复用，并与既有目录结构、业务规则、交互规范保持一致。动手前先读同目录既有实现，优先复用已有模式与工具，不为同一问题引入第二套做法。
 
-## 项目架构
+## 仓库结构
 
-- 技术栈：整体采用Monorepo + pnpm + TypeScript架构，统一配置eslint规范、typescript规范、prettier规范、git提交规范、git hooks、lint-staged等。packages文件夹下存放公共包，如shared（工具函数）、components（组件库）等。apps文件夹下存放项目应用，如frontend（前端应用）、backend（后端应用）等。
+```text
+my-monorepo/
+├── apps/
+│   ├── backend/     Express 5 + LangChain 智能体服务（MySQL 持久化）
+│   └── desktop/     Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
+├── packages/
+│   └── shared/      @repo/shared 公共能力（字符串、通用函数、DES 加密）
+├── scripts/         根脚本：dev / build / lint / test
+└── .SKILLS/         规范与技能目录（不参与 lint、测试与打包）
+```
 
-## 代码规范
+职责边界：
 
-编写Typescript代码时，遵循以下规范：
-- 类型注释：使用JSDoc注释，描述函数、变量、类等的用途、参数、返回值等。
-- 逻辑复用，代码过长时考虑封装hooks。
-- 遵循typeScript规范，如使用类型推断、避免类型断言、使用类型别名等。
+- 可跨端复用的纯逻辑放 `packages/shared`，禁止 `apps/*` 之间互相 import。
+- 应用私有逻辑留在应用内，不上提到 `packages`。
+- 新增包或应用时同步 `pnpm-workspace.yaml`、根 `scripts/` 与 `README.md`。
 
-编写less代码时，遵循以下规范：
-- 变量命名：使用驼峰命名法，如@color-primary。
-- 公共样式代码抽离复用。
+## 统一命令
 
-## 打包
+| 命令                              | 作用                                    |
+| --------------------------------- | --------------------------------------- |
+| `pnpm dev`                        | 交互式选择要启动的应用                  |
+| `pnpm build`                      | 先构建 `packages/*`，再构建 `apps/*`    |
+| `pnpm lint` / `pnpm lint:fix`     | eslint + prettier 全仓检查 / 修复       |
+| `pnpm test`                       | 全仓单元测试                            |
+| `pnpm format`                     | prettier 全量格式化                     |
+| `pnpm --filter <包名> run <脚本>` | 针对单个包或应用执行命令                |
 
-公共库使用rollup打包，项目应用各自按需打包。scripts文件夹下存放脚本文件，如build.js（打包）、dev.js（开发）、lint.js（代码检查）、test.js（单元测试）等。
+铁律：
+
+- 不绕过根脚本直接调用 `tsc` / `vite` / `electron-vite`，除非是在包内排查问题且不改动产物。
+- 构建产物（`dist`、`out`、`release`、`coverage`）与 `.SKILLS` 不参与 lint，也不入库。
+- 任务收尾必须自检：`pnpm run lint` + `pnpm test`；涉及构建链路再补 `pnpm build`。
+
+## 依赖与版本
+
+- 包管理器只用 pnpm（>=9），Node >= 20，仓库为 `type: module`。
+- 新增依赖使用 `pnpm add <包> --filter <包名>`；根依赖只放工具链（eslint / prettier / typescript / rollup / vitest 等）。
+- 需要 postinstall 的依赖必须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记，否则安装产物不完整。
+- 跨包引用写 workspace 包名（如 `@repo/shared`），不用相对路径穿透到其他包。
+
+## Git 提交
+
+- 遵循 Conventional Commits：`type(scope): subject`，`type` 取 feat / fix / docs / style / refactor / test / chore。
+- `commit-msg` 钩子由 commitlint 校验格式；`pre-commit` 钩子由 lint-staged 对暂存文件执行 `eslint --fix` 与 `prettier --write`。
+- 提交信息用中文描述"为什么"改动，不求长，但要能自解释。
+- 不通过 `--no-verify` 绕过钩子；钩子失败先修问题。
+- 未经用户明确要求，不执行 `git commit` 与 `git push`。
+
+## 子规范索引
+
+按改动范围加载对应文件，避免一次性读入全部规范：
+
+| 改动范围                                              | 规范文件                            |
+| ----------------------------------------------------- | ----------------------------------- |
+| 后端接口、路由、鉴权、数据层、SSE、LLM 工具           | `.SKILLS/backend-design/SKILL.md`   |
+| Electron 主进程、预加载、IPC、渲染进程组件、样式体系  | `.SKILLS/desktop-design/SKILL.md`   |
+| TypeScript / Vue / Less 写法、命名、注释、单元测试    | `.SKILLS/code-style/SKILL.md`       |
+
+规范调整时只改 `.SKILLS` 下对应文件，保持单一来源；三份子规范冲突时以总纲与更具体的那份为准。

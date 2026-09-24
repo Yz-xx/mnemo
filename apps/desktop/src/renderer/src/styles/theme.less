@@ -80,7 +80,7 @@
 // 深/亮互换时前景色与背景色若同时插值，亮度必然在中途交叉，文字会短暂失去
 // 对比度；对全部元素（*）做颜色过渡还会让每个文本片段反复重算字体抗锯齿，
 // 两者都会表现为“字闪一下”。
-@theme-surfaces: ~'body, .sidebar, .chat, .chat__error, .composer, .message__avatar, .message__content, .markdown pre, .markdown code, .drawer__panel, .drawer__mask, .field__input, .doc, .session, .tab--active, .btn, .icon-btn, .chip';
+@theme-surfaces: ~'body, .sidebar, .chat, .chat__error, .composer, .message__avatar, .message__content, .markdown pre, .markdown code, .drawer__panel, .drawer__mask, .field__input, .doc, .session, .tab--active, .btn, .icon-btn, .chip, .auth__card, .auth__endpoint';
 
 // 主题切换时的临时过渡：由 useTheme 在切换瞬间挂到根节点，动画结束即移除。
 .theme-transition {

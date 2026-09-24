@@ -52,6 +52,59 @@
   flex: 1;
 }
 
+// 当前登录用户：头像取用户名首字，退出入口同行右对齐
+.sidebar__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar__avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sidebar__name {
+  .ellipsis();
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sidebar__logout {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+
+  &:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
 // 空列表用衬线斜体，把“什么都没有”也当作版面的一部分处理
 .sidebar__empty {
   margin: auto;

@@ -20,5 +20,11 @@
   "scripts": {
     "build": "rollup -c rollup.config.js",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2"
   }
 }
