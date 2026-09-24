@@ -41,6 +41,8 @@ my-monorepo/
 │   │   │   ├── services/chatStream.ts # SSE 流式回复编排（推送事件 + 落库）
 │   │   │   ├── routes/               # 各接口路由，index.ts 统一注册（含健康检查）
 │   │   │   └── __vitest__/           # 单元测试（vitest 运行，不参与编译）
+│   │   ├── .env.development          # 开发环境配置（pnpm dev 加载）
+│   │   ├── .env.production           # 生产环境配置（pnpm start 加载）
 │   │   └── data/                     # 运行时数据（知识库 JSON，已被 gitignore）
 │   ├── desktop/              # Electron 桌面端
 │   │   └── src/
@@ -237,7 +239,14 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ### 3.10 配置项
 
-配置全部来自环境变量（可写在 `.env` 中），部署时无需改代码：
+配置全部来自环境变量，部署时无需改代码。后端按环境加载两份文件（走 Node 原生 `--env-file`，无需 dotenv 依赖）：
+
+| 文件                            | 加载时机                                                               |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| `apps/backend/.env.development` | `pnpm dev`，本地 Ollama + 本地 MySQL                                   |
+| `apps/backend/.env.production`  | `pnpm start`，DeepSeek + 独立向量服务，敏感项为 `CHANGE_ME` 占位待替换 |
+
+已存在的系统环境变量优先级高于文件，所以数据库密码与 API Key 在部署机上注入即可，不必写进仓库。
 
 | 变量                                                           | 默认值                      | 说明                      |
 | -------------------------------------------------------------- | --------------------------- | ------------------------- |
@@ -390,8 +399,22 @@ Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不�
 ### 5.3 桌面端构建与打包
 
 - `electron-vite dev / build / preview`：主进程与 preload 走 SSR 打包，渲染进程走 Vite；
-- `pnpm --filter @repo/desktop run dist`：`electron-vite build && electron-builder --win`，产出 Windows 安装包；
-- preload 在 `type: module` 下输出为 `index.mjs`，主进程按该扩展名加载。
+- `pnpm --filter @repo/desktop run dist`：`electron-vite build && electron-builder --win`，产物落在 `apps/desktop/release/`，含 NSIS 安装包 `AgentDesktop Setup <version>.exe` 与免安装目录 `win-unpacked/`；
+- preload 在 `type: module` 下输出为 `index.mjs`，主进程按该扩展名加载；
+- 下载源必须显式指定：Electron 二进制在 `electron-builder.yml` 的 `electronDownload.mirror` 里指向 npmmirror，打包工具链（NSIS / 7zip / winCodeSign）的镜像由 `dist` 脚本用 `cross-env` 注入 `ELECTRON_BUILDER_BINARIES_MIRROR`。原因是 `pnpm run` 不会把 `.npmrc` 的 `electron_mirror` / `electron_builder_binaries_mirror` 注入为环境变量，不声明就会回落到 GitHub 重下整包（约 150 MB）而超时。
+
+### 5.4 后端构建与运行
+
+- `pnpm --filter @repo/backend run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build` 把 `src/index.ts` 打成单文件 `dist/index.js`（ESM + sourcemap，代码部分已压缩、不含空格与注释）；
+- Vite 走服务端构建（`build.ssr`，`target: node20`），按 Node 环境解析依赖；目录下的 `.env.*` 由 `node --env-file` 在运行时读取，构建时以 `envDir: false` 关闭 Vite 自身的 env 加载；
+- 运行期依赖（含 workspace 的 `@repo/shared`）与 Node 内置模块全部外置，产物中保留裸包名，部署时需一并安装 `dependencies`；
+- 启动：`pnpm --filter @repo/backend run start`，即 `node --env-file=.env.production dist/index.js`。
+- 产物中仍可见的换行与缩进都属于字符串内容（多行 SQL、系统提示词、SSE 报文的 `\n\n`），是数据而非格式：`\n\n` 是 SSE 协议分隔符，提示词换行影响模型输入，压缩器不会也不应改写它们。
+
+### 5.5 公共库构建
+
+- `pnpm --filter @repo/shared run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）产出 `dist/index.mjs`、`dist/index.cjs` 与 `dist/index.d.ts` 等类型声明；
+- 产物保留空格与注释、开启 sourcemap，便于使用方调试；第三方运行时依赖（如 `crypto-js`）外置并保留裸包名，由使用方安装。
 
 ---
 

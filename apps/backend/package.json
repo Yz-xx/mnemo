@@ -5,9 +5,9 @@
   "description": "后端应用（Express + LangChain 智能体服务）",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "dev": "tsx watch --env-file=.env.development src/index.ts",
+    "build": "tsc --noEmit && vite build",
+    "start": "node --env-file=.env.production dist/index.js",
     "test": "vitest run"
   },
   "dependencies": {

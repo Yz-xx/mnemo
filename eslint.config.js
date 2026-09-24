@@ -57,7 +57,6 @@ export default tseslint.config(
       'apps/desktop/src/main/**/*.ts',
       'apps/desktop/src/preload/**/*.ts',
       '*.config.js',
-      '**/rollup.config.js',
       '**/*.config.ts',
     ],
     languageOptions: {

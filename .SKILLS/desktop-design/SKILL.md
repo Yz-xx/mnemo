@@ -85,9 +85,17 @@ renderer/src/
 3. 需要主进程即时生效时，在 `ipc.ts` 的 `settings:save` 分支中处理（如主题、窗口底色）。
 4. 渲染进程通过 composable 从 `initialSettings` / `desktopApi` 读取，不自行解析文件。
 
-## 9. 自检清单
+## 9. 构建与打包
 
-- `pnpm --filter @repo/desktop run build` 通过。
+- 链路：`electron-vite build` 产出 `out/{main,preload,renderer}`，再由 `electron-builder --win` 打成 `release/` 下的 NSIS 安装包与免安装的 `win-unpacked/`。
+- `electron-builder.yml` 的 `files` 只收 `out/**` 与 `package.json`，源码不入包；`dependencies` 里的生产依赖由 electron-builder 自动打进 `app.asar`。
+- 下载源必须显式声明：`electronDownload.mirror` 指向 npmmirror；工具链镜像（NSIS / 7zip / winCodeSign）没有对应配置项、只认 `ELECTRON_BUILDER_BINARIES_MIRROR`，由 `dist` 脚本经 `cross-env` 注入。`pnpm run` 不会把 `.npmrc` 的对应键注入为环境变量，不声明就会回落到 GitHub 重下整包（约 150 MB）而超时。
+- 主进程与 preload 的依赖由 `externalizeDepsPlugin()` 外置，渲染进程的依赖由 Vite 打进 bundle。
+- `out/` 与 `release/` 均为构建产物，不入库。
+
+## 10. 自检清单
+
+- `pnpm --filter @repo/desktop run build` 通过；需要安装包时 `run dist` 能产出 `release/` 下的 exe。
 - 新增 IPC 已在注册、暴露、类型三处同步。
 - 渲染进程未引入 Node / Electron API，未直接暴露 `ipcRenderer`。
 - 主题切换无字闪，冷启动无深色闪烁。

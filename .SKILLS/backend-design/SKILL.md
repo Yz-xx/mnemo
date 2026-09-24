@@ -78,16 +78,29 @@ apps/backend/src/
 - 模型与嵌入 provider 由 `config.ts` 决定（deepseek 走 `ChatOpenAI`，其余走 `ChatOllama`），业务代码不做 provider 判断。
 - 网络类异常统一转成可读提示（如 `fetch failed` → 「无法连接对话模型服务」）。
 
-## 8. ESM 与构建
+## 8. 配置与环境文件
+
+- 环境变量只在 `config.ts` 读取并映射为 `AppConfig`，其它模块一律使用注入的 config，不直接读 `process.env`。
+- 新增配置项的标准动作：`AppConfig` 加字段 → `loadConfig()` 读环境变量并给默认值 → 同步 `.env.development` 与 `.env.production` → 同步 README 的配置表。
+- 配置按环境拆两份：`.env.development` 供 `pnpm dev`（`tsx watch --env-file`）、`.env.production` 供 `pnpm start`（`node --env-file`），走 Node 原生能力，不引入 dotenv 之类的加载库。
+- 系统环境变量优先级高于文件，真实密钥不入库，生产文件只写占位值并在注释中说明注入方式。
+- 路径类配置（如 `DATA_DIR`）写进 env 文件时必须用绝对路径，避免随启动目录漂移。
+
+## 9. ESM 与构建
 
 - `module` 与 `moduleResolution` 为 `NodeNext`，所有相对导入必须带 `.js` 后缀。
-- 构建执行 `tsc -p tsconfig.json` 输出 `dist`；测试文件位于 `src/__vitest__` 并被 `tsconfig.json` 的 `exclude` 排除，不进入产物。
+- 构建由 `vite.config.ts` 完成（服务端构建 `build.ssr`，`target: node20`）：先 `tsc --noEmit` 做类型检查，再由 `vite build` 把 `src/index.ts` 打成单文件 `dist/index.js`（ESM + sourcemap），产物经 esbuild 压缩，代码部分不含空格与注释。
+- 运行期依赖与 Node 内置模块一律外置：`external` 由 `package.json` 的 `dependencies` 动态生成，外置时保留裸包名，新增依赖不必改配置；本地模块的 `.js` 后缀导入由 Vite 解析回 `.ts`。
+- 构建前清空 `dist`（`emptyOutDir`，产物为单文件，避免旧编译产物残留）；测试文件位于 `src/__vitest__` 并被 `tsconfig.json` 的 `exclude` 排除，不进入产物。
+- `.env.*` 只在运行时由 `node --env-file` 读取，构建时用 `envDir: false` 关闭 Vite 自身的 env 加载，避免生产配置被误读或写进产物。
+- 产物里剩下的换行与缩进都在字符串内部（多行 SQL、系统提示词、SSE 报文的 `\n\n`），属数据而非格式，压缩器不会改写；无需为了"产物看起来是单行"去改写这些字面量。
 - 单测不连真实数据库与网络，外部依赖用替身隔离，运行 `pnpm --filter @repo/backend run test`。
 
-## 9. 自检清单
+## 10. 自检清单
 
 - `pnpm --filter @repo/backend run test` 与 `run build` 通过。
 - 新接口已登记到 `routes/index.ts`，鉴权策略与所属前缀正确。
 - 错误响应为中文文案且状态码符合约定。
 - 涉及 SQL 的改动全部参数化并带 `user_id` 过滤。
 - 流式相关改动仍满足"res 监听中断、有正文才落库、finally 关闭响应"。
+- 新增配置项已在两份 env 文件与 README 配置表中同步。

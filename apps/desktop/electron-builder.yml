@@ -7,6 +7,10 @@ directories:
 files:
   - out/**
   - package.json
+# Electron 二进制走国内镜像：pnpm run 不会把 .npmrc 的 electron_mirror 注入为环境变量，
+# 必须在此显式声明，否则会回落到 GitHub 重新下载整包（本地已有缓存也不会命中）
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
 win:
   target:
     - target: nsis

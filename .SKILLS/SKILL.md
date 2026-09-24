@@ -51,7 +51,7 @@ my-monorepo/
 ## 依赖与版本
 
 - 包管理器只用 pnpm（>=9），Node >= 20，仓库为 `type: module`。
-- 新增依赖使用 `pnpm add <包> --filter <包名>`；根依赖只放工具链（eslint / prettier / typescript / rollup / vitest 等）。
+- 新增依赖使用 `pnpm add <包> --filter <包名>`；根依赖只放工具链（eslint / prettier / typescript / vite / vitest 等）。
 - 需要 postinstall 的依赖必须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记，否则安装产物不完整。
 - 跨包引用写 workspace 包名（如 `@repo/shared`），不用相对路径穿透到其他包。
 

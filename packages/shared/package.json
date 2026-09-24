@@ -6,10 +6,10 @@
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
-  "types": "./dist/types/index.d.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
     }
@@ -18,7 +18,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rollup -c rollup.config.js",
+    "build": "tsc --noEmit && vite build",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
