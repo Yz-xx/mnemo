@@ -6,6 +6,8 @@ import { fakeModel } from '@langchain/core/testing';
 import { createAgent } from 'langchain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTools } from '../llm/tools.js';
+import { createLogger } from '../logger/index.js';
+import type { LogSink } from '../logger/types.js';
 import { KnowledgeStore } from '../rag/store.js';
 import { FakeEmbeddings, TEST_ROOT } from './fakeEmbeddings.js';
 
@@ -67,5 +69,25 @@ describe('search_knowledge_base 工具', () => {
     const reply = String(result.messages.at(-1)?.content ?? '');
     expect(reply).toContain('公共手册');
     expect(reply).not.toContain('我的笔记');
+  });
+
+  it('检索日志记录命中数与最高分，并带上注入的请求上下文', async () => {
+    const lines: string[] = [];
+    const sink: LogSink = { color: false, write: (line) => void lines.push(line) };
+    const logger = createLogger({ level: 'debug', stdio: false, sinks: [sink] }).child({
+      requestId: 'abcd1234',
+    });
+
+    await buildAgent().invoke(
+      { messages: [{ role: 'user', content: '香蕉在哪个文档里？' }] },
+      { configurable: { userId: 1, logger } },
+    );
+
+    const searchLine = lines.find((line) => line.includes('检索知识库'));
+    expect(searchLine).toBeDefined();
+    expect(searchLine).toContain('requestId=abcd1234');
+    expect(searchLine).toContain('query=香蕉');
+    expect(searchLine).toMatch(/hits=[1-9]\d*/);
+    expect(searchLine).toMatch(/topScore=\d/);
   });
 });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import type { AppDependencies } from '../dependencies.js';
 import { currentUserId } from '../auth/middleware.js';
+import { requestLogger } from '../middleware/requestLog.js';
 import { streamChatReply } from '../services/chatStream.js';
 
 /** 对话接口：校验入参后交由 streamChatReply 以 SSE 流式返回回复 */
@@ -24,7 +25,14 @@ export function createChatRouter({ agent, conversations }: AppDependencies): Rou
 
     // 先落库用户消息，再把整轮回复交给流式服务编排
     const conversation = await conversations.append(userId, body.conversationId, 'user', content);
-    await streamChatReply({ res, agent, conversations, userId, conversation });
+    await streamChatReply({
+      res,
+      agent,
+      conversations,
+      logger: requestLogger(res),
+      userId,
+      conversation,
+    });
   });
 
   return router;

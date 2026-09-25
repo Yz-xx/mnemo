@@ -3,6 +3,7 @@ import type { UserStore } from './auth/userStore.js';
 import type { AppConfig } from './config.js';
 import type { ConversationStore } from './conversation/store.js';
 import type { AgentService } from './llm/agent.js';
+import type { Logger } from './logger/types.js';
 import type { KnowledgeStore } from './rag/store.js';
 
 /**
@@ -11,6 +12,7 @@ import type { KnowledgeStore } from './rag/store.js';
  */
 export interface AppDependencies {
   config: AppConfig;
+  logger: Logger;
   agent: AgentService;
   conversations: ConversationStore;
   knowledge: KnowledgeStore;

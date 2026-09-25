@@ -4,23 +4,15 @@ import { createAgent } from 'langchain';
 import { describeChatModel } from '../config.js';
 import type { AppConfig } from '../config.js';
 import type { StoredMessage } from '../conversation/types.js';
+import type { Logger } from '../logger/types.js';
 import type { KnowledgeStore } from '../rag/store.js';
 import { createChatModel } from './model.js';
 import { createTools } from './tools.js';
+import { SYSTEM_PROMPT } from './prompt.js';
 
 /** 流式过程中向前端推送的事件 */
 export type AgentStreamEvent =
   { type: 'token'; content: string } | { type: 'tool'; name: string; status: 'start' | 'end' };
-
-const SYSTEM_PROMPT = `你是运行在桌面客户端中的中文智能助手。
-
-工作要求：
-1. 需要事实信息时优先调用工具，不要凭空编造。
-2. 提问涉及公司制度、业务流程、产品资料、内部规定、专有知识，或带有“知识库”“文档”“资料”等字样时，必须先调用 search_knowledge_base 检索后再作答，禁止凭自身记忆直接回答；检索结果为空时才说明“知识库中未找到相关内容”。
-3. 涉及“今天”“现在”等时间概念时调用 get_current_time。
-4. 涉及算术运算时调用 calculator，不要自行心算。
-5. 引用知识库内容时标注来源文档名称。
-6. 使用简体中文回答，条理清晰，必要时使用列表。`;
 
 /** 从消息内容中提取纯文本，兼容字符串与内容块两种形式 */
 function extractText(content: BaseMessageChunk['content']): string {
@@ -63,11 +55,12 @@ export class AgentService {
   /**
    * 流式执行一轮对话。
    * 采用 messages 流模式，可直接拿到模型输出的增量分片与工具调用信息；
-   * 用户身份经 configurable 下传，供知识库等工具做可见性过滤。
+   * 用户身份与请求级日志经 configurable 下传：前者供知识库工具做可见性过滤，
+   * 后者让工具内部日志自动带上 requestId 等上下文，便于按请求检索。
    */
   async *stream(
     history: StoredMessage[],
-    options: { userId: number; signal?: AbortSignal },
+    options: { userId: number; signal?: AbortSignal; logger?: Logger },
   ): AsyncGenerator<AgentStreamEvent> {
     // 同一次工具调用会分散在多个分片中，用集合去重后只推送一次事件
     const startedTools = new Set<string>();
@@ -78,7 +71,7 @@ export class AgentService {
         {
           streamMode: 'messages',
           signal: options.signal,
-          configurable: { userId: options.userId },
+          configurable: { userId: options.userId, logger: options.logger },
         },
       );
 

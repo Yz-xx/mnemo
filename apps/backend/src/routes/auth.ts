@@ -5,6 +5,7 @@ import { parseCredentials } from '../auth/credentials.js';
 import { createRequireAuth, currentToken, currentUserId } from '../auth/middleware.js';
 import type { SessionStore } from '../auth/sessionStore.js';
 import type { UserRecord } from '../auth/userStore.js';
+import { requestLogger } from '../middleware/requestLog.js';
 
 /** 签发令牌并组装响应体；密码等敏感字段不会出现在响应中 */
 async function issueSession(
@@ -23,6 +24,7 @@ export function createAuthRouter({ users, sessions }: AppDependencies): Router {
   const requireAuth = createRequireAuth(sessions);
 
   router.post('/register', async (req: Request, res: Response) => {
+    const log = requestLogger(res);
     const parsed = parseCredentials(req.body);
     if (!parsed.ok) {
       res.status(400).json({ message: parsed.message });
@@ -30,14 +32,17 @@ export function createAuthRouter({ users, sessions }: AppDependencies): Router {
     }
     const user = await users.register(parsed.value.username, parsed.value.password);
     if (!user) {
+      log.warn('注册被拒绝：用户名已存在', { username: parsed.value.username });
       res.status(409).json({ message: '该用户名已被注册' });
       return;
     }
     // 注册成功即视为登录，省去一次重复输入
+    log.info('注册成功', { userId: user.id, username: user.username });
     res.status(201).json(await issueSession(user, sessions));
   });
 
   router.post('/login', async (req: Request, res: Response) => {
+    const log = requestLogger(res);
     const parsed = parseCredentials(req.body);
     if (!parsed.ok) {
       res.status(400).json({ message: parsed.message });
@@ -46,14 +51,18 @@ export function createAuthRouter({ users, sessions }: AppDependencies): Router {
     const user = await users.authenticate(parsed.value.username, parsed.value.password);
     // 用户不存在与密码错误使用同一提示，避免暴露账号是否已注册
     if (!user) {
+      // 登录失败要留痕，便于识别异常尝试；密码本身不写入日志
+      log.warn('登录失败：用户名或密码错误', { username: parsed.value.username });
       res.status(401).json({ message: '用户名或密码错误' });
       return;
     }
+    log.info('登录成功', { userId: user.id, username: user.username });
     res.json(await issueSession(user, sessions));
   });
 
   router.post('/logout', requireAuth, async (_req: Request, res: Response) => {
     await sessions.remove(currentToken(res));
+    requestLogger(res).info('已登出', { userId: currentUserId(res) });
     res.status(204).end();
   });
 

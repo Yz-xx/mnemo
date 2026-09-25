@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { currentUserId } from '../auth/middleware.js';
+import { requestLogger } from '../middleware/requestLog.js';
 import type { KnowledgeScope, KnowledgeStore } from '../rag/store.js';
 
 /** 新增文档的公共流程：校验内容后入库，失败时给出可读提示 */
@@ -16,18 +17,36 @@ async function createDocument(
     res.status(400).json({ message: '文档内容不能为空' });
     return;
   }
+  const title = body.title?.trim() || '未命名文档';
+  const startedAt = Date.now();
 
   try {
     const document = await knowledge.add({
-      title: body.title?.trim() || '未命名文档',
+      title,
       content,
       scope: target.scope,
+      userId: target.userId,
+    });
+    requestLogger(res).info('文档入库完成', {
+      documentId: document.id,
+      title: document.title,
+      scope: document.scope,
+      chunkCount: document.chunks,
+      durationMs: Date.now() - startedAt,
       userId: target.userId,
     });
     res.status(201).json(document);
   } catch (error) {
     // 向量化依赖本地 embedding 服务，维度或模型不符也在此统一提示
     const detail = error instanceof Error ? error.message : String(error);
+    // 入库失败集中在向量化服务与向量基准两类原因，必须把原始错误落日志才能定位
+    requestLogger(res).error('文档入库失败', {
+      title,
+      scope: target.scope,
+      userId: target.userId,
+      durationMs: Date.now() - startedAt,
+      error,
+    });
     res.status(502).json({ message: `文档入库失败：${detail}` });
   }
 }
@@ -68,6 +87,12 @@ export function createKnowledgeRouter(knowledge: KnowledgeStore, adminToken: str
       res.status(404).json({ message: '文档不存在或无权删除' });
       return;
     }
+    // 删除不可逆，留一条业务记录便于回溯是谁操作了全局文档
+    requestLogger(res).info('文档已删除', {
+      documentId: req.params.id,
+      userId: currentUserId(res),
+      isAdmin: isAdmin(req),
+    });
     res.status(204).end();
   });
 

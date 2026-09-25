@@ -21,6 +21,7 @@ apps/backend/src/
 ├── conversation/     会话与消息持久化
 ├── llm/              agent、model、tools
 ├── rag/              知识库存储与检索
+├── logger/           日志：级别过滤、脱敏、格式化、按天轮转的文件输出
 ├── db/               pool.ts、schema.ts
 └── __vitest__/       单元测试（不参与编译产物）
 ```
@@ -102,7 +103,20 @@ apps/backend/src/
 - 产物里剩下的换行与缩进都在字符串内部（多行 SQL、系统提示词、SSE 报文的 `\n\n`），属数据而非格式，压缩器不会改写；无需为了"产物看起来是单行"去改写这些字面量。
 - 单测不连真实数据库与网络，外部依赖用替身隔离，运行 `pnpm --filter @repo/backend run test`。
 
-## 10. 自检清单
+## 10. 日志
+
+- 统一使用 `src/logger/` 的 `Logger`（`createLogger` 组装控制台与按天轮转的文件输出），不再写裸 `console.*`。
+- 装配顺序：根日志在 `index.ts` 与配置一起最先建立，再经 `AppDependencies.logger` 传给 `app.ts`；这样建库等启动环节失败时也有可排查的记录。
+- 请求级日志：`createRequestLog` 为每个请求生成 8 位 `requestId`，挂到 `res.locals.log` 与 `res.locals.requestId`，并回写 `x-request-id` 响应头；路由与中间件内取日志只用 `requestLogger(res)`，业务日志自动带上该请求的 `requestId`。
+- 一次请求只留一条结果汇总：由 `createRequestLog` 在响应结束时按状态码定级输出（`5xx` = error、`4xx` = warn、其余 = info）；`errorHandler` 不自行打印，只把 5xx 的错误挂到 `res.locals.error` 交给请求日志，避免同一次失败产生两条记录。
+- 需要把多条日志串到同一上下文时用 `logger.child({ userId, conversationId })` 派生，不在每次调用里重复传参。
+- 埋点要求：失败路径必须带原始 `error` 字段（格式化层会展开堆栈）；成功路径记录可度量的字段（耗时、片段数、答复长度、工具名）。
+- 入参出参由请求日志统一记录：查询串、请求体、JSON 响应体都先 `redactValue` 脱敏、再 `preview` 截断（顺序不可颠倒，否则截断成字符串后嵌套的密钥就遮蔽不到了）。SSE 接口不走 `res.json`，其出参须由业务层自行补 `answerPreview` 一类摘要。
+- 首行列位固定为「时间 级别 接口路径 消息」：格式化层把 `path` 字段提升到第三列并从行尾跳过，请求日志因此可按接口竖向对照；不带 `path` 的记录自动省略该列，不输出空占位。
+- 脱敏：密码、令牌、密钥类字段由 `redactFields` 按字段名统一遮蔽，业务代码不必各自处理。
+- 新增日志配置项（如日志目录、保留天数）的标准动作同第 8 章：`AppConfig.log` → 两份 env → `apps/backend/README.md` 配置表。
+
+## 11. 自检清单
 
 - `pnpm --filter @repo/backend run test` 与 `run build` 通过。
 - 新接口已登记到 `routes/index.ts`，鉴权策略与所属前缀正确。
@@ -110,3 +124,4 @@ apps/backend/src/
 - 涉及 SQL 的改动全部参数化并带 `user_id` 过滤。
 - 流式相关改动仍满足"res 监听中断、有正文才落库、finally 关闭响应"。
 - 新增配置项已在两份 env 文件与 `apps/backend/README.md` 配置表中同步。
+- 日志统一走注入的 `Logger`，未新增裸 `console.*`；新增失败路径已带原始 `error` 字段。

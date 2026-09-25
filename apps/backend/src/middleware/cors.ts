@@ -5,6 +5,8 @@ export function allowCors(req: Request, res: Response, next: NextFunction): void
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  // 跨域下默认读不到自定义响应头，放开后客户端才能拿到请求 ID 用于反馈排查
+  res.setHeader('Access-Control-Expose-Headers', 'x-request-id');
   if (req.method === 'OPTIONS') {
     res.sendStatus(204);
     return;

@@ -154,32 +154,47 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 已存在的系统环境变量优先级高于文件，所以数据库密码与 API Key 在部署机上注入即可，不必写进仓库。
 
-| 变量                                                           | 默认值                      | 说明                                     |
-| -------------------------------------------------------------- | --------------------------- | ---------------------------------------- |
-| `PORT`                                                         | `3000`                      | 服务端口                                 |
-| `DATA_DIR`                                                     | `<cwd>/data`                | 知识库数据目录                           |
-| `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                               |
-| `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                               |
-| `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                             |
-| `MYSQL_PASSWORD`                                               | `123456`                    | MySQL 密码                               |
-| `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                 |
-| `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                   |
-| `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                 |
-| `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址                              |
-| `OLLAMA_CHAT_MODEL`                                            | `qwen2.5:7b`                | 本地对话模型                             |
-| `OLLAMA_EMBEDDING_MODEL`                                       | `nomic-embed-text`          | 本地向量模型                             |
-| `DEEPSEEK_API_KEY`                                             | 空                          | 线上对话服务的密钥                       |
-| `DEEPSEEK_BASE_URL`                                            | `https://api.deepseek.com`  | DeepSeek 兼容 OpenAI 协议                |
-| `DEEPSEEK_CHAT_MODEL`                                          | `deepseek-chat`             | 线上对话模型                             |
-| `EMBEDDING_PROVIDER`                                           | `ollama`                    | `ollama` 或 `openai`                     |
-| `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | `text-embedding-3-small` 等 | 线上向量服务配置                         |
-| `KNOWLEDGE_CHUNK_SIZE`                                         | `500`                       | 切片长度                                 |
-| `KNOWLEDGE_CHUNK_OVERLAP`                                      | `80`                        | 切片重叠                                 |
-| `KNOWLEDGE_TOP_K`                                              | `4`                         | 检索返回片段数                           |
-| `KNOWLEDGE_MIN_SCORE`                                          | `0.6`                       | 检索相似度下限（低于该分数的片段丢弃）   |
-| `KNOWLEDGE_ADMIN_TOKEN`                                        | 空                          | 全局知识库管理令牌（留空即关闭全局写入） |
+| 变量                                                           | 默认值                      | 说明                                                 |
+| -------------------------------------------------------------- | --------------------------- | ---------------------------------------------------- |
+| `PORT`                                                         | `3000`                      | 服务端口                                             |
+| `DATA_DIR`                                                     | `<cwd>/data`                | 数据目录（知识库与日志的基准目录）                   |
+| `LOG_LEVEL`                                                    | `info`                      | 日志级别：`debug` / `info` / `warn` / `error`        |
+| `LOG_DIR`                                                      | `<数据目录>/logs`           | 日志目录（相对路径会随启动目录漂移，建议填绝对路径） |
+| `LOG_RETENTION_DAYS`                                           | `14`                        | 日志文件保留天数                                     |
+| `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                                           |
+| `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                                           |
+| `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                                         |
+| `MYSQL_PASSWORD`                                               | `123456`                    | MySQL 密码                                           |
+| `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                             |
+| `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                               |
+| `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                             |
+| `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址                                          |
+| `OLLAMA_CHAT_MODEL`                                            | `qwen2.5:7b`                | 本地对话模型                                         |
+| `OLLAMA_EMBEDDING_MODEL`                                       | `nomic-embed-text`          | 本地向量模型                                         |
+| `DEEPSEEK_API_KEY`                                             | 空                          | 线上对话服务的密钥                                   |
+| `DEEPSEEK_BASE_URL`                                            | `https://api.deepseek.com`  | DeepSeek 兼容 OpenAI 协议                            |
+| `DEEPSEEK_CHAT_MODEL`                                          | `deepseek-chat`             | 线上对话模型                                         |
+| `EMBEDDING_PROVIDER`                                           | `ollama`                    | `ollama` 或 `openai`                                 |
+| `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | `text-embedding-3-small` 等 | 线上向量服务配置                                     |
+| `KNOWLEDGE_CHUNK_SIZE`                                         | `500`                       | 切片长度                                             |
+| `KNOWLEDGE_CHUNK_OVERLAP`                                      | `80`                        | 切片重叠                                             |
+| `KNOWLEDGE_TOP_K`                                              | `4`                         | 检索返回片段数                                       |
+| `KNOWLEDGE_MIN_SCORE`                                          | `0.6`                       | 检索相似度下限（低于该分数的片段丢弃）               |
+| `KNOWLEDGE_ADMIN_TOKEN`                                        | 空                          | 全局知识库管理令牌（留空即关闭全局写入）             |
 
 对话模型与向量模型**分开配置**：DeepSeek 不提供 embedding 接口，所以即便对话走线上，向量仍可继续使用本地 Ollama。
+
+### 日志
+
+日志同时输出到控制台与 `<LOG_DIR>/backend-YYYY-MM-DD.log`：按本地日期轮转，超期文件在启动与跨天时清理；日志文件写入失败（目录无权限、磁盘满）只降级为"仅控制台输出"，不影响服务本身。控制台里 `warn` / `error` 走 stderr，可用 `2>` 单独重定向。
+
+每个请求都会分配一个 8 位 `requestId`：它出现在该请求产生的每条日志上，并通过响应头 `x-request-id` 回写。排查时先按 `requestId` 检索日志文件，即可拿到该请求的完整链路（请求汇总、业务动作、5xx 的原始堆栈）。
+
+日志中的密码、令牌、密钥字段（`password` / `token` / `authorization` / `apiKey` 等）在写入前已统一遮蔽为 `***`。
+
+知识库检索的命中片段数与最高相似度记在 `debug` 级别，排查"答非所问 / 未命中"时把 `LOG_LEVEL` 调为 `debug` 即可看到。
+
+请求级日志同时记录**入参**（查询串、请求体）与**出参**（JSON 响应体）：两者都先脱敏再截断到 500 字符，长度超过 100 字符的字段会折叠成缩进块单独成行，因此首行的「时间 + 接口路径 + 事件 + 短字段」始终便于扫读。流式接口 `/api/chat` 不走 JSON 响应，其出参以 `answerLength` 与 `answerPreview`（回复开头 200 字符）记录，另有 `tools` 列出本轮用到的工具。
 
 ## 十一、前置条件与启动
 

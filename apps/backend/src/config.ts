@@ -1,11 +1,21 @@
 import path from 'node:path';
 import process from 'node:process';
+import type { LogLevel } from './logger/types.js';
 
 /** 对话模型提供方：本地 Ollama 或 OpenAI 兼容的线上服务（DeepSeek） */
 export type LlmProvider = 'ollama' | 'deepseek';
 
 /** 向量化提供方：DeepSeek 不提供 embedding 接口，故与对话模型独立配置 */
 export type EmbeddingProvider = 'ollama' | 'openai';
+
+/** 日志配置：文件按天轮转，级别用于过滤调试信息 */
+export interface LogConfig {
+  level: LogLevel;
+  /** 日志目录，默认落在数据目录下的 logs */
+  dir: string;
+  /** 日志文件保留天数 */
+  retentionDays: number;
+}
 
 /** MySQL 连接参数：用户与对话记录持久化在此库中 */
 export interface MysqlConfig {
@@ -19,6 +29,7 @@ export interface MysqlConfig {
 export interface AppConfig {
   port: number;
   dataDir: string;
+  log: LogConfig;
   mysql: MysqlConfig;
   llm: {
     provider: LlmProvider;
@@ -56,11 +67,24 @@ function toNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** 日志级别：非法值一律退回 info，避免拼错环境变量导致日志全部静默 */
+function toLogLevel(value: string | undefined): LogLevel {
+  return value === 'debug' || value === 'warn' || value === 'error' ? value : 'info';
+}
+
 /** 读取运行配置：全部来自环境变量（可用 .env 文件提供），保证部署时无需改代码 */
 export function loadConfig(): AppConfig {
+  // 数据目录先解析出来，供知识库与日志目录共用同一基准
+  const dataDir = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
+
   return {
     port: toNumber(process.env.PORT, 3000),
-    dataDir: process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data'),
+    dataDir,
+    log: {
+      level: toLogLevel(process.env.LOG_LEVEL),
+      dir: process.env.LOG_DIR ?? path.join(dataDir, 'logs'),
+      retentionDays: toNumber(process.env.LOG_RETENTION_DAYS, 14),
+    },
     mysql: {
       host: process.env.MYSQL_HOST ?? '127.0.0.1',
       port: toNumber(process.env.MYSQL_PORT, 3306),
