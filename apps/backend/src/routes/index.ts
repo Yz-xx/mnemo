@@ -19,5 +19,9 @@ export function registerRoutes(app: Express, deps: AppDependencies): void {
   app.use('/api/auth', createAuthRouter(deps));
   app.use('/api/chat', requireAuth, createChatRouter(deps));
   app.use('/api/conversations', requireAuth, createConversationRouter(conversations));
-  app.use('/api/knowledge', requireAuth, createKnowledgeRouter(knowledge));
+  app.use(
+    '/api/knowledge',
+    requireAuth,
+    createKnowledgeRouter(knowledge, config.knowledge.adminToken),
+  );
 }

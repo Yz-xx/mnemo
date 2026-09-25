@@ -1,6 +1,16 @@
 import { tool } from 'langchain';
+import type { ToolRunnableConfig } from '@langchain/core/tools';
 import { z } from 'zod';
 import type { KnowledgeStore } from '../rag/store.js';
+
+/** 从运行时配置中取出当前用户 ID：调用者身份由 Agent 经 configurable 注入 */
+function readUserId(config?: ToolRunnableConfig): number {
+  const userId = config?.configurable?.userId;
+  if (!Number.isInteger(userId)) {
+    throw new Error('缺少当前用户身份，无法检索知识库');
+  }
+  return userId as number;
+}
 
 /** 白名单校验后计算算术表达式，避免执行任意代码 */
 function evaluateExpression(expression: string): number {
@@ -17,8 +27,8 @@ function evaluateExpression(expression: string): number {
 /** 组装 Agent 工具集：知识库检索、当前时间、算术计算 */
 export function createTools(knowledge: KnowledgeStore) {
   const searchKnowledgeBase = tool(
-    async ({ query }) => {
-      const results = await knowledge.search(query);
+    async ({ query }, config) => {
+      const results = await knowledge.search(query, { userId: readUserId(config) });
       if (results.length === 0) return '知识库中没有检索到相关内容。';
       return results
         .map((item, index) => `【片段${index + 1}】来源《${item.title}》\n${item.content}`)

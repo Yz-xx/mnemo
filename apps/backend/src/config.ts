@@ -44,6 +44,10 @@ export interface AppConfig {
     chunkSize: number;
     chunkOverlap: number;
     topK: number;
+    /** 检索相似度下限：低于该分数的片段视为噪声丢弃 */
+    minScore: number;
+    /** 全局知识库管理令牌；留空表示不开放全局文档写入接口 */
+    adminToken: string;
   };
 }
 
@@ -88,6 +92,8 @@ export function loadConfig(): AppConfig {
       chunkSize: toNumber(process.env.KNOWLEDGE_CHUNK_SIZE, 500),
       chunkOverlap: toNumber(process.env.KNOWLEDGE_CHUNK_OVERLAP, 80),
       topK: toNumber(process.env.KNOWLEDGE_TOP_K, 4),
+      minScore: toNumber(process.env.KNOWLEDGE_MIN_SCORE, 0.6),
+      adminToken: process.env.KNOWLEDGE_ADMIN_TOKEN ?? '',
     },
   };
 }
@@ -95,4 +101,16 @@ export function loadConfig(): AppConfig {
 /** 当前对话模型名称，用于健康检查与界面展示 */
 export function describeChatModel(config: AppConfig): string {
   return config.llm.provider === 'deepseek' ? config.deepseek.chatModel : config.ollama.chatModel;
+}
+
+/** 当前向量模型名称，用于识别知识库是否由同一模型建立 */
+export function describeEmbeddingModel(config: AppConfig): string {
+  return config.embedding.provider === 'openai'
+    ? config.embedding.model
+    : config.ollama.embeddingModel;
+}
+
+/** 当前向量化服务地址，用于把连接失败翻译成可定位的提示 */
+export function describeEmbeddingEndpoint(config: AppConfig): string {
+  return config.embedding.provider === 'openai' ? config.embedding.baseUrl : config.ollama.baseUrl;
 }

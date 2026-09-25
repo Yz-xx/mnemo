@@ -1,7 +1,12 @@
 import { createApp } from './app.js';
 import { SessionStore } from './auth/sessionStore.js';
 import { UserStore } from './auth/userStore.js';
-import { describeChatModel, loadConfig } from './config.js';
+import {
+  describeChatModel,
+  describeEmbeddingEndpoint,
+  describeEmbeddingModel,
+  loadConfig,
+} from './config.js';
 import { ConversationStore } from './conversation/store.js';
 import { createMysqlPool } from './db/pool.js';
 import { ensureSchema } from './db/schema.js';
@@ -22,7 +27,14 @@ async function bootstrap(): Promise<void> {
   // 启动清理：清掉过期会话，并把历史遗留的同账号重复会话收敛为单端登录
   const prunedSessions = await sessions.prune();
   const conversations = new ConversationStore(pool);
-  const knowledge = new KnowledgeStore(config.dataDir, createEmbeddings(config), config.knowledge);
+  const knowledge = new KnowledgeStore(config.dataDir, createEmbeddings(config), {
+    chunkSize: config.knowledge.chunkSize,
+    chunkOverlap: config.knowledge.chunkOverlap,
+    topK: config.knowledge.topK,
+    minScore: config.knowledge.minScore,
+    embeddingModel: describeEmbeddingModel(config),
+    embeddingEndpoint: describeEmbeddingEndpoint(config),
+  });
   const agent = new AgentService(config, knowledge);
 
   const app = createApp({ config, agent, conversations, knowledge, users, sessions });

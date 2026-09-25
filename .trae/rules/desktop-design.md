@@ -1,7 +1,7 @@
 ---
-name: desktop-design
-description: apps/desktop（Electron + Vue 3）的设计规范，涵盖三层结构与边界、主进程职责拆分、IPC 契约、主题与防闪烁处理、渲染进程状态管理、SSE 消费与样式分层。修改桌面端主进程、预加载、组件或样式时使用。
-keywords: electron, vue3, ipc, 主题, composable, 样式
+description: apps/desktop（Electron + Vue 3）的设计规范，涵盖三层结构与边界、主进程职责拆分、IPC 契约、主题与防闪烁处理、渲染进程状态管理、SSE 消费与样式分层。修改桌面端主进程、预加载、组件或样式时遵守。
+globs: apps/desktop/**
+alwaysApply: false
 ---
 
 # 桌面端设计规范
@@ -76,7 +76,7 @@ renderer/src/
 - `styles/` 按 `theme`（色板）→ `motion` → `base` → `layout` → `components/*` 聚合，导入顺序即层叠顺序。
 - 新增组件样式文件必须在 `styles/index.less` 注册；组件样式文件与组件同名（`components/knowledge.less` 对应 `KnowledgePanel.vue`）。
 - 与主题无关的尺寸、时长、字体放 `variables.less`；色值只放 `theme.less`；可复用片段放 `mixins.less`。
-- 详细写法遵循 `.SKILLS/code-style/SKILL.md` 的 Less 章节。
+- 详细写法遵循 `.trae/rules/code-style.md` 的 Less 章节。
 
 ## 8. 新增设置项清单
 

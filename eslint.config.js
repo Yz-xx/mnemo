@@ -7,7 +7,7 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
 export default tseslint.config(
-  // 全局忽略：构建产物、依赖目录与 IDE 技能目录
+  // 全局忽略：构建产物、依赖目录与 Trae 规则目录（仅含 Markdown）
   {
     ignores: [
       '**/dist/**',
@@ -15,7 +15,7 @@ export default tseslint.config(
       '**/release/**',
       '**/coverage/**',
       '**/node_modules/**',
-      '.SKILLS/**',
+      '.trae/**',
     ],
   },
 

@@ -1,7 +1,7 @@
 ---
-name: code-style
-description: 本仓库 TypeScript、Vue、Less 的编写与命名注释规范，含 Prettier 与 ESLint 配置约定、抽象复用准则、单元测试组织方式。编写、重构或评审代码前使用。
-keywords: 代码规范, 命名, 注释, prettier, eslint, vitest
+description: 本仓库 TypeScript、Vue、Less 的编写与命名注释规范，含 Prettier 与 ESLint 配置约定、抽象复用准则、单元测试组织方式。编写、重构或评审代码时遵守。
+globs: apps/**,packages/**,scripts/**
+alwaysApply: false
 ---
 
 # 代码编写规范

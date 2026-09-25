@@ -11,5 +11,10 @@ allowBuilds:
   electron: true
   electron-winstaller: true
 
+# LanceDB 自带的 embedding 函数是可选能力（本项目向量化走 Ollama / OpenAI 接口），
+# 忽略其 transformers 依赖链，避免额外安装约 200MB 的本地推理运行时
+ignoredOptionalDependencies:
+  - '@huggingface/transformers'
+
 minimumReleaseAgeExclude:
   - electron@44.4.5

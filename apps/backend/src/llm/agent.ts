@@ -62,16 +62,24 @@ export class AgentService {
 
   /**
    * 流式执行一轮对话。
-   * 采用 messages 流模式，可直接拿到模型输出的增量分片与工具调用信息。
+   * 采用 messages 流模式，可直接拿到模型输出的增量分片与工具调用信息；
+   * 用户身份经 configurable 下传，供知识库等工具做可见性过滤。
    */
-  async *stream(history: StoredMessage[], signal?: AbortSignal): AsyncGenerator<AgentStreamEvent> {
+  async *stream(
+    history: StoredMessage[],
+    options: { userId: number; signal?: AbortSignal },
+  ): AsyncGenerator<AgentStreamEvent> {
     // 同一次工具调用会分散在多个分片中，用集合去重后只推送一次事件
     const startedTools = new Set<string>();
 
     try {
       const stream = await this.agent.stream(
         { messages: this.toMessages(history) },
-        { streamMode: 'messages', signal },
+        {
+          streamMode: 'messages',
+          signal: options.signal,
+          configurable: { userId: options.userId },
+        },
       );
 
       for await (const item of stream as AsyncIterable<unknown>) {

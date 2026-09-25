@@ -45,7 +45,10 @@ export async function streamChatReply(input: {
 
   let answer = '';
   try {
-    for await (const event of agent.stream(conversation.messages, controller.signal)) {
+    for await (const event of agent.stream(conversation.messages, {
+      userId,
+      signal: controller.signal,
+    })) {
       if (event.type === 'token') answer += event.content;
       send(event);
     }

@@ -1,38 +1,71 @@
 import { Router } from 'express';
-import type { KnowledgeStore } from '../rag/store.js';
+import type { Request, Response } from 'express';
+import { currentUserId } from '../auth/middleware.js';
+import type { KnowledgeScope, KnowledgeStore } from '../rag/store.js';
 
-/** 知识库接口：文档入库会同步完成切分与向量化 */
-export function createKnowledgeRouter(knowledge: KnowledgeStore): Router {
+/** 新增文档的公共流程：校验内容后入库，失败时给出可读提示 */
+async function createDocument(
+  req: Request,
+  res: Response,
+  knowledge: KnowledgeStore,
+  target: { scope: KnowledgeScope; userId: number },
+): Promise<void> {
+  const body = req.body as { title?: string; content?: string };
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  if (!content) {
+    res.status(400).json({ message: '文档内容不能为空' });
+    return;
+  }
+
+  try {
+    const document = await knowledge.add({
+      title: body.title?.trim() || '未命名文档',
+      content,
+      scope: target.scope,
+      userId: target.userId,
+    });
+    res.status(201).json(document);
+  } catch (error) {
+    // 向量化依赖本地 embedding 服务，维度或模型不符也在此统一提示
+    const detail = error instanceof Error ? error.message : String(error);
+    res.status(502).json({ message: `文档入库失败：${detail}` });
+  }
+}
+
+/**
+ * 知识库接口：文档入库会同步完成切分与向量化。
+ * 客户端只能上传与删除自己的私有文档；全局共享文档由管理令牌校验的接口写入。
+ */
+export function createKnowledgeRouter(knowledge: KnowledgeStore, adminToken: string): Router {
   const router = Router();
 
-  router.get('/documents', (_req, res) => {
-    res.json(knowledge.list());
+  /** 管理令牌未配置时视为不开放全局文档写入 */
+  const isAdmin = (req: Request): boolean =>
+    adminToken !== '' && req.get('x-admin-token') === adminToken;
+
+  router.get('/documents', async (_req, res) => {
+    res.json(await knowledge.list(currentUserId(res)));
   });
 
   router.post('/documents', async (req, res) => {
-    const body = req.body as { title?: string; content?: string };
-    const content = typeof body.content === 'string' ? body.content.trim() : '';
-    if (!content) {
-      res.status(400).json({ message: '文档内容不能为空' });
-      return;
-    }
-
-    try {
-      const document = await knowledge.add({
-        title: body.title?.trim() || '未命名文档',
-        content,
-      });
-      res.status(201).json(document);
-    } catch (error) {
-      // 向量化依赖本地 embedding 服务，失败时给出可读提示
-      const detail = error instanceof Error ? error.message : String(error);
-      res.status(502).json({ message: `文档向量化失败：${detail}` });
-    }
+    await createDocument(req, res, knowledge, { scope: 'private', userId: currentUserId(res) });
   });
 
-  router.delete('/documents/:id', (req, res) => {
-    if (!knowledge.remove(req.params.id)) {
-      res.status(404).json({ message: '文档不存在' });
+  router.post('/global/documents', async (req, res) => {
+    if (!isAdmin(req)) {
+      res.status(403).json({ message: '无权写入全局知识库' });
+      return;
+    }
+    await createDocument(req, res, knowledge, { scope: 'global', userId: currentUserId(res) });
+  });
+
+  router.delete('/documents/:id', async (req, res) => {
+    const removed = await knowledge.remove(req.params.id, {
+      userId: currentUserId(res),
+      isAdmin: isAdmin(req),
+    });
+    if (!removed) {
+      res.status(404).json({ message: '文档不存在或无权删除' });
       return;
     }
     res.status(204).end();

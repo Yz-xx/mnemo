@@ -1,7 +1,6 @@
 ---
-name: my-monorepo
-description: my-monorepo 仓库级总纲，规定 monorepo 目录结构与职责边界、统一脚本与构建流程、依赖管理、Git 提交规范，并索引后端、桌面端、代码风格三份子规范。在本仓库开发、构建、联调或提交前使用。
-keywords: monorepo, pnpm, 架构, 工程规范
+description: my-monorepo 仓库级总纲：目录结构与职责边界、统一脚本、依赖与版本、Git 提交规范，并索引后端、桌面端、代码风格三份子规范及收尾自检要求。在本仓库做任何任务时始终遵守。
+alwaysApply: true
 ---
 
 # my-monorepo 总纲
@@ -22,7 +21,8 @@ my-monorepo/
 ├── packages/
 │   └── shared/      @repo/shared 公共能力（字符串、通用函数、DES 加密）
 ├── scripts/         根脚本：dev / build / lint / test
-└── .SKILLS/         规范与技能目录（不参与 lint、测试与打包）
+└── .trae/
+    └── rules/       工程规范（Trae 项目规则，随仓库入库并统一格式化）
 ```
 
 职责边界：
@@ -33,19 +33,20 @@ my-monorepo/
 
 ## 统一命令
 
-| 命令                              | 作用                                    |
-| --------------------------------- | --------------------------------------- |
-| `pnpm dev`                        | 交互式选择要启动的应用                  |
-| `pnpm build`                      | 先构建 `packages/*`，再构建 `apps/*`    |
-| `pnpm lint` / `pnpm lint:fix`     | eslint + prettier 全仓检查 / 修复       |
-| `pnpm test`                       | 全仓单元测试                            |
-| `pnpm format`                     | prettier 全量格式化                     |
-| `pnpm --filter <包名> run <脚本>` | 针对单个包或应用执行命令                |
+| 命令                              | 作用                                 |
+| --------------------------------- | ------------------------------------ |
+| `pnpm dev`                        | 交互式选择要启动的应用               |
+| `pnpm build`                      | 先构建 `packages/*`，再构建 `apps/*` |
+| `pnpm lint` / `pnpm lint:fix`     | eslint + prettier 全仓检查 / 修复    |
+| `pnpm test`                       | 全仓单元测试                         |
+| `pnpm format`                     | prettier 全量格式化                  |
+| `pnpm --filter <包名> run <脚本>` | 针对单个包或应用执行命令             |
 
 铁律：
 
+- 所有回复和思考过程都必须使用中文。
 - 不绕过根脚本直接调用 `tsc` / `vite` / `electron-vite`，除非是在包内排查问题且不改动产物。
-- 构建产物（`dist`、`out`、`release`、`coverage`）与 `.SKILLS` 不参与 lint，也不入库。
+- 构建产物（`dist`、`out`、`release`、`coverage`）不参与 lint，也不入库；工程规范位于 `.trae/rules/`，随仓库入库并交给 prettier 统一格式。
 - 任务收尾必须自检：`pnpm run lint` + `pnpm test`；涉及构建链路再补 `pnpm build`。
 
 ## 依赖与版本
@@ -65,12 +66,16 @@ my-monorepo/
 
 ## 子规范索引
 
-按改动范围加载对应文件，避免一次性读入全部规范：
+三份子规范配置了 `globs`，改动命中下列范围时自动生效；未命中时按本表主动读取后再动手，不凭记忆行动：
 
-| 改动范围                                              | 规范文件                            |
-| ----------------------------------------------------- | ----------------------------------- |
-| 后端接口、路由、鉴权、数据层、SSE、LLM 工具           | `.SKILLS/backend-design/SKILL.md`   |
-| Electron 主进程、预加载、IPC、渲染进程组件、样式体系  | `.SKILLS/desktop-design/SKILL.md`   |
-| TypeScript / Vue / Less 写法、命名、注释、单元测试    | `.SKILLS/code-style/SKILL.md`       |
+| 改动范围                                             | 规范文件                        |
+| ---------------------------------------------------- | ------------------------------- |
+| 后端接口、路由、鉴权、数据层、SSE、LLM 工具          | `.trae/rules/backend-design.md` |
+| Electron 主进程、预加载、IPC、渲染进程组件、样式体系 | `.trae/rules/desktop-design.md` |
+| TypeScript / Vue / Less 写法、命名、注释、单元测试   | `.trae/rules/code-style.md`     |
 
-规范调整时只改 `.SKILLS` 下对应文件，保持单一来源；三份子规范冲突时以总纲与更具体的那份为准。
+规范调整时只改 `.trae/rules/` 下对应文件，保持单一来源；三份子规范冲突时以总纲与更具体的那份为准。
+
+# 注意事项
+
+- 每次对话结束后必须将对话记录追加到 `.HISTORY/` 目录下，文件名格式为 `YYYY-MM-DD.md`。

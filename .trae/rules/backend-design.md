@@ -1,7 +1,7 @@
 ---
-name: backend-design
-description: apps/backend 的设计规范，涵盖分层结构与依赖方向、组合根与依赖注入、路由与鉴权、SSE 流式对话协议、MySQL 数据层与错误码约定。新增或修改后端接口、服务、数据层与中间件时使用。
-keywords: backend, express, langchain, mysql, sse, 鉴权
+description: apps/backend 的设计规范，涵盖分层结构与依赖方向、组合根与依赖注入、路由与鉴权、SSE 流式对话协议、MySQL 数据层与错误码约定。新增或修改后端接口、服务、数据层与中间件时遵守。
+globs: apps/backend/**
+alwaysApply: false
 ---
 
 # 后端设计规范
@@ -53,6 +53,9 @@ apps/backend/src/
 - 采用单端登录：同一用户新建会话时先删除旧会话（事务内完成），保证 `user_id` 只有一条有效记录。
 - `createRequireAuth(sessions)` 校验通过后把 `userId` 与 `token` 写入 `res.locals`，读取只用 `currentUserId(res)` / `currentToken(res)`。
 - 所有会话、消息、知识库操作必须带 `user_id` 过滤，禁止仅按 id 查询后返回。
+- 知识库分 `global`（全局共享）与 `private`（仅上传者）两类，归属记在 `owner_user_id`；列表与检索统一用 `(scope = 'global' OR owner_user_id = <uid>)` 过滤，权限不足一律按“不存在”处理，不泄漏他人文档信息。
+- 用户身份要传到工具层：`AgentService.stream` 把 `userId` 放进 `configurable`，工具回调从 `config.configurable.userId` 读取；缺失身份时直接抛错，禁止退化成不过滤。
+- 全局文档不开放客户端写入，只由管理令牌（`KNOWLEDGE_ADMIN_TOKEN` 与请求头 `x-admin-token`）校验的接口维护，令牌留空即视为关闭该能力。
 
 ## 5. SSE 流式对话
 
@@ -70,18 +73,21 @@ apps/backend/src/
 - 查询一律参数化（`?` 占位），禁止字符串拼接 SQL；动态标识符用 `mysql.escapeId`。
 - 时间在应用层生成后写入，读取时统一转回 ISO 字符串。
 - 启动时惰性清理过期会话：事务内先删过期记录，再保留每个用户最新一条（自连接删除更早的会话）。
+- 知识库不进 MySQL，落在本地 LanceDB 目录（`data/knowledge/lancedb`）：`documents` 存元数据，`chunks` 存片段与向量；表结构显式声明（可空列、`FixedSizeList` 向量维度、数值列用 `Float64` 以免读出 `BigInt`）。
+- LanceDB 的过滤表达式使用字符串拼接：只允许拼入白名单校验过的值（UUID、整数 `userId`），其余一律禁止。
+- 向量模型或维度变化时必须显式报错（入库与检索都校验），不允许按较短维度截断计算相似度。
 
 ## 7. LLM 与工具
 
 - 智能体由 `createAgent` + `streamMode: 'messages'` 构建，系统提示词统一维护在 `llm/agent.ts`。
-- 工具实现在 `llm/tools.ts`，必须自校验入参并在非法时抛出中文错误；知识库检索结果需带「来源」标注。
+- 工具实现在 `llm/tools.ts`，必须自校验入参并在非法时抛出中文错误；知识库检索按调用者可见性过滤，结果需带「来源」标注。
 - 模型与嵌入 provider 由 `config.ts` 决定（deepseek 走 `ChatOpenAI`，其余走 `ChatOllama`），业务代码不做 provider 判断。
 - 网络类异常统一转成可读提示（如 `fetch failed` → 「无法连接对话模型服务」）。
 
 ## 8. 配置与环境文件
 
 - 环境变量只在 `config.ts` 读取并映射为 `AppConfig`，其它模块一律使用注入的 config，不直接读 `process.env`。
-- 新增配置项的标准动作：`AppConfig` 加字段 → `loadConfig()` 读环境变量并给默认值 → 同步 `.env.development` 与 `.env.production` → 同步 README 的配置表。
+- 新增配置项的标准动作：`AppConfig` 加字段 → `loadConfig()` 读环境变量并给默认值 → 同步 `.env.development` 与 `.env.production` → 同步 `apps/backend/README.md` 的配置表。
 - 配置按环境拆两份：`.env.development` 供 `pnpm dev`（`tsx watch --env-file`）、`.env.production` 供 `pnpm start`（`node --env-file`），走 Node 原生能力，不引入 dotenv 之类的加载库。
 - 系统环境变量优先级高于文件，真实密钥不入库，生产文件只写占位值并在注释中说明注入方式。
 - 路径类配置（如 `DATA_DIR`）写进 env 文件时必须用绝对路径，避免随启动目录漂移。
@@ -103,4 +109,4 @@ apps/backend/src/
 - 错误响应为中文文案且状态码符合约定。
 - 涉及 SQL 的改动全部参数化并带 `user_id` 过滤。
 - 流式相关改动仍满足"res 监听中断、有正文才落库、finally 关闭响应"。
-- 新增配置项已在两份 env 文件与 README 配置表中同步。
+- 新增配置项已在两份 env 文件与 `apps/backend/README.md` 配置表中同步。
