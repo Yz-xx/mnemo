@@ -1,4 +1,4 @@
-# @repo/backend 智能体后端服务
+# @repo/agent-server 智能体后端服务
 
 Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式对话、会话持久化与向量知识库能力。
 
@@ -7,7 +7,7 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 - 存储：MySQL 保存用户、登录会话与对话记录；知识库为本地 LanceDB 向量库
 - 模型：默认本地 Ollama（`qwen2.5:7b` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
-仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；公共工具库见 [@repo/shared](../../packages/shared/README.md)。
+仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；公共工具库见 [@repo/shared](../../packages/shared/README.md)，日志库见 [@repo/logger](../../packages/logger/README.md)。
 
 ---
 
@@ -186,7 +186,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ### 日志
 
-日志同时输出到控制台与 `<LOG_DIR>/backend-YYYY-MM-DD.log`：按本地日期轮转，超期文件在启动与跨天时清理；日志文件写入失败（目录无权限、磁盘满）只降级为"仅控制台输出"，不影响服务本身。控制台里 `warn` / `error` 走 stderr，可用 `2>` 单独重定向。
+日志能力来自公共包 [@repo/logger](../../packages/logger/README.md)，同时输出到控制台与 `<LOG_DIR>/agent-server-YYYY-MM-DD.log`（文件名前缀取自 `createLogger({ name: 'agent-server' })`）：按本地日期轮转，超期文件在启动与跨天时清理，且只清理自己前缀的文件；日志文件写入失败（目录无权限、磁盘满）只降级为"仅控制台输出"，不影响服务本身。控制台里 `warn` / `error` 走 stderr，可用 `2>` 单独重定向。
 
 每个请求都会分配一个 8 位 `requestId`：它出现在该请求产生的每条日志上，并通过响应头 `x-request-id` 回写。排查时先按 `requestId` 检索日志文件，即可拿到该请求的完整链路（请求汇总、业务动作、5xx 的原始堆栈）。
 
@@ -213,15 +213,15 @@ ollama serve
 单独启动后端（默认 3000 端口，`tsx watch`）：
 
 ```bash
-pnpm --filter @repo/backend run dev
+pnpm --filter @repo/agent-server run dev
 ```
 
 ## 十二、构建与运行
 
-- `pnpm --filter @repo/backend run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build` 把 `src/index.ts` 打成单文件 `dist/index.js`（ESM + sourcemap，代码部分已压缩、不含空格与注释）；
+- `pnpm --filter @repo/agent-server run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build` 把 `src/index.ts` 打成单文件 `dist/index.js`（ESM + sourcemap，代码部分已压缩、不含空格与注释）；
 - Vite 走服务端构建（`build.ssr`，`target: node20`），按 Node 环境解析依赖；目录下的 `.env.*` 由 `node --env-file` 在运行时读取，构建时以 `envDir: false` 关闭 Vite 自身的 env 加载；
-- 运行期依赖（含 workspace 的 `@repo/shared`）与 Node 内置模块全部外置，产物中保留裸包名，部署时需一并安装 `dependencies`；
-- 启动：`pnpm --filter @repo/backend run start`，即 `node --env-file=.env.production dist/index.js`。
+- 运行期依赖（含 workspace 的 `@repo/shared`、`@repo/logger`）与 Node 内置模块全部外置，产物中保留裸包名，部署时需一并安装 `dependencies`；
+- 启动：`pnpm --filter @repo/agent-server run start`，即 `node --env-file=.env.production dist/index.js`。
 - 产物中仍可见的换行与缩进都属于字符串内容（多行 SQL、系统提示词、SSE 报文的 `\n\n`），是数据而非格式：`\n\n` 是 SSE 协议分隔符，提示词换行影响模型输入，压缩器不会也不应改写它们。
 
 ## 十三、已知约束与设计取舍

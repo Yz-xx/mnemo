@@ -63,53 +63,7 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@26.5.1)(jiti@2.6.1)(less@4.9.1(supports-color@7.2.0))(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.13)(yaml@2.9.1)
 
-  apps/backend:
-    dependencies:
-      '@lancedb/lancedb':
-        specifier: ^0.39.0
-        version: 0.39.0(@types/node@26.5.1)(apache-arrow@18.1.0)
-      '@langchain/core':
-        specifier: ^1.2.12
-        version: 1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5))
-      '@langchain/ollama':
-        specifier: ^1.3.0
-        version: 1.3.0(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))
-      '@langchain/openai':
-        specifier: ^1.5.13
-        version: 1.5.13(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))(undici@7.29.1)
-      '@langchain/textsplitters':
-        specifier: ^1.0.1
-        version: 1.0.1(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))
-      '@repo/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
-      apache-arrow:
-        specifier: ^18.1.0
-        version: 18.1.0
-      express:
-        specifier: ^5.2.1
-        version: 5.2.1(supports-color@7.2.0)
-      langchain:
-        specifier: ^1.5.11
-        version: 1.5.11(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5))
-      mysql2:
-        specifier: ^3.24.4
-        version: 3.24.4(@types/node@26.5.1)
-      zod:
-        specifier: ^4.6.5
-        version: 4.6.5
-    devDependencies:
-      '@types/express':
-        specifier: ^5.0.6
-        version: 5.0.6
-      tsx:
-        specifier: ^4.23.13
-        version: 4.23.13
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.5.1)(jiti@2.6.1)(less@4.9.1(supports-color@7.2.0))(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.13)(yaml@2.9.1)
-
-  apps/desktop:
+  apps/agent-client:
     dependencies:
       markdown-it:
         specifier: ^15.0.2
@@ -140,6 +94,55 @@ importers:
         specifier: ^3.3.11
         version: 3.3.11(typescript@6.0.3)
 
+  apps/agent-server:
+    dependencies:
+      '@lancedb/lancedb':
+        specifier: ^0.39.0
+        version: 0.39.0(@types/node@26.5.1)(apache-arrow@18.1.0)
+      '@langchain/core':
+        specifier: ^1.2.12
+        version: 1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5))
+      '@langchain/ollama':
+        specifier: ^1.3.0
+        version: 1.3.0(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))
+      '@langchain/openai':
+        specifier: ^1.5.13
+        version: 1.5.13(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))(undici@7.29.1)
+      '@langchain/textsplitters':
+        specifier: ^1.0.1
+        version: 1.0.1(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))
+      '@repo/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@repo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      apache-arrow:
+        specifier: ^18.1.0
+        version: 18.1.0
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1(supports-color@7.2.0)
+      langchain:
+        specifier: ^1.5.11
+        version: 1.5.11(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5))
+      mysql2:
+        specifier: ^3.24.4
+        version: 3.24.4(@types/node@26.5.1)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.5.1)(jiti@2.6.1)(less@4.9.1(supports-color@7.2.0))(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.13)(yaml@2.9.1)
+
   apps/frontend:
     dependencies:
       '@repo/components':
@@ -161,6 +164,8 @@ importers:
       vue:
         specifier: ^3.4.0
         version: 3.5.42(typescript@6.0.3)
+
+  packages/logger: {}
 
   packages/shared:
     dependencies:

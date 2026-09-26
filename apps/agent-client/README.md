@@ -1,4 +1,4 @@
-# @repo/desktop 桌面端
+# @repo/agent-client 桌面端
 
 Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话界面，通过 HTTP + SSE 对接后端服务。
 
@@ -6,7 +6,7 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 - 技术栈：Electron 44 + Vue 3 + TypeScript + Less，构建工具为 electron-vite
 - 目录分层：`src/main`（主进程）、`src/preload`（预加载）、`src/renderer`（渲染进程）
 
-仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；后端接口与 SSE 协议见 [@repo/backend](../backend/README.md)。
+仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；后端接口与 SSE 协议见 [@repo/agent-server](../agent-server/README.md)。
 
 ---
 
@@ -116,7 +116,7 @@ Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不�
 ## 九、构建与打包
 
 - `electron-vite dev / build / preview`：主进程与 preload 走 SSR 打包，渲染进程走 Vite；
-- `pnpm --filter @repo/desktop run dist`：`electron-vite build && electron-builder --win`，产物落在 `apps/desktop/release/`，含 NSIS 安装包 `AgentDesktop Setup <version>.exe` 与免安装目录 `win-unpacked/`；
+- `pnpm --filter @repo/agent-client run dist`：`electron-vite build && electron-builder --win`，产物落在 `apps/agent-client/release/`，含 NSIS 安装包 `AgentDesktop Setup <version>.exe` 与免安装目录 `win-unpacked/`；
 - preload 在 `type: module` 下输出为 `index.mjs`，主进程按该扩展名加载；
 - 下载源必须显式指定：Electron 二进制在 `electron-builder.yml` 的 `electronDownload.mirror` 里指向 npmmirror，打包工具链（NSIS / 7zip / winCodeSign）的镜像由 `dist` 脚本用 `cross-env` 注入 `ELECTRON_BUILDER_BINARIES_MIRROR`。原因是 `pnpm run` 不会把 `.npmrc` 的 `electron_mirror` / `electron_builder_binaries_mirror` 注入为环境变量，不声明就会回落到 GitHub 重下整包（约 150 MB）而超时。
 
@@ -125,7 +125,7 @@ Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不�
 单独启动桌面端（会自行连接 `http://localhost:3000`，需后端已运行）：
 
 ```bash
-pnpm --filter @repo/desktop run dev     # electron-vite dev
+pnpm --filter @repo/agent-client run dev     # electron-vite dev
 ```
 
 视觉改动可在构建产物上做静态验证：`electron-vite build` 后用任意静态服务器指向 `out/renderer`，再以无头 Chrome 截图核对两套主题。

@@ -53,9 +53,9 @@ export default tseslint.config(
   {
     files: [
       'scripts/**/*.js',
-      'apps/backend/**/*.ts',
-      'apps/desktop/src/main/**/*.ts',
-      'apps/desktop/src/preload/**/*.ts',
+      'apps/agent-server/**/*.ts',
+      'apps/agent-client/src/main/**/*.ts',
+      'apps/agent-client/src/preload/**/*.ts',
       '*.config.js',
       '**/*.config.ts',
     ],

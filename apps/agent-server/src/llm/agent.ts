@@ -8,7 +8,7 @@ import { createTools } from './tools.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 import type { AppConfig } from '../config.js';
 import type { StoredMessage } from '../conversation/types.js';
-import type { Logger } from '../logger/types.js';
+import type { Logger } from '@repo/logger';
 import type { KnowledgeStore } from '../rag/store.js';
 
 /** 流式过程中向前端推送的事件 */

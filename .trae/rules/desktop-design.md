@@ -1,6 +1,6 @@
 ---
-description: apps/desktop（Electron + Vue 3）的设计规范，涵盖三层结构与边界、主进程职责拆分、IPC 契约、主题与防闪烁处理、渲染进程状态管理、SSE 消费与样式分层。修改桌面端主进程、预加载、组件或样式时遵守。
-globs: apps/desktop/**
+description: apps/agent-client（Electron + Vue 3）的设计规范，涵盖三层结构与边界、主进程职责拆分、IPC 契约、主题与防闪烁处理、渲染进程状态管理、SSE 消费与样式分层。修改桌面端主进程、预加载、组件或样式时遵守。
+globs: apps/agent-client/**
 alwaysApply: false
 ---
 
@@ -9,7 +9,7 @@ alwaysApply: false
 ## 1. 三层结构与边界
 
 ```text
-apps/desktop/src/
+apps/agent-client/src/
 ├── main/        主进程（Node 环境）
 ├── preload/     预加载层，唯一的跨层出口
 └── renderer/    Vue 3 渲染进程（浏览器环境）
@@ -100,7 +100,7 @@ renderer/src/
 
 ## 10. 自检清单
 
-- `pnpm --filter @repo/desktop run build` 通过；需要安装包时 `run dist` 能产出 `release/` 下的 exe。
+- `pnpm --filter @repo/agent-client run build` 通过；需要安装包时 `run dist` 能产出 `release/` 下的 exe。
 - 新增 IPC 已在注册、暴露、类型三处同步。
 - 渲染进程未引入 Node / Electron API，未直接暴露 `ipcRenderer`。
 - 主题切换无字闪，冷启动无深色闪烁。

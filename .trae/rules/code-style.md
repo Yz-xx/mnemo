@@ -14,7 +14,7 @@ alwaysApply: false
 - ESLint 为扁平配置（`eslint.config.js`）：`js.configs.recommended` + `typescript-eslint` recommended + `eslint-plugin-vue` flat/recommended，末尾接 `eslint-config-prettier` 关闭所有格式类规则。
 - 有意忽略的参数或变量用 `_` 前缀（如 Express 错误中间件的 `_req`、`_next`），由 `argsIgnorePattern` / `varsIgnorePattern` 放行。
 - `.vue` 文件中 `no-undef` 已关闭，类型由 TS 编译器负责，不要为类型名添加 eslint 抑制注释。
-- Node 环境全局变量仅对 `scripts/**`、`apps/backend/**`、桌面端 `main`/`preload`、各类配置文件开放，渲染进程代码不得依赖 Node 全局。
+- Node 环境全局变量仅对 `scripts/**`、`apps/agent-server/**`、桌面端 `main`/`preload`、各类配置文件开放，渲染进程代码不得依赖 Node 全局。
 - 提交前跑 `pnpm run lint`（必要时 `pnpm run lint:fix`），不手工调整行宽或引号以迎合个人习惯。
 
 ## 2. TypeScript

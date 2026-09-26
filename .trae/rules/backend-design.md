@@ -1,6 +1,6 @@
 ---
-description: apps/backend 的设计规范，涵盖分层结构与依赖方向、组合根与依赖注入、路由与鉴权、SSE 流式对话协议、MySQL 数据层与错误码约定。新增或修改后端接口、服务、数据层与中间件时遵守。
-globs: apps/backend/**
+description: apps/agent-server 的设计规范，涵盖分层结构与依赖方向、组合根与依赖注入、路由与鉴权、SSE 流式对话协议、MySQL 数据层与错误码约定。新增或修改后端接口、服务、数据层与中间件时遵守。
+globs: apps/agent-server/**
 alwaysApply: false
 ---
 
@@ -9,7 +9,7 @@ alwaysApply: false
 ## 1. 分层与依赖方向
 
 ```text
-apps/backend/src/
+apps/agent-server/src/
 ├── index.ts          组合根：读配置 → 建库表 → 建连接池 → 装配 Store/Service → createApp → listen
 ├── app.ts            createApp：仅"通用中间件 → 注册路由 → 错误兜底"三段骨架
 ├── dependencies.ts   AppDependencies 接口，运行期依赖集合
@@ -22,7 +22,6 @@ apps/backend/src/
 ├── conversation/     会话与消息持久化
 ├── llm/              agent、model、tools
 ├── rag/              知识库存储与检索
-├── logger/           日志：级别过滤、脱敏、格式化、按天轮转的文件输出
 ├── db/               pool.ts、schema.ts
 └── __vitest__/       单元测试（不参与编译产物）
 ```
@@ -89,7 +88,7 @@ apps/backend/src/
 ## 8. 配置与环境文件
 
 - 环境变量只在 `config.ts` 读取并映射为 `AppConfig`，其它模块一律使用注入的 config，不直接读 `process.env`。
-- 新增配置项的标准动作：`AppConfig` 加字段 → `loadConfig()` 读环境变量并给默认值 → 同步 `.env.development` 与 `.env.production` → 同步 `apps/backend/README.md` 的配置表。
+- 新增配置项的标准动作：`AppConfig` 加字段 → `loadConfig()` 读环境变量并给默认值 → 同步 `.env.development` 与 `.env.production` → 同步 `apps/agent-server/README.md` 的配置表。
 - 配置按环境拆两份：`.env.development` 供 `pnpm dev`（`tsx watch --env-file`）、`.env.production` 供 `pnpm start`（`node --env-file`），走 Node 原生能力，不引入 dotenv 之类的加载库。
 - 系统环境变量优先级高于文件，真实密钥不入库，生产文件只写占位值并在注释中说明注入方式。
 - 路径类配置（如 `DATA_DIR`）写进 env 文件时必须用绝对路径，避免随启动目录漂移。
@@ -102,11 +101,11 @@ apps/backend/src/
 - 构建前清空 `dist`（`emptyOutDir`，产物为单文件，避免旧编译产物残留）；测试文件位于 `src/__vitest__` 并被 `tsconfig.json` 的 `exclude` 排除，不进入产物。
 - `.env.*` 只在运行时由 `node --env-file` 读取，构建时用 `envDir: false` 关闭 Vite 自身的 env 加载，避免生产配置被误读或写进产物。
 - 产物里剩下的换行与缩进都在字符串内部（多行 SQL、系统提示词、SSE 报文的 `\n\n`），属数据而非格式，压缩器不会改写；无需为了"产物看起来是单行"去改写这些字面量。
-- 单测不连真实数据库与网络，外部依赖用替身隔离，运行 `pnpm --filter @repo/backend run test`。
+- 单测不连真实数据库与网络，外部依赖用替身隔离，运行 `pnpm --filter @repo/agent-server run test`。
 
 ## 10. 日志
 
-- 统一使用 `src/logger/` 的 `Logger`（`createLogger` 组装控制台与按天轮转的文件输出），不再写裸 `console.*`。
+- 统一使用公共包 `@repo/logger` 的 `Logger`（`createLogger({ name, level, dir, retentionDays })` 组装控制台与按天轮转的文件输出），不再写裸 `console.*`；`name` 取服务名并决定日志文件名前缀，同目录下多个服务各写各的文件，清理超期文件时不会误删他人内容。
 - 装配顺序：根日志在 `index.ts` 与配置一起最先建立，再经 `AppDependencies.logger` 传给 `app.ts`；这样建库等启动环节失败时也有可排查的记录。
 - 请求级日志：`createRequestLog` 为每个请求生成 8 位 `requestId`，挂到 `res.locals.log` 与 `res.locals.requestId`，并回写 `x-request-id` 响应头；路由与中间件内取日志只用 `requestLogger(res)`，业务日志自动带上该请求的 `requestId`。
 - 一次请求只留一条结果汇总：由 `createRequestLog` 在响应结束时按状态码定级输出（`5xx` = error、`4xx` = warn、其余 = info）；`errorHandler` 不自行打印，只把 5xx 的错误挂到 `res.locals.error` 交给请求日志，避免同一次失败产生两条记录。
@@ -115,14 +114,14 @@ apps/backend/src/
 - 入参出参由请求日志统一记录：查询串、请求体、JSON 响应体都先 `redactValue` 脱敏、再 `preview` 截断（顺序不可颠倒，否则截断成字符串后嵌套的密钥就遮蔽不到了）。SSE 接口不走 `res.json`，其出参须由业务层自行补 `answerPreview` 一类摘要。
 - 首行列位固定为「时间 级别 接口路径 消息」：格式化层把 `path` 字段提升到第三列并从行尾跳过，请求日志因此可按接口竖向对照；不带 `path` 的记录自动省略该列，不输出空占位。
 - 脱敏：密码、令牌、密钥类字段由 `redactFields` 按字段名统一遮蔽，业务代码不必各自处理。
-- 新增日志配置项（如日志目录、保留天数）的标准动作同第 8 章：`AppConfig.log` → 两份 env → `apps/backend/README.md` 配置表。
+- 新增日志配置项（如日志目录、保留天数）的标准动作同第 8 章：`AppConfig.log` → 两份 env → `apps/agent-server/README.md` 配置表。
 
 ## 11. 自检清单
 
-- `pnpm --filter @repo/backend run test` 与 `run build` 通过。
+- `pnpm --filter @repo/agent-server run test` 与 `run build` 通过。
 - 新接口已登记到 `routes/index.ts`，鉴权策略与所属前缀正确。
 - 错误响应为中文文案且状态码符合约定。
 - 涉及 SQL 的改动全部参数化并带 `user_id` 过滤。
 - 流式相关改动仍满足"res 监听中断、有正文才落库、finally 关闭响应"。
-- 新增配置项已在两份 env 文件与 `apps/backend/README.md` 配置表中同步。
+- 新增配置项已在两份 env 文件与 `apps/agent-server/README.md` 配置表中同步。
 - 日志统一走注入的 `Logger`，未新增裸 `console.*`；新增失败路径已带原始 `error` 字段。

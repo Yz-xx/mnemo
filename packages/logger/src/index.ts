@@ -3,10 +3,18 @@ import { formatRecord } from './format.js';
 import { redactFields } from './redact.js';
 import type { LogFields, LogLevel, LogRecord, LogSink, Logger } from './types.js';
 
+// 统一出口：业务方只从 '@repo/logger' 引入
+export { formatDay, formatRecord } from './format.js';
+export { preview } from './preview.js';
+export { redactFields, redactValue } from './redact.js';
+export type { LogFields, LogLevel, LogRecord, LogSink, Logger } from './types.js';
+
 /** 级别权重：低于当前阈值的记录直接丢弃，避免日志文件被 debug 噪声淹没 */
 const WEIGHT: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
 export interface LoggerOptions {
+  /** 服务名：决定日志文件名前缀与写入失败时的降级提示，如 backend-2026-09-26.log */
+  name: string;
   level: LogLevel;
   /** 日志目录，留空则只输出到控制台 */
   dir?: string;
@@ -60,10 +68,10 @@ function buildLogger(level: LogLevel, bindings: LogFields, sinks: LogSink[]): Lo
  * 颜色只在控制台且为 TTY 时启用，避免日志文件被 ANSI 转义码污染。
  */
 export function createLogger(options: LoggerOptions): Logger {
-  const { level, dir, retentionDays = 14, stdio = true, sinks = [] } = options;
+  const { name, level, dir, retentionDays = 14, stdio = true, sinks = [] } = options;
   const targets: LogSink[] = [
     ...(stdio ? [createStdioSink(process.stdout.isTTY === true)] : []),
-    ...(dir ? [createFileSink({ dir, retentionDays })] : []),
+    ...(dir ? [createFileSink({ dir, name, retentionDays })] : []),
     ...sinks,
   ];
   return buildLogger(level, {}, targets);

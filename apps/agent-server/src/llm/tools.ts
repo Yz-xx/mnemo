@@ -1,7 +1,7 @@
 import { tool } from 'langchain';
 import type { ToolRunnableConfig } from '@langchain/core/tools';
 import { z } from 'zod';
-import type { Logger } from '../logger/types.js';
+import type { Logger } from '@repo/logger';
 import type { KnowledgeStore } from '../rag/store.js';
 
 /** 检索词为用户原文，截断后写入日志，避免日志行过长 */

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import process from 'node:process';
-import type { LogLevel } from './logger/types.js';
+import type { LogLevel } from '@repo/logger';
 
 /** 对话模型提供方：本地 Ollama 或 OpenAI 兼容的线上服务（DeepSeek） */
 export type LlmProvider = 'ollama' | 'deepseek';

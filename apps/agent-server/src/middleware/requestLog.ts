@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { preview } from '../logger/preview.js';
-import { redactValue } from '../logger/redact.js';
-import type { Logger } from '../logger/types.js';
+import { preview, redactValue } from '@repo/logger';
+import type { Logger } from '@repo/logger';
 
 /** 请求 ID 取 UUID 前 8 位：足够区分单机并发请求，又便于人工抄读 */
 const REQUEST_ID_LENGTH = 8;

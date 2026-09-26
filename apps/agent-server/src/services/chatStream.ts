@@ -3,8 +3,8 @@ import { toErrorMessage } from '../errors.js';
 import type { Conversation } from '../conversation/types.js';
 import type { ConversationStore } from '../conversation/store.js';
 import type { AgentService } from '../llm/agent.js';
-import { preview } from '../logger/preview.js';
-import type { Logger } from '../logger/types.js';
+import { preview } from '@repo/logger';
+import type { Logger } from '@repo/logger';
 
 /** 出参摘要保留的回复开头长度：足以判断回答是否切题，又不至于把整篇回答写进日志 */
 const ANSWER_PREVIEW = 200;

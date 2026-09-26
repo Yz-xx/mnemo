@@ -16,11 +16,12 @@ alwaysApply: true
 ```text
 my-monorepo/
 ├── apps/
-│   ├── backend/     Express 5 + LangChain 智能体服务（MySQL 持久化）
-│   ├── desktop/     Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
-│   └── frontend/    示例 Web 前端（脚手架预留）
+│   ├── agent-server/  Express 5 + LangChain 智能体服务（MySQL 持久化）
+│   ├── agent-client/  Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
+│   └── frontend/      示例 Web 前端（脚手架预留）
 ├── packages/
 │   ├── shared/      @repo/shared 公共能力（字符串、通用函数、DES 加密）
+│   ├── logger/      @repo/logger Node 端结构化日志库（控制台 + 按天轮转文件）
 │   └── components/  @repo/components 公共 Vue 组件库（Vite 库模式）
 ├── scripts/         根脚本：dev / build / lint / test
 └── .trae/
@@ -29,7 +30,7 @@ my-monorepo/
 
 职责边界：
 
-- 可跨端复用的纯逻辑放 `packages/shared`，可复用的 Vue 组件放 `packages/components`，禁止 `apps/*` 之间互相 import。
+- 可跨端复用的纯逻辑放 `packages/shared`，可复用的 Vue 组件放 `packages/components`，依赖进程与文件系统的 Node 端能力放 `packages/logger`，禁止 `apps/*` 之间互相 import。
 - 应用私有逻辑留在应用内，不上提到 `packages`。
 - 新增包或应用时同步 `pnpm-workspace.yaml`、根 `scripts/` 与 `README.md`。
 
@@ -84,4 +85,4 @@ my-monorepo/
 
 # 技能调用
 
-执行任务时，必须调用 `ask-matt` 技能获取适合的技能进行调用，比如以下几个技能是必须调用的：任务开始前调用 `grill-with-docs` 技能，编码时调用 `codebase-design` 技能，测试时调用 `code-review` 和 `tdd` 技能。
+重点：执行任务时，必须调用 `ask-matt` 技能获取适合的技能进行调用，比如以下几个技能是必须调用的：任务开始前调用 `grill-with-docs` 技能，编码时调用 `codebase-design` 技能，测试时调用 `code-review` 和 `tdd` 技能。

@@ -1,5 +1,5 @@
 {
-  "name": "@repo/desktop",
+  "name": "@repo/agent-client",
   "version": "0.0.0",
   "private": true,
   "description": "桌面端应用（Electron + Vue 3 + TypeScript）",

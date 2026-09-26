@@ -85,5 +85,5 @@ console.log(`[dev] 启动应用：${selected.map((app) => app.dir).join('、')}`
 // 1. 确保公共库产物存在
 run(['--filter', './packages/*', 'run', 'build']);
 
-// 2. 并行运行所选应用的 dev 脚本（backend: tsx watch / desktop: electron-vite / frontend: vite）
+// 2. 并行运行所选应用的 dev 脚本（agent-server: tsx watch / agent-client: electron-vite / frontend: vite）
 run(['--parallel', ...selected.flatMap((app) => ['--filter', app.filter]), 'run', 'dev']);

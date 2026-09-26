@@ -15,7 +15,7 @@
 ```text
 my-monorepo/
 ├── apps/
-│   ├── backend/              # 智能体后端服务（Express + LangChain）
+│   ├── agent-server/         # 智能体后端服务（Express + LangChain）
 │   │   ├── src/
 │   │   │   ├── index.ts              # 组合根：装配依赖、启动清理会话并监听端口
 │   │   │   ├── config.ts             # 环境变量 → AppConfig
@@ -44,7 +44,7 @@ my-monorepo/
 │   │   ├── .env.development          # 开发环境配置（pnpm dev 加载）
 │   │   ├── .env.production           # 生产环境配置（pnpm start 加载）
 │   │   └── data/                     # 运行时数据（LanceDB 向量库，已被 gitignore）
-│   ├── desktop/              # Electron 桌面端
+│   ├── agent-client/         # Electron 桌面端
 │   │   └── src/
 │   │       ├── main/                 # 主进程：index.ts 只留生命周期，其余按职责分模块
 │   │       │   ├── settings.ts       # settings.json 读写与默认值
@@ -56,6 +56,7 @@ my-monorepo/
 │   └── frontend/             # 示例 Web 前端（脚手架预留）
 ├── packages/
 │   ├── shared/               # 通用工具库（DES 加解密 / capitalize / truncate 等）
+│   ├── logger/               # Node 端日志库（级别过滤 / 脱敏 / 按天轮转文件）
 │   └── components/           # 公共 Vue 组件库（Vite 库模式）
 ├── scripts/                  # dev / build / lint / test 编排脚本
 ├── pnpm-workspace.yaml
@@ -113,11 +114,12 @@ my-monorepo/
 
 各端的设计细节、配置项与构建方式分别维护在各自的 README 中，本文只保留跨端的概览与约定：
 
-| 文档                                                     | 内容范围                                                                                            |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| [apps/backend/README.md](./apps/backend/README.md)       | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建    |
-| [apps/desktop/README.md](./apps/desktop/README.md)       | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证 |
-| [packages/shared/README.md](./packages/shared/README.md) | 公共能力库的导出索引（字符串 / 通用函数 / DES 加解密）、引用方式与构建                              |
+| 文档                                                         | 内容范围                                                                                            |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| [apps/agent-server/README.md](./apps/agent-server/README.md) | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建    |
+| [apps/agent-client/README.md](./apps/agent-client/README.md) | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证 |
+| [packages/shared/README.md](./packages/shared/README.md)     | 公共能力库的导出索引（字符串 / 通用函数 / DES 加解密）、引用方式与构建                              |
+| [packages/logger/README.md](./packages/logger/README.md)     | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                |
 
 ---
 
@@ -145,8 +147,8 @@ my-monorepo/
 
 ```bash
 pnpm install
-pnpm dev                        # 交互选择要启动的应用（默认全选，回车即启动全部）
-pnpm dev backend desktop        # 也可直接指定，支持目录名（backend）或包名（@repo/backend）
+pnpm dev                             # 交互选择要启动的应用（默认全选，回车即启动全部）
+pnpm dev agent-server agent-client   # 也可直接指定，支持目录名（agent-server）或包名（@repo/agent-server）
 ```
 
 `pnpm dev` 的交互菜单：`↑`/`↓` 移动光标、空格切换选中、`a` 全选/全不选、回车确认、`Esc` 取消；确认后先构建 `packages/*`，再用 `pnpm --parallel` 启动所选应用（桌面端会自行连接 http://localhost:3000）。在非交互环境（CI、输出被管道接管）下无法弹菜单，会自动启动全部应用。
@@ -154,17 +156,17 @@ pnpm dev backend desktop        # 也可直接指定，支持目录名（backend
 单独运行某个应用：
 
 ```bash
-pnpm --filter @repo/backend run dev     # tsx watch，默认 3000 端口
-pnpm --filter @repo/desktop run dev     # electron-vite dev
+pnpm --filter @repo/agent-server run dev     # tsx watch，默认 3000 端口
+pnpm --filter @repo/agent-client run dev     # electron-vite dev
 ```
 
-前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 MySQL 8 与 Ollama 的模型准备）见 [apps/backend/README.md](./apps/backend/README.md)。
+前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 MySQL 8 与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)。
 
 质量校验：
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（shared 的 DES 加解密、后端的凭证校验与知识库检索）
+pnpm test           # 各子包单元测试（shared 的 DES 加解密、logger 的格式化与文件轮转、后端的凭证校验与知识库检索）
 pnpm build          # 全仓构建
 ```
 

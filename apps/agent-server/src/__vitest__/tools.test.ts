@@ -6,8 +6,8 @@ import { fakeModel } from '@langchain/core/testing';
 import { createAgent } from 'langchain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTools } from '../llm/tools.js';
-import { createLogger } from '../logger/index.js';
-import type { LogSink } from '../logger/types.js';
+import { createLogger } from '@repo/logger';
+import type { LogSink } from '@repo/logger';
 import { KnowledgeStore } from '../rag/store.js';
 import { FakeEmbeddings, TEST_ROOT } from './fakeEmbeddings.js';
 
@@ -74,7 +74,12 @@ describe('search_knowledge_base 工具', () => {
   it('检索日志记录命中数与最高分，并带上注入的请求上下文', async () => {
     const lines: string[] = [];
     const sink: LogSink = { color: false, write: (line) => void lines.push(line) };
-    const logger = createLogger({ level: 'debug', stdio: false, sinks: [sink] }).child({
+    const logger = createLogger({
+      name: 'test',
+      level: 'debug',
+      stdio: false,
+      sinks: [sink],
+    }).child({
       requestId: 'abcd1234',
     });
 
