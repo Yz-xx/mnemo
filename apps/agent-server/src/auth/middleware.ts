@@ -1,4 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { HTTP_STATUS } from '@repo/shared';
+import { ERROR_MESSAGE } from '../messages.js';
 import type { SessionStore } from './sessionStore.js';
 
 /** 从 Authorization: Bearer <token> 中取出令牌 */
@@ -16,7 +18,7 @@ export function createRequireAuth(sessions: SessionStore): RequestHandler {
     const token = readToken(req);
     const userId = token ? await sessions.resolve(token) : null;
     if (!userId || !token) {
-      res.status(401).json({ message: '登录已失效，请重新登录' });
+      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: ERROR_MESSAGE.SESSION_EXPIRED });
       return;
     }
     res.locals.userId = userId;

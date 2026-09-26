@@ -6,3 +6,5 @@ release
 coverage
 pnpm-lock.yaml
 *.tsbuildinfo
+# 技能包资产：来自技能市场的原样文件，改写会在下次安装时被覆盖
+.trae/skills

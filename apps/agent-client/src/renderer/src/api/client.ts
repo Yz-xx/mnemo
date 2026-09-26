@@ -1,3 +1,6 @@
+// 从包根按需引入：@repo/shared 声明了 sideEffects: false，
+// 未用到的模块（连同依赖 crypto-js 的 crypto.ts）不会被打进渲染产物
+import { HTTP_STATUS } from '@repo/shared';
 import type {
   AuthSession,
   AuthUser,
@@ -33,7 +36,7 @@ export class ApiError extends Error {
 
 /** 是否为登录失效错误 */
 export function isUnauthorized(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 401;
+  return error instanceof ApiError && error.status === HTTP_STATUS.UNAUTHORIZED;
 }
 
 /** 后端智能体服务的 HTTP 客户端，含 SSE 流式对话；登录后自动携带令牌 */
@@ -58,7 +61,7 @@ export class AgentApi {
       headers: this.buildHeaders(init.headers as Record<string, string> | undefined),
     });
     if (!res.ok) throw new ApiError(res.status, await this.extractError(res));
-    if (res.status === 204) return undefined as T;
+    if (res.status === HTTP_STATUS.NO_CONTENT) return undefined as T;
     return (await res.json()) as T;
   }
 

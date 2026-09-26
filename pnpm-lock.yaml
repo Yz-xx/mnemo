@@ -65,6 +65,9 @@ importers:
 
   apps/agent-client:
     dependencies:
+      '@repo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       markdown-it:
         specifier: ^15.0.2
         version: 15.0.2

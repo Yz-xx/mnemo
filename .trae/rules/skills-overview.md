@@ -58,6 +58,7 @@ my-monorepo/
 - 新增依赖使用 `pnpm add <包> --filter <包名>`；根依赖只放工具链（eslint / prettier / typescript / vite / vitest 等）。
 - 需要 postinstall 的依赖必须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记，否则安装产物不完整。
 - 跨包引用写 workspace 包名（如 `@repo/shared`），不用相对路径穿透到其他包。
+- `@repo/shared` 的包根只放**不含第三方依赖**的能力（`strings` / `common` / `http`），并声明 `sideEffects: false`；带第三方依赖的能力必须另开子路径入口（DES 依赖 `crypto-js`，位于 `@repo/shared/crypto`）。原因是第三方包常常没有自己的 `sideEffects` 声明，打包器无法证明导入它无副作用，只能为保留副作用而整包引入——实测把 `crypto.ts` 留在包根会让 Electron 渲染产物多出约 215 kB，且 `electron-vite` 不读本包的 `sideEffects`（`vite build` 则能正确剔除）。
 
 ## Git 提交
 

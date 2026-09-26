@@ -15,7 +15,8 @@ apps/agent-server/src/
 ├── dependencies.ts   AppDependencies 接口，运行期依赖集合
 ├── config.ts         env 读取 + 默认值 + describeChatModel
 ├── errors.ts         错误消息提取与依赖服务连接错误翻译（跨层共用）
-├── middleware/       cors.ts、errorHandler.ts
+├── messages.ts       对外固定文案常量表（ERROR_MESSAGE）
+├── middleware/       cors.ts、requestLog.ts、errorHandler.ts
 ├── routes/           各接口路由；index.ts 统一注册前缀与鉴权
 ├── services/         跨路由的编排逻辑（chatStream.ts）
 ├── auth/             userStore / sessionStore / middleware / credentials
@@ -33,7 +34,7 @@ apps/agent-server/src/
 
 ## 2. 新增接口的标准动作
 
-1. 在 `routes/<name>.ts` 导出 `create<Name>Router(deps)` 工厂，路由体内只做参数校验、状态码与调用下层，不写业务编排。
+1. 在 `routes/<name>.ts` 导出 `create<Name>Router(deps)` 工厂，路由体内只做参数校验、状态码与调用下层，不写业务编排。工厂签名用 `Pick<AppDependencies, 'a' | 'b'>` 只声明本模块真正用到的依赖：调用处不必关心中间件与其余依赖，`registerRoutes` 里各路由形状一致，测试也只需构造用到的那几项。
 2. 在 `routes/index.ts` 追加一行 `app.use('/api/<name>', [requireAuth,] create<Name>Router(...))`。
 3. 鉴权策略在 `registerRoutes` 集中声明，不在单个路由内部重复校验。
 4. 需要新能力时先在 `services/` 或对应领域目录实现，再在路由调用。
@@ -43,9 +44,12 @@ apps/agent-server/src/
 
 - 接口前缀统一 `/api/*`。
 - 错误响应固定为 `{ message: '中文可读提示' }`，不返回堆栈。
-- 状态码：`400` 参数非法；`401` 未登录或登录失效；`404` 资源不存在；`500` 服务内部错误。
-- 客户端类错误透传原始信息；`5xx` 统一返回「服务内部错误」并在服务端 `console.error`。
-- 鉴权失败文案固定为「登录已失效，请重新登录」；账号密码错误统一为「用户名或密码错误」，不区分具体原因。
+- 状态码常量统一取自 `@repo/shared` 的 `HTTP_STATUS`（与桌面端共用同一份取值，见 `docs/adr/0001-http-status-contract.md`），代码里不写字面量数字。
+- 成功档：`200` 普通响应、`201` 新建资源、`204` 删除与登出等无响应体的成功。
+- 错误档只保留四个：`400` 参数非法、`401` 未登录或登录失效、`404` 资源不存在、`500` 服务内部错误。需要第五种含义时先改本节、再改 `HTTP_STATUS`，不要就地造码。
+- 有意不引入 `403` 与 `409`：权限不足按「资源不存在」处理（第 4 章），用户名冲突按「参数非法」处理。客户端真正会分支的只有「登录失效」与「资源没了」两种情况，多登记的档位只会诱使两端为不会发生的事写代码。
+- `5xx` 对外一律 `500`，细节留在服务端日志（第 10 章）；文案允许翻译成依赖服务相关的可读提示（如「文档入库失败：<原因>」），让用户自行判断是不是向量化服务没启动，但不透出堆栈。
+- 鉴权失败文案固定为「登录已失效，请重新登录」；账号密码错误统一为「用户名或密码错误」，不区分具体原因。这两条与「服务内部错误」收在 `messages.ts` 的 `ERROR_MESSAGE`，被多处引用时不再各自手抄。
 - 健康检查 `GET /api/health` 返回 `status / service / provider / model / knowledgeEnabled / timestamp`，供客户端展示连接状态。
 
 ## 4. 鉴权与数据隔离
@@ -122,7 +126,8 @@ apps/agent-server/src/
 
 - `pnpm --filter @repo/agent-server run test` 与 `run build` 通过。
 - 新接口已登记到 `routes/index.ts`，鉴权策略与所属前缀正确。
-- 错误响应为中文文案且状态码符合约定。
+- 错误响应为中文文案且状态码符合第 3 章的约定。
+- 状态码取自 `HTTP_STATUS`、固定文案取自 `ERROR_MESSAGE`，未新增字面量数字与手抄文案。
 - 涉及 SQL 的改动全部参数化并带 `user_id` 过滤。
 - 流式相关改动仍满足"res 监听中断、有正文才落库、finally 关闭响应"。
 - 新增配置项已在两份 env 文件与 `apps/agent-server/README.md` 配置表中同步。

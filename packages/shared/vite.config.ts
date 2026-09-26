@@ -22,9 +22,14 @@ export default defineConfig({
     minify: false,
     sourcemap: true,
     lib: {
-      entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
+      // 双入口：crypto 单独一个入口（原因见 src/index.ts 的说明），
+      // 包根因此不含对 crypto-js 的静态引用，引包根就不会带上它
+      entry: {
+        index: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
+        crypto: fileURLToPath(new URL('./src/crypto.ts', import.meta.url)),
+      },
       formats: ['es', 'cjs'],
-      fileName: (format) => (format === 'es' ? 'index.mjs' : 'index.cjs'),
+      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: { external },
   },

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { HTTP_STATUS } from '@repo/shared';
 import { currentUserId } from '../auth/middleware.js';
+import type { AppDependencies } from '../dependencies.js';
 import { toErrorMessage } from '../errors.js';
 import { requestLogger } from '../middleware/requestLog.js';
 import type { KnowledgeScope, KnowledgeStore } from '../rag/store.js';
@@ -15,7 +17,7 @@ async function createDocument(
   const body = req.body as { title?: string; content?: string };
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   if (!content) {
-    res.status(400).json({ message: '文档内容不能为空' });
+    res.status(HTTP_STATUS.BAD_REQUEST).json({ message: '文档内容不能为空' });
     return;
   }
   const title = body.title?.trim() || '未命名文档';
@@ -36,7 +38,7 @@ async function createDocument(
       durationMs: Date.now() - startedAt,
       userId: target.userId,
     });
-    res.status(201).json(document);
+    res.status(HTTP_STATUS.CREATED).json(document);
   } catch (error) {
     // 向量化依赖本地 embedding 服务，维度或模型不符也在此统一提示
     const detail = toErrorMessage(error);
@@ -48,7 +50,9 @@ async function createDocument(
       durationMs: Date.now() - startedAt,
       error,
     });
-    res.status(502).json({ message: `文档入库失败：${detail}` });
+    // 同类失败对外只有 500 一种状态码（backend-design 第 3 章）；
+    // 文案保留具体原因，便于用户判断是不是向量化服务没起来
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: `文档入库失败：${detail}` });
   }
 }
 
@@ -56,8 +60,12 @@ async function createDocument(
  * 知识库接口：文档入库会同步完成切分与向量化。
  * 客户端只能上传与删除自己的私有文档；全局共享文档由管理令牌校验的接口写入。
  */
-export function createKnowledgeRouter(knowledge: KnowledgeStore, adminToken: string): Router {
+export function createKnowledgeRouter({
+  knowledge,
+  config,
+}: Pick<AppDependencies, 'knowledge' | 'config'>): Router {
   const router = Router();
+  const adminToken = config.knowledge.adminToken;
 
   /** 管理令牌未配置时视为不开放全局文档写入 */
   const isAdmin = (req: Request): boolean =>
@@ -73,7 +81,8 @@ export function createKnowledgeRouter(knowledge: KnowledgeStore, adminToken: str
 
   router.post('/global/documents', async (req, res) => {
     if (!isAdmin(req)) {
-      res.status(403).json({ message: '无权写入全局知识库' });
+      // 权限不足按“不存在”处理（backend-design 第 4 章），不暴露该接口的存在
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: '资源不存在' });
       return;
     }
     await createDocument(req, res, knowledge, { scope: 'global', userId: currentUserId(res) });
@@ -85,7 +94,7 @@ export function createKnowledgeRouter(knowledge: KnowledgeStore, adminToken: str
       isAdmin: isAdmin(req),
     });
     if (!removed) {
-      res.status(404).json({ message: '文档不存在或无权删除' });
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: '文档不存在或无权删除' });
       return;
     }
     // 删除不可逆，留一条业务记录便于回溯是谁操作了全局文档
@@ -94,7 +103,7 @@ export function createKnowledgeRouter(knowledge: KnowledgeStore, adminToken: str
       userId: currentUserId(res),
       isAdmin: isAdmin(req),
     });
-    res.status(204).end();
+    res.status(HTTP_STATUS.NO_CONTENT).end();
   });
 
   return router;

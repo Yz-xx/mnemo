@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { HTTP_STATUS } from '@repo/shared';
 import { currentUserId } from '../auth/middleware.js';
 import type { AppDependencies } from '../dependencies.js';
+import { ERROR_MESSAGE } from '../messages.js';
 import { requestLogger } from '../middleware/requestLog.js';
 import { streamChatReply } from '../services/chatStream.js';
 
@@ -27,12 +29,12 @@ export async function handleChatMessage(
   const body = req.body as { conversationId?: string; message?: string };
   const content = typeof body.message === 'string' ? body.message.trim() : '';
   if (!content) {
-    res.status(400).json({ message: '消息内容不能为空' });
+    res.status(HTTP_STATUS.BAD_REQUEST).json({ message: '消息内容不能为空' });
     return;
   }
   // 指定了不存在（或不属于当前用户）的会话时直接报错，避免静默新建导致混淆
   if (body.conversationId && !(await conversations.get(userId, body.conversationId))) {
-    res.status(404).json({ message: '会话不存在' });
+    res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.CONVERSATION_NOT_FOUND });
     return;
   }
 

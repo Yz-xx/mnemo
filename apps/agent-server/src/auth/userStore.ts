@@ -1,5 +1,5 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
-import { desEncrypt } from '@repo/shared';
+import { desEncrypt } from '@repo/shared/crypto';
 
 /** 对外返回的用户信息：不包含密码字段 */
 export interface UserRecord {

@@ -1,4 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
+import { HTTP_STATUS } from '@repo/shared';
+import { ERROR_MESSAGE } from '../messages.js';
 
 /**
  * 兜底错误处理：避免异常导致连接悬挂，
@@ -12,9 +14,11 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
-  const status = error.status ?? 500;
-  if (status >= 500) res.locals.error = error;
+  const status = error.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR;
+  if (status >= HTTP_STATUS.INTERNAL_SERVER_ERROR) res.locals.error = error;
   if (!res.headersSent) {
-    res.status(status).json({ message: status >= 500 ? '服务内部错误' : error.message });
+    res.status(status).json({
+      message: status >= HTTP_STATUS.INTERNAL_SERVER_ERROR ? ERROR_MESSAGE.INTERNAL : error.message,
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { SERVICE_NAME, describeChatModel } from '../config.js';
 import type { AppConfig } from '../config.js';
+import type { AppDependencies } from '../dependencies.js';
 
 /** 健康检查响应体：字段与 backend-design 第 3 章的约定一一对应 */
 export interface HealthPayload {
@@ -28,7 +29,7 @@ export function describeHealth(config: AppConfig, now: Date = new Date()): Healt
 }
 
 /** 健康检查：同时返回当前对话模型与知识库状态，供客户端展示 */
-export function createHealthRouter(config: AppConfig): Router {
+export function createHealthRouter({ config }: Pick<AppDependencies, 'config'>): Router {
   const router = Router();
 
   router.get('/', (_req, res) => {

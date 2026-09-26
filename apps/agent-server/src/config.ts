@@ -92,7 +92,8 @@ export function loadConfig(): AppConfig {
       host: process.env.MYSQL_HOST ?? '127.0.0.1',
       port: toNumber(process.env.MYSQL_PORT, 3306),
       user: process.env.MYSQL_USER ?? 'root',
-      password: process.env.MYSQL_PASSWORD ?? '123456',
+      // 默认留空而非写死常见弱口令：宁可连接失败，也不让误部署直接用上猜到的密码
+      password: process.env.MYSQL_PASSWORD ?? '',
       database: process.env.MYSQL_DATABASE ?? 'agent_data',
     },
     llm: {

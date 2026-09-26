@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { preview, redactValue } from '@repo/logger';
 import type { Logger } from '@repo/logger';
+import { HTTP_STATUS } from '@repo/shared';
 
 /** 请求 ID 取 UUID 前 8 位：足够区分单机并发请求，又便于人工抄读 */
 const REQUEST_ID_LENGTH = 8;
@@ -55,8 +56,8 @@ export function createRequestLog(logger: Logger): RequestHandler {
         responseBody: res.locals.responseBody,
         error,
       };
-      if (status >= 500) log.error('请求处理失败', fields);
-      else if (status >= 400) log.warn('请求被拒绝', fields);
+      if (status >= HTTP_STATUS.INTERNAL_SERVER_ERROR) log.error('请求处理失败', fields);
+      else if (status >= HTTP_STATUS.BAD_REQUEST) log.warn('请求被拒绝', fields);
       else log.info('请求完成', fields);
     });
 

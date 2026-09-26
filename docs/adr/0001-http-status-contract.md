@@ -1,0 +1,18 @@
+# HTTP 状态码契约收敛为七项，并放入 @repo/shared
+
+后端签发状态码、桌面端按状态码分支（401 触发重新登录、204 表示无响应体），同一份取值手抄两遍正是漏改的源头，因此把它放进跨端共享包 `@repo/shared`（`HTTP_STATUS`），且只保留 200 / 201 / 204 / 400 / 401 / 404 / 500 七项。用 `as const` 对象而非 TS `enum`：仓库既有的类型风格是字面量联合（`LogLevel`、`KnowledgeScope`），对象不产生运行时枚举开销，取值集合还能由常量派生（`HttpStatusCode`）。
+
+## Considered Options
+
+- **各端各写一份常量**：`agent-client` 此前不依赖任何 `@repo/*` 包，为七个数字引入 workspace 依赖看起来不划算。否决理由：客户端的 401 分支与后端的签发逻辑必须同时改，分开写只是把一次修改变成两次。
+- **只放后端（`config.ts` 或新建 `constants.ts`）**：客户端拿不到，等于回到上一项。
+- **TS `enum`**：能表达"取值是一个闭合集合"的意图，但仓库无先例，且会产出运行时代码；`as const` 对象加派生类型足以达到同样的类型安全。
+
+## Consequences
+
+- 用到状态码的地方一律写 `HTTP_STATUS.XXX`，不再出现字面量数字；新增状态码必须先改 `backend-design.md` 第 3 章，再改 `shared/src/http.ts`。
+- 三处刻意偏离"常识默认"，未来不要顺手"修正"：
+  - 权限不足返回 `404` 而非 `403`（backend-design 第 4 章：不泄漏他人资源的存在）。
+  - 用户名冲突返回 `400` 而非 `409`。
+  - 知识库入库失败返回 `500` 而非 `502`：5xx 对外只有一个状态码，具体原因写在响应文案里。
+- 状态码本身走包根（`import { HTTP_STATUS } from '@repo/shared'`），`agent-client` 因此新增了对 `@repo/shared` 的依赖。执行中实测到一个陷阱：包根一旦 re-export `crypto.ts`，Electron 渲染产物就会多出约 215 kB 的 crypto-js（426.89 kB → 641.53 kB）；`vite build` 能剔除而 `electron-vite` 不能，因为后者不读本包的 `sideEffects`。最终做法是把 DES 拆到 `@repo/shared/crypto`、包根只留无第三方依赖的模块，并给包声明 `sideEffects: false`。约束记在 `skills-overview.md` 与 `packages/shared/README.md`：**包根不出现带第三方依赖的模块**。
