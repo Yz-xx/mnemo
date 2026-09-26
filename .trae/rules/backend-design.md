@@ -60,12 +60,14 @@ apps/agent-server/src/
 
 ## 5. SSE 流式对话
 
-- 编排集中在 `services/chatStream.ts` 的 `streamChatReply()`；`routes/chat.ts` 只负责参数校验、会话归属校验与用户消息落库。
+- 编排集中在 `services/chatStream.ts` 的 `streamChatReply()`：落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话；`routes/chat.ts` 只负责参数校验（400）与会话归属校验（404）。
+- 落库提问必须在 `flushHeaders()` 之前完成，落库失败才能按普通请求返回 500，而不是已 flush 的事件流。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
 - 事件格式 `data: {...}\n\n`，`type` 取值 `token` / `tool` / `done` / `error`；`done` 携带 `conversationId` 与 `title`。
 - 中断必须监听 `res.on('close')`（`req` 的 `close` 在请求体读取完成后即触发，会误中断流式响应），并用 `res.writableEnded` 排除正常结束；中断时通过 `AbortController` 停止模型推理。
 - 客户端主动中断不再回推 `error`；`finally` 中统一 `res.end()`。
 - 仅在答复正文非空时落库，避免保存空回复。
+- 新建会话在本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止）时，必须连同刚写入的提问一起删除，否则列表会残留无回复记录、下次发起对话还会再建一条；已经开始产出内容的会话即便被中断也保留，避免丢掉用户刚发出的输入。已推送 `done` 的会话（含空回复）一律保留，避免前端已记住的 `conversationId` 失效。
 
 ## 6. 数据层
 

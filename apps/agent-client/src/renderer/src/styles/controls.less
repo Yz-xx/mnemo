@@ -16,7 +16,7 @@
 .field__label {
   color: var(--text-muted);
   font-size: 13px;
-  letter-spacing: 0.04em;
+  letter-spacing: @tracking-label;
 }
 
 .field__input {
@@ -47,7 +47,7 @@
   color: var(--text-muted);
   font-family: @font-mono;
   font-size: 11px;
-  letter-spacing: 0.06em;
+  letter-spacing: @tracking-control;
 }
 
 .dot {
@@ -106,7 +106,7 @@
   color: var(--text);
   font-size: 14px;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: @tracking-control;
   transition:
     background-color @ease-quick,
     border-color @ease-quick,

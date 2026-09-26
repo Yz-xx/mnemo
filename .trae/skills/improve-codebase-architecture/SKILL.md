@@ -1,7 +1,6 @@
 ---
 name: improve-codebase-architecture
 description: 扫描代码库，寻找深化机会（deepening opportunities），以可视化 HTML 报告的形式呈现，然后就你选中的那一个进行追问推演（grill）。
-disable-model-invocation: true
 ---
 
 # 改进代码库架构

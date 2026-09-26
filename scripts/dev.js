@@ -1,6 +1,6 @@
 // 本地开发：先构建公共库（后端通过 workspace 引用其 dist），再并行启动用户选择的应用
 // 用法：pnpm dev                     # 交互式多选（默认全选）
-//       pnpm dev backend desktop     # 直接指定，支持目录名或包名
+//       pnpm dev agent-server agent-client   # 直接指定，支持目录名或包名
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';

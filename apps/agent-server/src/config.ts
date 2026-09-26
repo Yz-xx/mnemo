@@ -2,6 +2,9 @@ import path from 'node:path';
 import process from 'node:process';
 import type { LogLevel } from '@repo/logger';
 
+/** 服务标识：日志文件名前缀与健康检查的 service 字段共用，改名时只需改这一处 */
+export const SERVICE_NAME = 'agent-server';
+
 /** 对话模型提供方：本地 Ollama 或 OpenAI 兼容的线上服务（DeepSeek） */
 export type LlmProvider = 'ollama' | 'deepseek';
 

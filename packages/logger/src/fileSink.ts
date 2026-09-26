@@ -12,7 +12,7 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface FileSinkOptions {
   dir: string;
-  /** 服务名：决定文件名前缀，如 backend-2026-09-25.log */
+  /** 服务名：决定文件名前缀，如 agent-server-2026-09-25.log */
   name: string;
   /** 保留天数：早于该天数的日志文件在启动与跨天轮转时清理 */
   retentionDays: number;

@@ -25,8 +25,17 @@
   system-ui, sans-serif;
 @font-mono: 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;
 
-// 字距：衬线标题略开一点更显从容；小型大写字母（等宽标签）靠大得多的字距立住
+// 字距：衬线标题略开一点更显从容；小型大写字母（等宽标签）靠大得多的字距立住。
+// 中间四档按「用在哪里」命名，各处不再写字面量，避免同一视觉意图散出多个取值。
 @tracking-display: 0.02em;
+// 表单标签、页签：比标题略开，提示可读性
+@tracking-label: 0.04em;
+// 按钮、标签与列表元信息等控件小字
+@tracking-control: 0.06em;
+// 会话时间这类密集元信息：在 eyebrow 的宽字距基础上收窄
+@tracking-meta: 0.08em;
+// 两字短按钮：加宽以免两字挤在一起
+@tracking-button: 0.12em;
 @tracking-caps: 0.14em;
 // 发丝线的粗细：金线全部用 1px，不随缩放变粗
 @hairline: 1px;

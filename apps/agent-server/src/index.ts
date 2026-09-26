@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { SessionStore } from './auth/sessionStore.js';
 import { UserStore } from './auth/userStore.js';
 import {
+  SERVICE_NAME,
   describeChatModel,
   describeEmbeddingEndpoint,
   describeEmbeddingModel,
@@ -19,7 +20,7 @@ import { KnowledgeStore } from './rag/store.js';
 const config = loadConfig();
 const logger = createLogger({
   // 服务名：决定日志文件名前缀，便于同目录下区分多个服务
-  name: 'agent-server',
+  name: SERVICE_NAME,
   level: config.log.level,
   dir: config.log.dir,
   retentionDays: config.log.retentionDays,

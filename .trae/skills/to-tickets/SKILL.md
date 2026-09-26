@@ -1,7 +1,6 @@
 ---
 name: to-tickets
 description: 把一份计划、规格或当前对话拆解成一组曳光弹（tracer-bullet）工单，每个工单声明自己的阻塞边（blocking edge），并发布到已配置的追踪器（本地模式下每个工单一个文件、以文本表示阻塞边；真实追踪器上则用原生阻塞链接）。
-disable-model-invocation: true
 ---
 
 # 生成工单

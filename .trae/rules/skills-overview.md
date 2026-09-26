@@ -1,5 +1,5 @@
 ---
-description: my-monorepo 仓库级总纲：目录结构与职责边界、统一脚本、依赖与版本、Git 提交规范，并索引后端、桌面端、代码风格三份子规范及收尾自检要求。在本仓库做任何任务时始终遵守。
+description: my-monorepo 仓库级总纲：目录结构与职责边界、统一脚本、依赖与版本、Git 提交规范，并索引后端、桌面端、代码风格三份子规范及收尾自检要求。在本仓库做任何任务时必须始终遵守。
 alwaysApply: true
 ---
 
@@ -83,6 +83,6 @@ my-monorepo/
 
 - 每次对话结束后必须将对话记录追加到 `.HISTORY/` 目录下，文件名格式为 `YYYY-MM-DD.md`。
 
-# 技能调用
+# 技能调用（重要！！！）
 
-重点：执行任务时，必须调用 `ask-matt` 技能获取适合的技能进行调用，比如以下几个技能是必须调用的：任务开始前调用 `grill-with-docs` 技能，编码时调用 `codebase-design` 技能，测试时调用 `code-review` 和 `tdd` 技能。
+执行任务时，必须调用 `ask-matt` 技能获取适合的技能进行调用，比如以下几个技能是必须调用的：任务开始前调用 `grill-with-docs` 技能，编码时调用 `codebase-design` 技能，测试时调用 `code-review` 和 `tdd` 技能。

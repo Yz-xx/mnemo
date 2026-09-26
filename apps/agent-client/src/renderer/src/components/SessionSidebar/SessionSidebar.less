@@ -101,7 +101,7 @@
   background: transparent;
   color: var(--text-faint);
   font-size: 12px;
-  letter-spacing: 0.06em;
+  letter-spacing: @tracking-control;
   cursor: pointer;
   transition:
     background-color @ease-quick,
@@ -205,7 +205,7 @@
   .eyebrow();
   margin-top: 5px;
   // eyebrow 的宽字距对会话时间这类密集元信息偏散，收一点
-  letter-spacing: 0.08em;
+  letter-spacing: @tracking-meta;
 }
 
 .session__remove {

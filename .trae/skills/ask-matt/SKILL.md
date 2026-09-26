@@ -1,7 +1,6 @@
 ---
 name: ask-matt
 description: 询问哪种技能或流程（skill or flow）适合你的情况。本仓库中技能的路由器。
-disable-model-invocation: true
 ---
 
 # 询问 Matt

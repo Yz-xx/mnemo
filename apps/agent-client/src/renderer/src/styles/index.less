@@ -1,5 +1,5 @@
 // 桌面端样式入口：只聚合跨组件复用的公共样式，导入顺序即层叠顺序。
-// 各组件私有样式以 <style lang="less" scoped> 维护在对应 .vue 文件内，不在此注册。
+// 各组件私有样式以组件目录下的 Xxx.less 维护，由对应 .vue 以 <style src> 引入，不在此注册。
 @import 'theme.less';
 @import 'motion.less';
 @import 'base.less';

@@ -1,5 +1,4 @@
 interface:
   display_name: '分诊'
   short_description: '按分诊角色推进 issue'
-policy:
-  allow_implicit_invocation: false
+

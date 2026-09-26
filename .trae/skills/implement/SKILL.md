@@ -1,7 +1,6 @@
 ---
 name: implement
 description: '基于一份规格或一组工单实现一项工作（Implement a piece of work based on a spec or set of tickets）。'
-disable-model-invocation: true
 ---
 
 实现用户在规格或工单中所描述的工作。

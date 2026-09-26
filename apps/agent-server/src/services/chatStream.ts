@@ -1,6 +1,5 @@
 import type { Response } from 'express';
 import { toErrorMessage } from '../errors.js';
-import type { Conversation } from '../conversation/types.js';
 import type { ConversationStore } from '../conversation/store.js';
 import type { AgentService } from '../llm/agent.js';
 import { preview } from '@repo/logger';
@@ -25,7 +24,7 @@ function openEventStream(res: Response): void {
 }
 
 /**
- * 把一轮智能体输出以 SSE 写回响应，并在结束后把回复落库。
+ * 编排一整轮对话：落库提问 → 流式写回响应 → 落库回复，并回滚没有产出的新建会话。
  * 客户端断开时同步中断模型调用，避免继续消耗算力。
  * 日志按「一轮对话」聚合耗时、答复长度与用到的工具，便于事后判断是模型慢还是检索慢。
  */
@@ -35,9 +34,16 @@ export async function streamChatReply(input: {
   conversations: ConversationStore;
   logger: Logger;
   userId: number;
-  conversation: Conversation;
+  /** 目标会话 ID；留空表示本轮新建会话 */
+  conversationId: string | undefined;
+  /** 本轮用户提问 */
+  content: string;
 }): Promise<void> {
-  const { res, agent, conversations, logger, userId, conversation } = input;
+  const { res, agent, conversations, logger, userId, conversationId, content } = input;
+
+  // 先落库提问：新会话在这里创建，本轮若没有产出才好整体回滚。
+  // 必须在开启 SSE 之前做，落库失败仍按普通请求返回 500，而不是已 flush 的事件流
+  const conversation = await conversations.append(userId, conversationId, 'user', content);
   const log = logger.child({ userId, conversationId: conversation.id });
   const startedAt = Date.now();
   openEventStream(res);
@@ -54,6 +60,10 @@ export async function streamChatReply(input: {
   });
 
   let answer = '';
+  // 模型是否已经开始回应：中途被停止时，用户已经看到内容，此时不回滚，避免丢掉刚发出的提问
+  let responded = false;
+  // 本轮是否正常收尾（已推送 done）
+  let finished = false;
   const usedTools = new Set<string>();
   try {
     for await (const event of agent.stream(conversation.messages, {
@@ -62,6 +72,7 @@ export async function streamChatReply(input: {
       // 下传请求级子日志：工具内部的检索日志会自带 requestId 与 conversationId
       logger: log,
     })) {
+      responded = true;
       if (event.type === 'token') answer += event.content;
       if (event.type === 'tool') {
         if (event.status === 'start') usedTools.add(event.name);
@@ -84,6 +95,7 @@ export async function streamChatReply(input: {
       conversationId: conversation.id,
       title: latest?.title ?? conversation.title,
     });
+    finished = true;
   } catch (error) {
     // 客户端主动中断不算错误，无需回推
     if (controller.signal.aborted) {
@@ -97,5 +109,18 @@ export async function streamChatReply(input: {
     }
   } finally {
     res.end();
+  }
+
+  // 新建的会话若整轮既没正常收尾也没有任何产出（模型服务未启动、刚发出就被停止），就只剩这条提问：
+  // 连会话一起删除，否则列表里会留下一条没有回复的记录，下次发送还会再建一条
+  if (!conversationId && !finished && !responded) {
+    try {
+      if (await conversations.remove(userId, conversation.id)) {
+        log.info('本轮无产出，已删除新建会话');
+      }
+    } catch (error) {
+      // 响应已结束，这里的异常无处可报；留一条无回复记录比中断请求轻
+      log.warn('删除无产出会话失败', { error });
+    }
   }
 }

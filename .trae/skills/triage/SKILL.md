@@ -1,7 +1,6 @@
 ---
 name: triage
 description: 让议题与外部 PR 沿着一套分诊（triage）角色的状态机流转，分类、验证、必要时拷问，并写出可供 agent 直接使用的简报。
-disable-model-invocation: true
 ---
 
 # 分诊

@@ -13,7 +13,7 @@ export type { LogFields, LogLevel, LogRecord, LogSink, Logger } from './types.js
 const WEIGHT: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
 export interface LoggerOptions {
-  /** 服务名：决定日志文件名前缀与写入失败时的降级提示，如 backend-2026-09-26.log */
+  /** 服务名：决定日志文件名前缀与写入失败时的降级提示，如 agent-server-2026-09-26.log */
   name: string;
   level: LogLevel;
   /** 日志目录，留空则只输出到控制台 */

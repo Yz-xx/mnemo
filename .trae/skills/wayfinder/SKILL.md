@@ -1,7 +1,7 @@
 ---
 name: wayfinder
 description: 把一大块工作（超出一个 agent 会话所能承载的量）规划成议题追踪器上一张共享的决策工单地图，然后一次解决一个，直到通往目的地的道路清晰。
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 一个松散的构想出现了，它大得超出一个 agent 会话所能承载，并且笼罩在迷雾之中：从这里到**目的地（destination）**的道路还看不见。路径探索（wayfinding）是要找到那条路，而不是径直冲向目的地。本技能把这条路绘制成仓库议题追踪器上的一张**共享地图（map）**，然后一次处理一个**决策工单（decision ticket）**（即那种解决方式是一项决策、而非一段待执行构建切片的问题），直到路线变得清晰。

@@ -1,7 +1,6 @@
 ---
 name: to-spec
 description: '把当前对话转成一份规格（spec）并发布到项目议题追踪器（issue tracker）：不做访谈，只综合你已经讨论过的内容。'
-disable-model-invocation: true
 ---
 
 本技能接收当前对话的上下文与对代码库的理解，并产出一份规格（spec）。不要访谈用户，只综合你已经掌握的内容。

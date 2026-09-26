@@ -1,5 +1,3 @@
 interface:
   display_name: '带文档拷问'
   short_description: '拷问设计并撰写其文档'
-policy:
-  allow_implicit_invocation: false
