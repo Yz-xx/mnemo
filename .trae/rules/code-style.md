@@ -25,7 +25,7 @@ alwaysApply: false
 - 不用 `any`；外部不可信输入用 `unknown`，并在系统边界收窄。
 - 少用 `as` 断言，仅允许出现在边界（如 `req.body`、`JSON.parse` 结果）。
 - 常量用 `UPPER_SNAKE_CASE`（`SESSION_TTL_MS`、`DEFAULT_TITLE`），仅模块内部使用时不导出；函数与变量用 camelCase。
-- 命名对应关系：后端文件 camelCase（`sessionStore.ts`、`chatStream.ts`）、Vue 组件 PascalCase（`SettingsDrawer.vue`）、composable `useXxx.ts`、样式文件 kebab（`drawer.less`）。
+- 命名对应关系：后端文件 camelCase（`sessionStore.ts`、`chatStream.ts`）、`components/` 下组件目录与组件文件 PascalCase（`components/SettingsDrawer/SettingsDrawer.vue`）、根组件为单文件 `App.vue`、组件私有 composable `useXxx.ts`、公共样式文件 kebab（`theme.less`）。
 - 不可变优先：用展开构造新对象或数组，不原地修改共享状态。
 - 单一职责：一个文件只承担一件事；函数接近 60 行或出现第二类职责时，按"编排 / 展示 / 数据"拆成独立模块。
 - 目录内已有同类实现时沿用其模式（工厂函数 + 参数注入、Store 类等），不引入第二种风格。
@@ -44,7 +44,7 @@ alwaysApply: false
 - 组件只负责展示与交互；请求、持久化、跨组件共享状态放 `composables/useXxx.ts`。
 - composable 内部状态用 `ref` / `computed`，需要跨组件共享时用模块级单例（参考 `useAuth`），对外只暴露只读状态与操作函数。
 - 父子通信走 props 与 emit，子组件不直接改父级状态。
-- 模板类名遵循 BEM（`块__元素`、`块--修饰`），样式文件与组件同名对应。
+- 模板类名遵循 BEM（`块__元素`、`块--修饰`）；`components/` 下的组件以目录组织（`Xxx/{index.ts, Xxx.vue, Xxx.less, useXxx.ts}`），私有样式写同目录 `Xxx.less` 并由 `.vue` 以 `<style src="./Xxx.less" lang="less" scoped>` 引入；根组件 `App.vue` 例外，保持单文件与内联 scoped 样式块。
 - 列表渲染必须写 `:key`；模板中出现多套条件分支时抽子组件，不堆叠 `v-if`。
 - 需要即时反映的流式数据（token 追加）通过独立 `ref` 承载，避免整列表重建。
 
@@ -53,8 +53,9 @@ alwaysApply: false
 - 变量用 kebab-case：`@sidebar-width`、`@radius-sm`、`@theme-transition`；CSS 自定义属性同理 `--bg-panel`。
 - 色值一律走 CSS 变量（`--bg`、`--text`、`--accent`、`--danger` 等），禁止在组件里写死颜色。
 - 可复用片段抽成 mixin（`.ellipsis()`、`.focus-ring()`、`.content-gutter()`），仅在确有多个调用方时才抽取。
-- 设计令牌集中维护：与主题无关的尺寸、时长、字体放 `styles/variables.less`；色板放 `styles/theme.less`；mixin 放 `styles/mixins.less`；组件样式用 `@import (reference)` 引入，避免重复输出。
-- 新增样式文件必须按层叠顺序在 `styles/index.less` 注册。
+- 设计令牌集中维护：与主题无关的尺寸、时长、字体放 `styles/variables.less`；色板放 `styles/theme.less`；mixin 放 `styles/mixins.less`；组件样式块用 `@import (reference)` 引入，避免重复输出。
+- `components/` 下组件的私有样式写在组件目录的 `Xxx.less` 中，由 `.vue` 以 `<style src="./Xxx.less" lang="less" scoped>` 引入（根组件 `App.vue` 用内联 `<style lang="less" scoped>`）；只有被两个及以上组件复用的样式才提炼到 `styles/`，并按层叠顺序在 `styles/index.less` 注册。
+- `v-html` 注入的内容不带 scoped 属性，覆盖其标签样式须用 `:deep()` 穿透。
 - 选择器保持 BEM 风格与浅层嵌套（不超过 2 层），避免滥用后代选择器。
 - 动效时长需与 TS 常量对齐时，在两侧注释互相指明（如 `@theme-transition` 对应 `useTheme.ts` 的 `TRANSITION_MS`）。
 

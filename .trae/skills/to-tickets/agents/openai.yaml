@@ -1,0 +1,5 @@
+interface:
+  display_name: '转工单'
+  short_description: '把计划拆成曳光弹工单'
+policy:
+  allow_implicit_invocation: false

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { currentUserId } from '../auth/middleware.js';
+import { toErrorMessage } from '../errors.js';
 import { requestLogger } from '../middleware/requestLog.js';
 import type { KnowledgeScope, KnowledgeStore } from '../rag/store.js';
 
@@ -38,7 +39,7 @@ async function createDocument(
     res.status(201).json(document);
   } catch (error) {
     // 向量化依赖本地 embedding 服务，维度或模型不符也在此统一提示
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = toErrorMessage(error);
     // 入库失败集中在向量化服务与向量基准两类原因，必须把原始错误落日志才能定位
     requestLogger(res).error('文档入库失败', {
       title,

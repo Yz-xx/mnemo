@@ -6,6 +6,7 @@ import { connect } from '@lancedb/lancedb';
 import type { Connection, Table } from '@lancedb/lancedb';
 import type { Embeddings } from '@langchain/core/embeddings';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
+import { describeConnectionError } from '../errors.js';
 
 /** 文档可见范围：global 全局共享，private 仅上传者本人可见 */
 export type KnowledgeScope = 'global' | 'private';
@@ -101,18 +102,6 @@ function readOwner(row: Record<string, unknown>): number | null {
     : Number(row.owner_user_id);
 }
 
-/**
- * 把向量化服务的网络错误翻译成含目标地址的可读提示。
- * Node 的 fetch 在连接失败时只给出 "fetch failed"，不含地址，界面无法定位问题。
- */
-function describeEmbeddingError(error: unknown, endpoint: string): Error {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up/i.test(message)) {
-    return new Error(`无法连接向量化服务 ${endpoint}，请确认该服务已启动后重试。`);
-  }
-  return error instanceof Error ? error : new Error(message);
-}
-
 function toDocument(row: Record<string, unknown>): KnowledgeDocument {
   return {
     id: String(row.id),
@@ -200,7 +189,7 @@ export class KnowledgeStore {
     try {
       return await task();
     } catch (error) {
-      throw describeEmbeddingError(error, this.options.embeddingEndpoint);
+      throw describeConnectionError(error, this.options.embeddingEndpoint, '向量化服务');
     }
   }
 

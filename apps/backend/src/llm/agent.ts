@@ -2,13 +2,14 @@ import { AIMessage, AIMessageChunk, HumanMessage, ToolMessage } from '@langchain
 import type { BaseMessageChunk } from '@langchain/core/messages';
 import { createAgent } from 'langchain';
 import { describeChatModel } from '../config.js';
+import { describeConnectionError } from '../errors.js';
+import { createChatModel } from './model.js';
+import { createTools } from './tools.js';
+import { SYSTEM_PROMPT } from './prompt.js';
 import type { AppConfig } from '../config.js';
 import type { StoredMessage } from '../conversation/types.js';
 import type { Logger } from '../logger/types.js';
 import type { KnowledgeStore } from '../rag/store.js';
-import { createChatModel } from './model.js';
-import { createTools } from './tools.js';
-import { SYSTEM_PROMPT } from './prompt.js';
 
 /** 流式过程中向前端推送的事件 */
 export type AgentStreamEvent =
@@ -95,19 +96,7 @@ export class AgentService {
         }
       }
     } catch (error) {
-      throw describeModelError(error, this.modelTarget);
+      throw describeConnectionError(error, this.modelTarget, '对话模型服务');
     }
   }
-}
-
-/**
- * 把模型侧晦涩的网络错误翻译成可读提示。
- * Node 的 fetch 在连接失败时只给出 "fetch failed"，不含目标地址，直接抛给界面无法定位问题。
- */
-function describeModelError(error: unknown, target: string): Error {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up/i.test(message)) {
-    return new Error(`无法连接对话模型服务 ${target}，请确认该服务已启动后重试。`);
-  }
-  return error instanceof Error ? error : new Error(message);
 }

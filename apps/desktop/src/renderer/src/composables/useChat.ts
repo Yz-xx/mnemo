@@ -1,9 +1,9 @@
 import { computed, ref } from 'vue';
+import { DEFAULT_BACKEND_URL, readSettings, saveSettings } from '../api/bridge';
 import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client';
+import { toErrorMessage } from '../api/errors';
 import type { ChatMessage, ChatStreamEvent, ConversationSummary } from '../types';
 import { useAuth } from './useAuth';
-
-const DEFAULT_BACKEND_URL = 'http://localhost:3000';
 
 export type ConnectionState = 'idle' | 'online' | 'offline';
 
@@ -34,7 +34,7 @@ export function useChat() {
       void clear();
       return;
     }
-    errorMessage.value = toMessage(error);
+    errorMessage.value = toErrorMessage(error);
   }
 
   /** 退出登录或令牌失效时清空本地会话数据，避免上一个账号的内容残留在界面上 */
@@ -139,7 +139,7 @@ export function useChat() {
       );
     } catch (error) {
       // 用户主动中断不算错误
-      if (!currentController.signal.aborted) errorMessage.value = toMessage(error);
+      if (!currentController.signal.aborted) errorMessage.value = toErrorMessage(error);
     } finally {
       streaming.value = false;
       controller = null;
@@ -157,7 +157,7 @@ export function useChat() {
   /** 切换后端地址并持久化到本地设置 */
   async function updateBackendUrl(url: string): Promise<void> {
     backendUrl.value = url.trim() || DEFAULT_BACKEND_URL;
-    await window.desktopApi.saveSettings({ backendUrl: backendUrl.value });
+    await saveSettings({ backendUrl: backendUrl.value });
     connection.value = 'idle';
     await refreshHealth();
     await refreshConversations();
@@ -165,7 +165,7 @@ export function useChat() {
 
   /** 启动时读取本地设置并完成首次连接 */
   async function init(): Promise<void> {
-    const settings = await window.desktopApi.getSettings();
+    const settings = await readSettings();
     backendUrl.value = settings.backendUrl;
     await refreshHealth();
     await refreshConversations();
@@ -196,10 +196,6 @@ export function useChat() {
 
 function createMessage(role: ChatMessage['role'], content: string): ChatMessage {
   return { id: crypto.randomUUID(), role, content, createdAt: new Date().toISOString() };
-}
-
-function toMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** 消费流式事件时需要回传给会话层的副作用 */

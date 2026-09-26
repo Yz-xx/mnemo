@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import { toErrorMessage } from '../errors.js';
 import type { Conversation } from '../conversation/types.js';
 import type { ConversationStore } from '../conversation/store.js';
 import type { AgentService } from '../llm/agent.js';
@@ -92,7 +93,7 @@ export async function streamChatReply(input: {
       });
     } else {
       log.error('本轮对话失败', { durationMs: Date.now() - startedAt, error });
-      send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+      send({ type: 'error', message: toErrorMessage(error) });
     }
   } finally {
     res.end();

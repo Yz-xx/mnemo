@@ -68,22 +68,24 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 2. 切换时只临时加 `.theme-transition` 类（240ms 后移除），常驻过渡会让滚动、hover 等交互动画变得迟钝；
 3. 切换结果通过 `saveSettings({ theme })` 交回主进程持久化，主进程随即更新 `themeSource` 与窗口底色，保证下次启动不闪。
 
-过渡样式在 `theme.less` 中被**限定在 18 个大面积表面元素**上，且只过渡 `background-color` 与 `border-color`：
+过渡样式在 `theme.less` 中被**限定在 20 个大面积表面元素**上，且只过渡 `background-color` 与 `border-color`：
 
 > 早期的全局 `transition: all` 会让每个元素都参与颜色插值，深↔亮切换时文字色与背景色在中途交叉，出现约 100ms 的低对比度“字体闪烁”。改为“表面渐变、文字瞬时”后该现象消失。
 
 ## 七、样式体系（Less 模块化）
 
 ```text
-renderer/src/styles/
+renderer/src/styles/          # 只放跨组件复用的公共样式
 ├── variables.less           # 设计令牌：尺寸、圆角、字体栈、动效时长
 ├── theme.less               # 双主题色板 + 需要过渡的表面元素清单
 ├── mixins.less              # .ellipsis() .eyebrow() .focus-ring() .stagger() .content-gutter()
-├── motion.less              # keyframes 与 .enter()，含 reduced-motion 兜底
-├── base.less / layout.less  # 重置与整体布局
-├── components/              # auth / controls / sidebar / chat / message / markdown / drawer / knowledge
+├── motion.less              # 跨组件共用的 keyframes 与 .enter()
+├── base.less                # 重置、窗口底色与全局滚动条
+├── controls.less            # 公共控件：field / chip / dot / icon-btn / btn
 └── index.less               # 入口，导入顺序即层叠顺序
 ```
+
+`components/` 下的组件私有样式随组件目录走：写在同目录的 `Xxx.less`，由 `.vue` 以 `<style src="./Xxx.less" lang="less" scoped>` 引入（如 `SessionSidebar/SessionSidebar.less` 里的 `.sidebar` / `.session*`）；根组件 `App.vue` 不目录化，样式仍以内联 `<style lang="less" scoped>` 写在文件末尾。判定标准：**被两个及以上组件复用才提炼到 `styles/`**，只服务单个组件的样式一律留在组件内。
 
 要点：
 
@@ -91,21 +93,25 @@ renderer/src/styles/
 - 排版有分工：标题与品牌用衬线显示字体，正文用无衬线，元信息（时间、会话数、模型名）用等宽小字 + 字距，形成“编辑级工作台”的观感；
 - **布局中轴**由 `.content-gutter()` 混入统一：顶栏、消息列表、输入条共用同一条左右边界，其中消息列表额外补偿了 `scrollbar-gutter: stable` 造成的 10px 占位，保证头像与输入条右边界严格对齐；
 - 两侧消息骨架对称：统一 `gap`、头像尺寸与 `align-self`，AI 侧用左侧细线（线）对应用户侧的浅色块（面），并用数值探针（而非肉眼）确认头像与正文首行中心误差在 1px 内；
-- 用 `@import (reference)` 引入变量与 mixin，避免重复产出样式；`calc()` 参与运算的表达式用 `~'...'` 转义，交给浏览器求值。
+- 组件样式文件内用 `@import (reference) '../../styles/variables.less'` 引入令牌与 mixin（`components/` 下组件目录比 `styles/` 深一层，根组件 `App.vue` 为 `'./styles/'`），`(reference)` 只取定义不产出、不会被重复打进产物；`calc()` 参与运算的表达式用 `~'...'` 转义，交给浏览器求值；
+- `MessageItem/Markdown.less` 处理的正文由 `v-html` 注入，节点不带 scoped 属性，因此那部分选择器统一用 `:deep()` 穿透（如 `.markdown :deep(pre) code`）；该文件由 `MessageItem.less` 在其后 `@import` 引入，靠源码顺序覆盖骨架的 `white-space`；
+- 公共控件与组件的作用关系是「组件覆写尺寸、公共层定外观」：如 `.composer .btn` 位于 `ChatWindow/ChatWindow.less` 内，只改 padding / 圆角 / 字号，金属渐变等材质仍由 `controls.less` 提供。
 
 ## 八、界面组成
 
-| 组件                 | 职责                                                                   |
-| -------------------- | ---------------------------------------------------------------------- |
-| `App.vue`            | 布局骨架与登录门禁，串联登录页、侧栏、对话窗与设置抽屉                 |
-| `LoginView.vue`      | 登录 / 注册表单，含后端地址配置与连通性探测                            |
-| `SessionSidebar.vue` | 会话列表、新建/切换/删除、连接状态与模型信息、当前账号与登出、主题切换 |
-| `ChatWindow.vue`     | 消息列表、空状态、输入条（Enter 发送 / Shift+Enter 换行）与停止按钮    |
-| `MessageItem.vue`    | 单条消息：用户纯文本 / 助手 Markdown 渲染、工具轨迹标签、思考动画      |
-| `SettingsDrawer.vue` | 抽屉外壳与标签页切换；「连接」页配置后端地址并探测连通性               |
-| `KnowledgePanel.vue` | 「知识库」页：文档入库、列表与删除（挂载时自动加载）                   |
+| 组件              | 职责                                                                   |
+| ----------------- | ---------------------------------------------------------------------- |
+| `App.vue`         | 布局骨架与登录门禁，串联登录页、侧栏、对话窗与设置抽屉                 |
+| `LoginView/`      | 登录 / 注册表单，含后端地址配置与连通性探测                            |
+| `SessionSidebar/` | 会话列表、新建/切换/删除、连接状态与模型信息、当前账号与登出、主题切换 |
+| `ChatWindow/`     | 消息列表、空状态、输入条（Enter 发送 / Shift+Enter 换行）与停止按钮    |
+| `MessageItem/`    | 单条消息：用户纯文本 / 助手 Markdown 渲染、工具轨迹标签、思考动画      |
+| `SettingsDrawer/` | 抽屉外壳与标签页切换；「连接」页配置后端地址并探测连通性               |
+| `KnowledgePanel/` | 「知识库」页：文档入库、列表与删除（挂载时自动加载）                   |
 
-Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不用气泡），配合衬线标题与克制的青绿强调色，长文阅读更接近阅读器体验。
+`components/` 下每个组件目录内固定为 `Xxx.vue`（模板与装配）、`Xxx.less`（私有样式）与 `index.ts`（对外导出入口）；`ChatWindow/`、`LoginView/`、`SessionSidebar/`、`KnowledgePanel/` 另有 `useXxx.ts` 承载组件私有的状态与交互，`MessageItem/` 另拆出 `Markdown.less`。消费方一律按目录引入（`import ChatWindow from '../components/ChatWindow'`）；根组件 `src/App.vue` 保持单文件，由 `main.ts` 以 `import App from './App.vue'` 引入。
+
+Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不用气泡），配合衬线标题、金色发丝线与克制的香槟金强调色，长文阅读更接近阅读器体验。
 
 ## 九、构建与打包
 

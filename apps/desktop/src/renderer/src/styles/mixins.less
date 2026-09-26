@@ -8,13 +8,14 @@
 }
 
 /**
- * 等宽小字标签：模型名、时间、片段数、状态等“机器信息”统一使用该形态，
+ * 等宽小字标签：模型名、时间、片段数、状态等“机器信息”统一使用该形态。
+ * 字距刻意开到 @tracking-caps，让全小写/数字也具备小型大写字母的庄重感，
  * 与正文的无衬线形成对比，是这套界面的主要识别特征之一。
  */
 .eyebrow() {
   font-family: @font-mono;
   font-size: 11px;
-  letter-spacing: 0.08em;
+  letter-spacing: @tracking-caps;
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -26,6 +27,48 @@
   background: @bg;
   color: var(--text);
   font: inherit;
+  // 极淡的顶部内高光，让输入面像一块上漆的薄板而非纯色矩形
+  box-shadow: var(--engrave);
+}
+
+/**
+ * 金线描边：所有“有实体感的块”共用同一套镶边语汇（1px 金线 + 顶部内高光）。
+ * 悬停或聚焦时把 --gold-line 换成 --gold-line-strong 即可提亮，无需另写一套规则。
+ */
+.gold-frame(@line: var(--gold-line)) {
+  border: 1px solid @line;
+  box-shadow: var(--engrave);
+}
+
+/**
+ * 水平发丝线：透明 → 金 → 透明的 1px 渐变线，替代等宽实线。
+ * 两端渐隐是这套版面的签名细节；挂在伪元素上，因此宿主元素必须已定位。
+ */
+.hairline(@side: bottom) {
+  content: '';
+  position: absolute;
+  right: 0;
+  left: 0;
+  @{side}: 0;
+  height: @hairline;
+  background-image: var(--hairline);
+  pointer-events: none;
+}
+
+/**
+ * 金箔菱形品牌标记：登录页与侧栏共用，保证登录前后品牌标记完全一致。
+ * @valign 微调基线上的位置（侧栏字号更小，需要略低一点）
+ */
+.brand-mark(@valign: 3px) {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 11px;
+  border-radius: 1px;
+  background: var(--accent-gradient);
+  transform: rotate(45deg);
+  vertical-align: @valign;
 }
 
 /**
@@ -39,10 +82,10 @@
   @{prop}-left: @gutter;
 }
 
-/** 聚焦态：强调色描边加柔和外发光，替代浏览器默认 outline */
+/** 聚焦态：金线描边加柔和外发光，替代浏览器默认 outline */
 .focus-ring() {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--gold-line-strong);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 

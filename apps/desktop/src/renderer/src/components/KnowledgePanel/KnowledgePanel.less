@@ -1,0 +1,64 @@
+@import (reference) '../../styles/variables.less';
+@import (reference) '../../styles/mixins.less';
+
+// 知识库面板：作为抽屉主体的一部分渲染，布局节奏与抽屉的 connection 分页保持一致
+.knowledge__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.knowledge__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+// 知识库面板：已入库文档列表
+.doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc {
+  // 每张文档卡都是同一枚镶金薄片，悬停时提亮金线并抬出一层阴影
+  .gold-frame();
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: @radius-sm;
+  background: var(--bg-panel);
+  transition:
+    border-color @ease-quick,
+    box-shadow @ease-quick;
+
+  &:hover {
+    border-color: var(--gold-line-strong);
+    box-shadow: var(--shadow-card);
+  }
+}
+
+.doc__title {
+  .ellipsis();
+  font-size: 14px;
+}
+
+.doc__meta {
+  .ellipsis();
+  flex: none;
+  max-width: 45%;
+  color: var(--text-faint);
+  font-family: @font-mono;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}

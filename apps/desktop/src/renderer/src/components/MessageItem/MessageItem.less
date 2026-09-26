@@ -1,0 +1,127 @@
+@import (reference) '../../styles/variables.less';
+@import (reference) '../../styles/mixins.less';
+@import (reference) '../../styles/motion.less';
+
+// 消息共用一套骨架：外侧说话者标记 + 内容块，两者的内边距节奏完全一致。
+// AI 用左侧金线界定发言范围，用户用镶金底的块——线 / 面的镜像关系即是对称的来源。
+.message {
+  .enter();
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  max-width: @content-max;
+  margin: 0 auto;
+
+  // 用户消息靠右并与标记左右镜像
+  &--user {
+    flex-direction: row-reverse;
+
+    .message__avatar {
+      border-color: var(--gold-line-strong);
+      background: var(--accent-gradient);
+      // 金箔块上的深墨字，与主按钮同一套材质
+      color: var(--on-accent);
+    }
+
+    .message__body {
+      max-width: 78%;
+    }
+
+    .message__content {
+      .gold-frame();
+      padding: 10px 14px;
+      border-radius: @radius;
+      background-color: var(--bg-elevated);
+      // 从左上角洇开的淡金光，让“用户说的话”也带上一层薄金
+      background-image: linear-gradient(150deg, var(--accent-soft), transparent 72%);
+    }
+  }
+
+  // AI 回复排入文档流，仅以一条金线界定范围，不再包气泡
+  &--assistant .message__content {
+    padding: 10px 0 10px 14px;
+    border-left: 2px solid var(--gold-line-strong);
+  }
+
+  // 工具标签与正文文字左对齐（金线 2px + 内边距 14px）
+  &--assistant .message__steps {
+    padding-left: 16px;
+  }
+}
+
+// 说话者标记：等宽方形标签，两侧规格一致，只用材质区分角色；
+// 与内容块首行文字垂直居中（内容块上内边距 10px，行高约 24.75px）。
+.message__avatar {
+  .eyebrow();
+  flex: none;
+  align-self: flex-start;
+  width: 26px;
+  height: 26px;
+  margin-top: 9px;
+  border: 1px solid var(--gold-line);
+  border-radius: @radius-sm;
+  color: var(--accent);
+  line-height: 24px;
+  text-align: center;
+  // 抵消 letter-spacing 在末尾留下的空隙，让字面真正居中
+  text-indent: 0.14em;
+}
+
+.message__body {
+  min-width: 0;
+}
+
+.message__content {
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  // 等待首个 token 时只留三点脉冲，避免出现“正在思考…”这类静态文案
+  &--pending {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+  }
+}
+
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.55;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+
+  &:nth-child(2) {
+    animation-delay: 0.16s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.32s;
+  }
+}
+
+.message__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+// 等待首个 token 时的三点脉冲；只服务于本组件，故随样式一并下沉
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+// markdown 正文规则量大且与消息骨架关注点不同，单独成文件；
+// 必须排在骨架之后，才能以同特异性的源码顺序覆盖 .message__content 的 white-space
+@import './Markdown.less';

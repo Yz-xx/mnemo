@@ -17,11 +17,27 @@ body {
   font-size: 15px;
   line-height: 1.65;
   color: var(--text);
-  background: var(--bg);
+  // 底色之上压一层淡金光晕，大块纯色会显得廉价，一层微光就把它压住了
+  background-color: var(--bg);
+  background-image: var(--sheen);
+  background-attachment: fixed;
   // 窗口级滚动会把输入框一起滚走，滚动全部收敛到各面板内部
   overflow: hidden;
   // 字体渲染交给系统，避免细体在小字号下发虚
   -webkit-font-smoothing: antialiased;
+}
+
+// 全局颗粒：不引入图片资源，用内联 SVG 噪声生成，压在所有界面之上。
+// 作用是消掉大色块的“塑料感”，让墨底与纸面都带上一点纸浆/漆面的颗粒。
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  // 高于抽屉与遮罩，但完全透传指针事件，只做质感叠加
+  z-index: 999;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23grain)'/%3E%3C/svg%3E");
 }
 
 // 选中文字沿用强调色的柔和变体，与界面配色同源

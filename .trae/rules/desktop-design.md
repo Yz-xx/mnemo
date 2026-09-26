@@ -46,14 +46,17 @@ apps/desktop/src/
 renderer/src/
 ├── types.ts        跨组件共享类型（ChatMessage、ConversationSummary 等）
 ├── api/client.ts   唯一的 HTTP 入口 AgentApi
-├── composables/    状态与业务（useAuth、useChat、useTheme）
-└── components/     展示与交互
+├── composables/    跨组件共享的状态与业务（useAuth、useChat、useTheme）
+├── App.vue         根组件（门禁与整体布局）
+└── components/     展示与交互，每个组件一个目录
 ```
 
 - `api/client.ts` 负责请求头拼装、中断/超时、错误归一化（`ApiError` 带 `status`，`isUnauthorized` 判定 401），其他模块不直接调用 `fetch`。
-- `composables/` 承载状态与业务；跨组件共享的状态用模块级单例（`useAuth` 的 token 与 user）。
+- `composables/` 承载跨组件共享的状态与业务（`useAuth` 的 token 与 user 为模块级单例）；组件私有的状态与交互留在组件目录内，不上提。
 - `components/` 只做展示与交互，通过 props / emit 与 composable 交互。
-- `App.vue` 只做门禁（`booting` + token）与整体布局，不掺业务逻辑。
+- `components/` 下的组件一律以**目录**为单位组织，目录名即组件名：`Xxx/{index.ts, Xxx.vue, Xxx.less}`，按需再加 `useXxx.ts`。`index.ts` 统一 `export { default } from './Xxx.vue'`，消费方按 `import Xxx from '../components/Xxx'` 引入，不写 `.vue` 后缀。
+- `components/` 下组件超过 200 行时按关注点拆到同目录：TS 逻辑（含 props / emits 类型定义）进 `useXxx.ts`，样式进 `Xxx.less`，`.vue` 只留模板与装配；不足 200 行不强行拆。
+- `App.vue` 是唯一例外：作为根组件不目录化，保持单文件（门禁 + 布局 + 内联 scoped 样式块），不掺业务逻辑。
 
 ## 5. 数据流与错误处理
 
@@ -73,8 +76,10 @@ renderer/src/
 
 ## 7. 样式分层
 
-- `styles/` 按 `theme`（色板）→ `motion` → `base` → `layout` → `components/*` 聚合，导入顺序即层叠顺序。
-- 新增组件样式文件必须在 `styles/index.less` 注册；组件样式文件与组件同名（`components/knowledge.less` 对应 `KnowledgePanel.vue`）。
+- `styles/` 只放跨组件复用的公共样式，按 `theme`（色板）→ `motion` → `base` → `controls`（公共控件）聚合，导入顺序即层叠顺序。
+- `components/` 下组件的私有样式写在组件目录的 `Xxx.less` 中，由 `.vue` 以 `<style src="./Xxx.less" lang="less" scoped>` 引入；`App.vue` 作为根组件仍用内联 `<style lang="less" scoped>`。判定标准是**被两个及以上组件复用才提炼到 `styles/`**（如 `.btn`、`.field`、`.chip`、`.dot` 被多个组件共用，属公共；`.session`、`.composer`、`.doc` 只服务单个组件，随组件走）。
+- 组件样式用 `@import (reference)` 引入令牌与 mixin，路径按所在位置取值：组件目录为 `'../../styles/xxx.less'`，根组件 `App.vue` 为 `'./styles/xxx.less'`；`v-html` 注入的内容（markdown 正文）不带 scoped 属性，相关选择器须用 `:deep()` 穿透，且这部分规则单独放 `MessageItem/Markdown.less`，由 `MessageItem.less` 在其后 `@import` 引入，保证同特异性下靠源码顺序生效。
+- 公共控件与组件的关系固定为「公共层定外观、组件层覆写尺寸」：组件 scoped 块只改 padding / 圆角 / 字号等尺寸项，材质（渐变、金线、阴影令牌）仍由 `controls.less` 提供。
 - 与主题无关的尺寸、时长、字体放 `variables.less`；色值只放 `theme.less`；可复用片段放 `mixins.less`。
 - 详细写法遵循 `.trae/rules/code-style.md` 的 Less 章节。
 
@@ -99,4 +104,4 @@ renderer/src/
 - 新增 IPC 已在注册、暴露、类型三处同步。
 - 渲染进程未引入 Node / Electron API，未直接暴露 `ipcRenderer`。
 - 主题切换无字闪，冷启动无深色闪烁。
-- 组件拆分后样式文件已在 `index.less` 注册且类名仍为 BEM。
+- `components/` 下组件拆分后私有样式已随组件目录（`Xxx.less` + `<style src>` scoped）维护，根组件 `App.vue` 保持内联 scoped 块，跨组件复用的样式才注册到 `index.less`，类名仍为 BEM。

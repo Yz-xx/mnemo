@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue';
 import type { Ref } from 'vue';
-import type { DesktopApi, ThemeMode } from '../../../preload/types.js';
+import type { ThemeMode } from '../../../preload/types.js';
+import { initialSettings, saveSettings } from '../api/bridge';
 
 interface ThemeControls {
   theme: Ref<ThemeMode>;
@@ -10,11 +11,8 @@ interface ThemeControls {
 /** 与 less 中的 @theme-transition 保持一致：调用方在过渡结束后即撤销临时类 */
 const TRANSITION_MS = 240;
 
-// 纯浏览器环境（如样式预览页）没有 preload 桥接，此时按深色渲染且不持久化
-const bridge = window.desktopApi as DesktopApi | undefined;
-
 // 主题真源在主进程设置中，preload 已同步注入，首个渲染帧即可拿到正确主题
-const theme = ref<ThemeMode>(bridge?.initialSettings?.theme ?? 'dark');
+const theme = ref<ThemeMode>(initialSettings.theme);
 
 // 初始主题直接落到根节点，不加过渡，避免启动时出现一次颜色渐变
 document.documentElement.dataset['theme'] = theme.value;
@@ -42,7 +40,7 @@ watch(theme, (value) => {
     document.documentElement.dataset['theme'] = value;
   });
   // 交给主进程持久化，同时让窗口底色与 themeSource 跟随，避免下次启动闪烁
-  void bridge?.saveSettings({ theme: value }).catch(() => {
+  void saveSettings({ theme: value }).catch(() => {
     // 持久化失败不影响本次会话的主题切换
   });
 });

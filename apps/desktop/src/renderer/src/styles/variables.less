@@ -1,17 +1,21 @@
 // 与主题无关的设计令牌：尺寸、时长、字体在此统一维护
 
-// 尺寸与形状
+// 尺寸与形状：圆角收得比常见软件更紧，接近金属镶边的切角感，而非圆润的卡片
 @sidebar-width: 272px;
 // 对话正文最大行宽：过宽的一行会明显降低长文阅读效率
 @content-max: 780px;
-@radius: 8px;
-@radius-sm: 4px;
+@radius: 6px;
+@radius-sm: 3px;
+@radius-lg: 14px;
 @radius-pill: 999px;
 
 // 动效时长；主题切换值需与 useTheme.ts 中的 TRANSITION_MS 保持一致
 @theme-transition: 240ms;
-@enter: 320ms;
-@enter-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+// 入场刻意放慢：起步快、落点极缓，收尾的“拖长”是这套界面精致感的来源
+@enter: 460ms;
+@enter-ease: cubic-bezier(0.16, 1, 0.3, 1);
+// 控件上的短过渡（hover、下划线展开等），不参与入场编排
+@ease-quick: 0.18s ease;
 
 // 字体分工：显示字体承担品牌与标题，无衬线承担正文，等宽承担“机器信息”
 // （模型名、时间、片段数、代码）。三者都是系统已装字体，无需外部下载。
@@ -20,3 +24,9 @@
 @font-sans: 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC',
   system-ui, sans-serif;
 @font-mono: 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+
+// 字距：衬线标题略开一点更显从容；小型大写字母（等宽标签）靠大得多的字距立住
+@tracking-display: 0.02em;
+@tracking-caps: 0.14em;
+// 发丝线的粗细：金线全部用 1px，不随缩放变粗
+@hairline: 1px;

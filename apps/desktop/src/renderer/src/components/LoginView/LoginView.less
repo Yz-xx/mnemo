@@ -1,0 +1,157 @@
+@import (reference) '../../styles/variables.less';
+@import (reference) '../../styles/mixins.less';
+@import (reference) '../../styles/motion.less';
+
+// 登录 / 注册：整屏居中单列卡片，与主界面共用同一套设计令牌。
+// 这是用户见到的第一屏，金色装饰在此给得最足。
+
+.auth {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  padding: 24px;
+  // 同样不铺底色，让窗口自身的墨底/纸面与淡金光晕透上来
+  background: transparent;
+}
+
+.auth__card {
+  .enter();
+  position: relative;
+  width: 384px;
+  max-width: 100%;
+  padding: 34px 34px 22px;
+  border: 1px solid var(--gold-line);
+  border-radius: @radius-lg;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-card);
+
+  // 上下各压一道金线，把卡片做成一片“镶边的书封”
+  &::before {
+    .hairline();
+    .draw-rule(160ms);
+  }
+
+  &::after {
+    .hairline(top);
+    .draw-rule(160ms);
+  }
+}
+
+.auth__brand {
+  display: block;
+  font-family: @font-display;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: @tracking-display;
+
+  // 与侧栏品牌相同的金箔菱形，登录前后品牌标记保持一致
+  &::before {
+    .brand-mark(2px);
+  }
+}
+
+.auth__tagline {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.75;
+  letter-spacing: @tracking-display;
+}
+
+// 登录 / 注册切换：下划线式标签，比胶囊按钮更贴合这套版面的编辑感
+.auth__modes {
+  display: flex;
+  gap: 22px;
+  margin: 28px 0 22px;
+  // 底衬同样走金线，与卡片上下边的发丝线保持同一材质
+  border-bottom: 1px solid var(--gold-line);
+}
+
+.auth__mode {
+  position: relative;
+  padding: 0 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color @ease-quick;
+
+  &:hover {
+    color: var(--text-muted);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+    border-radius: @radius-sm;
+  }
+
+  // 选中下划线取金箔渐变，与主按钮同材质
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    border-radius: @radius-pill;
+    background: var(--accent-gradient);
+    transform: scaleX(0);
+    transition: transform @ease-quick;
+  }
+
+  &--active {
+    color: var(--text);
+    font-weight: 500;
+
+    &::after {
+      transform: scaleX(1);
+    }
+  }
+}
+
+.auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth__error {
+  margin: 0;
+  padding: 9px 12px;
+  border-left: 2px solid var(--danger);
+  border-radius: 0 @radius-sm @radius-sm 0;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+// 底栏：服务地址可改，避免后端地址配错时因进不去主界面而无法调整
+.auth__foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 18px;
+
+  &::before {
+    .hairline(top);
+  }
+}
+
+.auth__endpoint {
+  .surface(var(--bg));
+  .ellipsis();
+  flex: 1;
+  padding: 5px 9px;
+  color: var(--text-muted);
+  font-family: @font-mono;
+  font-size: 11px;
+
+  &:focus {
+    .focus-ring();
+  }
+}

@@ -1,6 +1,7 @@
 @import (reference) 'variables.less';
 
 // 动效集中在此：入场位移刻意做得很小，长文界面里大幅运动会干扰阅读。
+// 这套界面的动效重心不在位移，而在“金线展开”与缓慢落点。
 
 @keyframes rise {
   from {
@@ -24,6 +25,19 @@
   }
 }
 
+// 金线展开：分隔线从中间向两端推开，是整套界面最有辨识度的一次入场
+@keyframes draw {
+  from {
+    opacity: 0;
+    transform: scaleX(0.18);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
 // 状态点呼吸：用 currentColor 取用状态点自身的颜色，扩散到透明即完成一次脉冲
 @keyframes breathe {
   from {
@@ -35,23 +49,15 @@
   }
 }
 
-// 等待首个 token 时的三点脉冲
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 0.25;
-    transform: translateY(0);
-  }
-
-  40% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
-}
-
 /** 入场：加在需要“淡入上移”的容器上 */
 .enter() {
   animation: rise @enter @enter-ease backwards;
+}
+
+/** 金线展开：配合 mixins 的 .hairline() 使用，可按需追加延迟对齐其他入场 */
+.draw-rule(@delay: 0ms) {
+  transform-origin: center;
+  animation: draw 620ms @enter-ease @delay backwards;
 }
 
 // 尊重系统的“减弱动效”设置

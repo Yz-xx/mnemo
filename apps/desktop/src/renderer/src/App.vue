@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
-import ChatWindow from './components/ChatWindow.vue';
-import LoginView from './components/LoginView.vue';
-import SessionSidebar from './components/SessionSidebar.vue';
-import SettingsDrawer from './components/SettingsDrawer.vue';
+import ChatWindow from './components/ChatWindow';
+import LoginView from './components/LoginView';
+import SessionSidebar from './components/SessionSidebar';
+import SettingsDrawer from './components/SettingsDrawer';
 import { useAuth } from './composables/useAuth';
 import { useChat } from './composables/useChat';
 
@@ -87,3 +87,19 @@ onMounted(async () => {
     />
   </div>
 </template>
+
+<style lang="less" scoped>
+@import (reference) './styles/variables.less';
+
+// 应用骨架：左侧会话栏固定宽度，右侧对话区自适应
+.shell {
+  display: grid;
+  grid-template-columns: @sidebar-width 1fr;
+  height: 100vh;
+}
+
+// 启动占位：校验本地令牌期间只保留窗口底色，不渲染任何界面
+.boot {
+  height: 100vh;
+}
+</style>

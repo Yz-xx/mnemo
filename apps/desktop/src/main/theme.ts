@@ -4,10 +4,11 @@ import type { ThemeMode } from '../preload/types.js';
 /**
  * 窗口底色需与主题一致：窗口出现到首个渲染帧之间露出的是这个颜色，
  * 若固定为深色，亮色主题用户在启动时会看到一次深色闪烁。
+ * 取值必须与 styles/theme.less 的 --bg 一致（黑金：暖墨黑 / 象牙金：象牙纸）。
  */
 export const WINDOW_BACKGROUND: Record<ThemeMode, string> = {
-  dark: '#0d1011',
-  light: '#f7f5f1',
+  dark: '#0c0b09',
+  light: '#f7f3ea',
 };
 
 /**

@@ -1,0 +1,228 @@
+@import (reference) '../../styles/variables.less';
+@import (reference) '../../styles/mixins.less';
+@import (reference) '../../styles/motion.less';
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  // 与对话区的分界用一条金线，而不是普普通通的灰边
+  border-right: 1px solid var(--gold-line);
+  background: var(--bg-panel);
+}
+
+.sidebar__head,
+.sidebar__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar__head {
+  position: relative;
+  padding: 20px 14px 16px 18px;
+
+  // 金色发丝线自中间向两端展开，是启动时第一件“发生的事”
+  &::after {
+    .hairline();
+    .draw-rule(120ms);
+  }
+}
+
+.sidebar__foot {
+  position: relative;
+  padding: 12px 14px 12px 18px;
+  color: var(--text-muted);
+  font-size: 13px;
+
+  &::before {
+    .hairline(top);
+  }
+}
+
+.sidebar__brand {
+  flex: 1;
+  font-family: @font-display;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: @tracking-display;
+
+  // 品牌标记：一枚金箔菱形代替图标，与强调色同源（旋转 45° 的方块）
+  &::before {
+    .brand-mark(2px);
+  }
+}
+
+.sidebar__status {
+  flex: 1;
+}
+
+// 当前登录用户：头像取用户名首字，退出入口同行右对齐
+.sidebar__user {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 18px;
+
+  &::before {
+    .hairline(top);
+  }
+}
+
+.sidebar__avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  // 方形头像配金线，比圆头像更接近印章的观感
+  border: 1px solid var(--gold-line);
+  border-radius: @radius-sm;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: @font-display;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar__name {
+  .ellipsis();
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sidebar__logout {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition:
+    background-color @ease-quick,
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    border-color: transparent;
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+// 空列表用衬线斜体，把“什么都没有”也当作版面的一部分处理
+.sidebar__empty {
+  margin: auto;
+  padding: 0 24px;
+  color: var(--text-faint);
+  font-family: @font-display;
+  font-style: italic;
+  letter-spacing: @tracking-display;
+  text-align: center;
+}
+
+.session-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 12px 12px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.session {
+  .enter();
+  .stagger(10, 30ms, 80ms);
+  position: relative;
+  padding: 10px 12px 10px 14px;
+  border-radius: @radius-sm;
+  cursor: pointer;
+  transition: background-color @ease-quick;
+
+  // 选中标记：左侧随选中态伸缩的金条，比整块高亮更克制
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 2px;
+    height: 24px;
+    border-radius: @radius-pill;
+    background: var(--accent-gradient);
+    transform: translateY(-50%) scaleY(0);
+    transition: transform @ease-quick;
+  }
+
+  &:hover {
+    background: var(--bg-elevated);
+
+    .session__title {
+      color: var(--text);
+    }
+  }
+
+  &--active {
+    background-color: var(--bg-elevated);
+    // 从左金条向外洇开的一层极淡金光，把“当前项”点亮得更有层次
+    background-image: linear-gradient(90deg, var(--accent-soft), transparent 62%);
+
+    &::before {
+      transform: translateY(-50%) scaleY(1);
+    }
+
+    .session__title {
+      color: var(--text);
+      font-weight: 500;
+    }
+  }
+
+  // 删除按钮平时隐藏，悬停会话项时再出现，减少视觉噪音
+  &:hover &__remove {
+    display: block;
+  }
+}
+
+.session__title {
+  .ellipsis();
+  padding-right: 22px;
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: color @ease-quick;
+}
+
+.session__meta {
+  .eyebrow();
+  margin-top: 5px;
+  // eyebrow 的宽字距对会话时间这类密集元信息偏散，收一点
+  letter-spacing: 0.08em;
+}
+
+.session__remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: none;
+  padding: 2px 6px;
+  border: none;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--danger);
+  }
+}

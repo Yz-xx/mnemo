@@ -1,0 +1,166 @@
+@import (reference) '../../styles/variables.less';
+@import (reference) '../../styles/mixins.less';
+
+// AI 回复由 markdown-it 渲染，这里统一覆盖标签默认样式，保证长文可读性。
+// v-html 注入的节点不带 scoped 属性，所有后代选择器必须经 :deep 穿透。
+.markdown {
+  // 渲染结果含标签之间的换行，沿用 pre-wrap 会多出大量空行
+  white-space: normal;
+
+  // 消息内首尾不留外边距，避免与容器内边距叠加出多余空白
+  :deep(> :first-child) {
+    margin-top: 0;
+  }
+
+  :deep(> :last-child) {
+    margin-bottom: 0;
+  }
+
+  :deep(p),
+  :deep(ul),
+  :deep(ol),
+  :deep(pre),
+  :deep(blockquote),
+  :deep(table) {
+    margin: 0 0 14px;
+  }
+
+  // 标题改用衬线体，与正文的无衬线拉开层次，形成段落节奏
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4) {
+    margin: 26px 0 12px;
+    font-family: @font-display;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: @tracking-display;
+  }
+
+  // 一二级标题压一道金色发丝线，像书页上的章节饰线；
+  // 用 background 而非 border，才能拿到两端渐隐的效果
+  :deep(h1),
+  :deep(h2) {
+    padding-bottom: 10px;
+    background-image: var(--hairline);
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 100% @hairline;
+  }
+
+  :deep(h1) {
+    font-size: 26px;
+  }
+
+  :deep(h2) {
+    font-size: 21px;
+  }
+
+  :deep(h3) {
+    font-size: 17px;
+  }
+
+  :deep(h4) {
+    font-size: 15px;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    padding-left: 22px;
+  }
+
+  // 列表符号也用金色，是正文里唯一带色的点状元素
+  :deep(ul > li::marker) {
+    color: var(--accent);
+  }
+
+  :deep(ol > li::marker) {
+    color: var(--text-faint);
+    font-family: @font-mono;
+    font-size: 0.86em;
+  }
+
+  :deep(li) {
+    margin: 3px 0;
+
+    // 列表项内的段落不留额外间距，保持整体紧凑
+    > p {
+      margin: 0;
+    }
+  }
+
+  :deep(code) {
+    padding: 1px 5px;
+    border-radius: @radius-sm;
+    background: var(--code-bg);
+    font-family: @font-mono;
+    font-size: 13px;
+  }
+
+  :deep(pre) {
+    padding: 14px 16px;
+    border: 1px solid var(--gold-line);
+    border-radius: @radius-sm;
+    background: var(--pre-bg);
+    box-shadow: var(--engrave);
+    overflow-x: auto;
+
+    code {
+      padding: 0;
+      border: none;
+      background: transparent;
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+  }
+
+  :deep(blockquote) {
+    padding: 2px 0 2px 14px;
+    border-left: 2px solid var(--gold-line-strong);
+    color: var(--text-muted);
+  }
+
+  :deep(a) {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: var(--gold-line);
+    text-underline-offset: 3px;
+
+    &:hover {
+      text-decoration-color: var(--accent);
+    }
+  }
+
+  :deep(table) {
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  // 表格只保留水平线，比全边框更接近印刷表格的处理；
+  // 表头下的那条换成金线，作为整张表的“上框”
+  :deep(th),
+  :deep(td) {
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+
+  :deep(th) {
+    .eyebrow();
+    // 表头比正文更弱但仍需可读，故不走 eyebrow 的淡色
+    color: var(--text-muted);
+    border-bottom-color: var(--gold-line);
+  }
+
+  :deep(hr) {
+    height: @hairline;
+    margin: 24px 0;
+    border: none;
+    background-image: var(--hairline);
+  }
+
+  :deep(img) {
+    max-width: 100%;
+    border-radius: @radius-sm;
+  }
+}

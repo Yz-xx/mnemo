@@ -1,5 +1,7 @@
 import { ref } from 'vue';
+import { readSettings, saveSettings } from '../api/bridge';
 import { AgentApi } from '../api/client';
+import { toErrorMessage } from '../api/errors';
 import type { AuthUser } from '../types';
 
 export type AuthMode = 'login' | 'register';
@@ -11,20 +13,20 @@ const user = ref<AuthUser | null>(null);
 const submitting = ref(false);
 const errorMessage = ref('');
 
-/** 以当前后端地址与令牌构造客户端 */
+/** 以当前后端地址与令牌构造客户端；浏览器调试环境无桥接时退回默认地址 */
 async function createApi(): Promise<AgentApi> {
-  const settings = await window.desktopApi.getSettings();
+  const settings = await readSettings();
   return new AgentApi(settings.backendUrl, token.value);
 }
 
-/** 令牌写入本地设置，供下次启动恢复登录态 */
+/** 令牌写入本地设置，供下次启动恢复登录态；无桥接时写入被跳过 */
 async function persist(value: string): Promise<void> {
-  await window.desktopApi.saveSettings({ authToken: value });
+  await saveSettings({ authToken: value });
 }
 
 /** 启动时恢复登录态；令牌已过期或被服务端清除时静默退出登录 */
 async function restore(): Promise<void> {
-  const settings = await window.desktopApi.getSettings();
+  const settings = await readSettings();
   if (!settings.authToken) return;
   token.value = settings.authToken;
   try {
@@ -50,7 +52,7 @@ async function submit(mode: AuthMode, username: string, password: string): Promi
     await persist(session.token);
     return true;
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error);
+    errorMessage.value = toErrorMessage(error);
     return false;
   } finally {
     submitting.value = false;

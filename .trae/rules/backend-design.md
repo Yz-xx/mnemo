@@ -14,6 +14,7 @@ apps/backend/src/
 ├── app.ts            createApp：仅"通用中间件 → 注册路由 → 错误兜底"三段骨架
 ├── dependencies.ts   AppDependencies 接口，运行期依赖集合
 ├── config.ts         env 读取 + 默认值 + describeChatModel
+├── errors.ts         错误消息提取与依赖服务连接错误翻译（跨层共用）
 ├── middleware/       cors.ts、errorHandler.ts
 ├── routes/           各接口路由；index.ts 统一注册前缀与鉴权
 ├── services/         跨路由的编排逻辑（chatStream.ts）

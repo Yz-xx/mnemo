@@ -2,66 +2,113 @@
 
 // 主题色板：两套色板封装为 mixin，供 [data-theme] 与系统偏好兜底共同引用，
 // 避免同一组颜色在多处重复定义。
+//
+// 本轮整体改为「黑金 / 象牙金」：深色是暖墨黑漆面配香槟金，亮色是象牙纸配古铜金。
+// 金色只出现在线条、字距、微光与按钮上，不做大面积铺色——这是奢华与俗艳的分界。
 
-// 深色主题：墨底配青绿强调色，中性色带一点冷调，避免纯灰的廉价感
+// 深色主题：暖墨黑漆面，中性色一律偏暖（冷灰一出现就会把金衬脏）
 .theme-dark() {
   color-scheme: dark;
 
-  --bg: #0d1011;
-  --bg-panel: #14181a;
-  --bg-elevated: #1c2123;
-  --border: #262c2e;
-  --border-strong: #364042;
-  --text: #e9ebe8;
-  --text-muted: #939c98;
-  --text-faint: #6e7873;
-  --accent: #35c4b5;
-  --accent-soft: rgba(53, 196, 181, 0.14);
-  // 青绿底上用深墨字而非白字，对比更足也更耐看
-  --on-accent: #05201d;
-  --danger: #ef6b6b;
-  --danger-soft: rgba(239, 107, 107, 0.12);
-  --success: #4cc38a;
-  --code-bg: rgba(255, 255, 255, 0.06);
-  --pre-bg: #101415;
-  --scrollbar: #2b3334;
-  --scrollbar-hover: #3d4849;
-  --mask: rgba(4, 8, 9, 0.6);
-  // 对话区背景的点阵纹理
-  --grid-dot: rgba(233, 235, 232, 0.045);
+  --bg: #0c0b09;
+  --bg-panel: #131110;
+  --bg-elevated: #1c1917;
+  --border: #2b2723;
+  --border-strong: #423b32;
+  --text: #f1ece1;
+  --text-muted: #a79d8b;
+  --text-faint: #7a7263;
+  // 香槟金：深底上的强调色、文字与线条统一取它
+  --accent: #d3ae6b;
+  --accent-strong: #eed69f;
+  --accent-soft: rgba(211, 174, 107, 0.13);
+  // 金属渐变：按钮与品牌标记共用，模拟金箔的明暗两段
+  --accent-gradient: linear-gradient(152deg, #f0dcae 0%, #d3ae6b 46%, #a3803c 100%);
+  // 金底上用深墨字而非白字，对比更足也更耐看
+  --on-accent: #1b1408;
+  // 金线两档：常态描边与悬停/聚焦时的亮线
+  --gold-line: rgba(211, 174, 107, 0.26);
+  --gold-line-strong: rgba(211, 174, 107, 0.55);
+  // 分隔线用的横向渐变：两端透明，只在中间露出金，替代等宽实线
+  --hairline: linear-gradient(
+    90deg,
+    transparent,
+    rgba(211, 174, 107, 0.34) 22%,
+    rgba(211, 174, 107, 0.34) 78%,
+    transparent
+  );
+  // 顶部内高光：给块状元素一层极淡的“漆面反光”
+  --engrave: inset 0 @hairline 0 rgba(255, 244, 219, 0.05);
+  // 金属按钮的立体高光：顶亮边 + 底部暗边，做出金箔的厚度（与 --engrave 的“漆面”分工不同）
+  --bevel: inset 0 1px 0 rgba(255, 244, 219, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+  --shadow-panel: 0 30px 70px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.42);
+  --danger: #cf6a5c;
+  --danger-soft: rgba(207, 106, 92, 0.13);
+  // 橄榄金绿：与金调同源的成功色，避免出现一枚突兀的纯绿
+  --success: #93a86a;
+  --code-bg: rgba(241, 236, 225, 0.055);
+  --pre-bg: #100e0c;
+  --scrollbar: #322c24;
+  --scrollbar-hover: #4d4335;
+  --mask: rgba(6, 5, 4, 0.68);
+  // 对话区背景的金色点阵
+  --grid-dot: rgba(211, 174, 107, 0.075);
 }
 
-// 亮色主题：纸感底色配深青绿，整体偏暖，与深色的墨底形成“同一套版面的昼夜两面”
+// 亮色主题：象牙纸配古铜金，与深色的墨底构成“同一套镶边的昼夜两面”
 .theme-light() {
   color-scheme: light;
 
-  --bg: #f7f5f1;
-  --bg-panel: #fffefb;
-  --bg-elevated: #efebe4;
-  --border: #e2ddd4;
-  --border-strong: #cbc3b6;
-  --text: #171b1a;
-  --text-muted: #667069;
-  --text-faint: #969e97;
-  --accent: #0f8f84;
-  --accent-soft: rgba(15, 143, 132, 0.12);
-  // 纸面上强调色较深，配白字保证对比度
-  --on-accent: #ffffff;
-  --danger: #c93a3a;
-  --danger-soft: rgba(201, 58, 58, 0.1);
-  --success: #1a9e6a;
-  --code-bg: rgba(23, 27, 26, 0.06);
-  --pre-bg: #f1ede6;
-  --scrollbar: #d0c9be;
-  --scrollbar-hover: #b6ada0;
-  --mask: rgba(23, 27, 26, 0.28);
-  // 对话区背景的点阵纹理
-  --grid-dot: rgba(23, 27, 26, 0.05);
+  --bg: #f7f3ea;
+  --bg-panel: #fffdf8;
+  --bg-elevated: #efe8da;
+  --border: #e1d9c8;
+  --border-strong: #c8bba1;
+  --text: #1b1915;
+  --text-muted: #6c6555;
+  --text-faint: #8d8571;
+  // 古铜金：纸面上金色必须加深才能读得住
+  --accent: #8a6a2f;
+  --accent-strong: #6d4f1d;
+  --accent-soft: rgba(138, 106, 47, 0.12);
+  --accent-gradient: linear-gradient(152deg, #ab8b46 0%, #8a6a2f 52%, #63481a 100%);
+  // 古铜金底较深，配纸白字保证对比度
+  --on-accent: #fffdf7;
+  --gold-line: rgba(138, 106, 47, 0.3);
+  --gold-line-strong: rgba(138, 106, 47, 0.62);
+  --hairline: linear-gradient(
+    90deg,
+    transparent,
+    rgba(138, 106, 47, 0.38) 22%,
+    rgba(138, 106, 47, 0.38) 78%,
+    transparent
+  );
+  --engrave: inset 0 @hairline 0 rgba(255, 255, 255, 0.7);
+  // 金属按钮的立体高光：亮色下改用暖棕暗边，纯黑会在纸面语境里发脏
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(74, 58, 26, 0.3);
+  --shadow-panel: 0 30px 70px rgba(74, 58, 26, 0.18);
+  --shadow-card: 0 16px 34px rgba(74, 58, 26, 0.1);
+  --danger: #a8342a;
+  --danger-soft: rgba(168, 52, 42, 0.1);
+  --success: #4b7440;
+  --code-bg: rgba(27, 25, 21, 0.06);
+  --pre-bg: #f2ecdf;
+  --scrollbar: #d5c9b0;
+  --scrollbar-hover: #b9a781;
+  --mask: rgba(27, 25, 21, 0.32);
+  --grid-dot: rgba(138, 106, 47, 0.1);
 }
 
 // 深色为默认值
 :root {
   .theme-dark();
+
+  // 窗面淡金光晕：两套主题共用同一枚渐变（值完全相同）。
+  // 值一致是刻意的——background-image 不参与颜色插值，若两套主题各写一份，
+  // 切换主题时整块渐变会瞬间跳变，而底色的过渡还在进行，一闪就很廉价。
+  // 光晕打在偏右上方，正对着对话区；左侧会话栏是不透明面板，光晕在那里也看不见。
+  --sheen: radial-gradient(120% 85% at 68% -12%, rgba(201, 163, 92, 0.075), transparent 62%);
 }
 
 [data-theme='light'] {

@@ -1,0 +1,164 @@
+@import (reference) 'variables.less';
+@import (reference) 'mixins.less';
+
+// 跨组件复用的基础控件：状态点、标签、图标按钮、文本按钮、表单字段。
+// 它们被登录页、侧栏、对话区、设置抽屉、知识库面板共同使用，
+// 属于真正的公共样式，因此留在全局而组件无法 scoped 覆盖；
+// 各组件只在本文件的基础上覆写尺寸相关的少数字段（如 .composer .btn）。
+
+/** 表单字段：登录页与设置抽屉共用同一套输入外观 */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.field__label {
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.field__input {
+  // 承载它的面板底色通常更浅，输入框改用窗口底色形成层次
+  .surface(var(--bg));
+  padding: 10px 12px;
+  font-size: 14px;
+  transition:
+    border-color @ease-quick,
+    box-shadow @ease-quick;
+
+  &:focus {
+    .focus-ring();
+  }
+
+  &--area {
+    resize: vertical;
+    line-height: 1.65;
+  }
+}
+
+/** 标签：统一为等宽小字，承载模型名、工具名、来源片段等“机器信息” */
+.chip {
+  padding: 3px 8px;
+  border: 1px solid var(--gold-line);
+  border-radius: @radius-sm;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-family: @font-mono;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+
+  &--online {
+    // 呼吸光晕提示连接活跃；颜色取状态点自身，无需为两套主题各写一份
+    color: var(--success);
+    background: currentColor;
+    animation: breathe 2.6s ease-out infinite;
+  }
+
+  &--offline {
+    color: var(--danger);
+    background: currentColor;
+  }
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  transition:
+    background-color @ease-quick,
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    border-color: var(--gold-line);
+    background: var(--bg-elevated);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+.btn {
+  // 次级按钮也走金线镶边，只是线条更弱；与主按钮同一套语汇，差在材质
+  .gold-frame(var(--gold-line));
+  padding: 9px 20px;
+  border-radius: @radius-sm;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  transition:
+    background-color @ease-quick,
+    border-color @ease-quick,
+    color @ease-quick,
+    transform 0.1s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--gold-line-strong);
+    color: var(--accent);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  // 主按钮是整套界面唯一的“金属实体”：金箔渐变 + 深墨字，
+  // 悬停只微调亮度，不再引入新色值
+  &--primary {
+    border-color: var(--gold-line-strong);
+    background: var(--accent-gradient);
+    color: var(--on-accent);
+    font-weight: 600;
+    // 顶亮边 + 底部暗边由 --bevel 提供：两套主题的高光强度不同，色值不进组件
+    box-shadow: var(--bevel);
+
+    &:hover:not(:disabled) {
+      border-color: var(--accent-strong);
+      color: var(--on-accent);
+      filter: brightness(1.07);
+    }
+  }
+
+  &--danger {
+    border-color: transparent;
+    background: var(--danger);
+    color: var(--on-accent);
+    font-weight: 600;
+    box-shadow: var(--engrave);
+
+    &:hover:not(:disabled) {
+      border-color: transparent;
+      color: var(--on-accent);
+      filter: brightness(1.08);
+    }
+  }
+}
