@@ -1,4 +1,6 @@
-// 主进程与渲染进程共享的桥接类型（纯类型文件，不产生运行时代码）
+// 主进程与渲染进程共享的桥接契约：桥接类型 + 设置项默认值。
+// 放在 preload 是因为它是主进程与渲染进程共同引用的一层：默认值只在这里写一份，
+// 两边各写一份必然漂移（浏览器调试环境用的地址会与主进程读到的地址不一致）。
 
 /** 界面主题 */
 export type ThemeMode = 'dark' | 'light';
@@ -12,6 +14,13 @@ export interface AppSettings {
   /** 登录令牌，由登录页写入，用于下次启动恢复登录态；为空表示未登录 */
   authToken: string;
 }
+
+/** 设置项默认值：本地开发时后端默认监听 3000 端口 */
+export const DEFAULT_SETTINGS: AppSettings = {
+  backendUrl: 'http://localhost:3000',
+  theme: 'dark',
+  authToken: '',
+};
 
 /** 运行环境信息，用于界面展示与问题排查 */
 export interface AppInfo {

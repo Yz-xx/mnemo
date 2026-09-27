@@ -13,12 +13,12 @@ apps/agent-server/src/
 ├── index.ts          组合根：读配置 → 建库表 → 建连接池 → 装配 Store/Service → createApp → listen
 ├── app.ts            createApp：仅"通用中间件 → 注册路由 → 错误兜底"三段骨架
 ├── dependencies.ts   AppDependencies 接口，运行期依赖集合
-├── config.ts         env 读取 + 默认值 + describeChatModel
-├── errors.ts         错误消息提取与依赖服务连接错误翻译（跨层共用）
+├── config.ts         env 读取 + 默认值 + describe* 系列（当前模型 / 服务地址）
+├── errors.ts         依赖服务连接错误翻译（跨层共用）
 ├── messages.ts       对外固定文案常量表（ERROR_MESSAGE）
 ├── middleware/       cors.ts、requestLog.ts、errorHandler.ts
 ├── routes/           各接口路由；index.ts 统一注册前缀与鉴权
-├── services/         跨路由的编排逻辑（chatStream.ts）
+├── services/         跨路由的编排逻辑（chatStream.ts、knowledge.ts）
 ├── auth/             userStore / sessionStore / middleware / credentials
 ├── conversation/     会话与消息持久化
 ├── llm/              agent、model、tools、prompt（系统提示词）
@@ -44,12 +44,12 @@ apps/agent-server/src/
 
 - 接口前缀统一 `/api/*`。
 - 错误响应固定为 `{ message: '中文可读提示' }`，不返回堆栈。
-- 状态码常量统一取自 `@repo/shared` 的 `HTTP_STATUS`（与桌面端共用同一份取值，见 `docs/adr/0001-http-status-contract.md`），代码里不写字面量数字。
+- 状态码常量统一取自 `@repo/reusable` 的 `HTTP_STATUS`（与桌面端共用同一份取值，见 `docs/adr/0001-http-status-contract.md`），代码里不写字面量数字。
 - 成功档：`200` 普通响应、`201` 新建资源、`204` 删除与登出等无响应体的成功。
 - 错误档只保留四个：`400` 参数非法、`401` 未登录或登录失效、`404` 资源不存在、`500` 服务内部错误。需要第五种含义时先改本节、再改 `HTTP_STATUS`，不要就地造码。
 - 有意不引入 `403` 与 `409`：权限不足按「资源不存在」处理（第 4 章），用户名冲突按「参数非法」处理。客户端真正会分支的只有「登录失效」与「资源没了」两种情况，多登记的档位只会诱使两端为不会发生的事写代码。
 - `5xx` 对外一律 `500`，细节留在服务端日志（第 10 章）；文案允许翻译成依赖服务相关的可读提示（如「文档入库失败：<原因>」），让用户自行判断是不是向量化服务没启动，但不透出堆栈。
-- 鉴权失败文案固定为「登录已失效，请重新登录」；账号密码错误统一为「用户名或密码错误」，不区分具体原因。这两条与「服务内部错误」收在 `messages.ts` 的 `ERROR_MESSAGE`，被多处引用时不再各自手抄。
+- 鉴权失败文案固定为「登录已失效，请重新登录」（取自 `@repo/reusable` 的 `SESSION_EXPIRED_MESSAGE`，桌面端登录页展示同一句话，避免两端各写一份而漂移）；账号密码错误统一为「用户名或密码错误」，不区分具体原因。这两条与「服务内部错误」收在 `messages.ts` 的 `ERROR_MESSAGE`，被多处引用时不再各自手抄。
 - 健康检查 `GET /api/health` 返回 `status / service / provider / model / knowledgeEnabled / timestamp`，供客户端展示连接状态。
 
 ## 4. 鉴权与数据隔离
@@ -67,10 +67,11 @@ apps/agent-server/src/
 - 编排集中在 `services/chatStream.ts` 的 `streamChatReply()`：落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话；`routes/chat.ts` 只负责参数校验（400）与会话归属校验（404）。
 - 落库提问必须在 `flushHeaders()` 之前完成，落库失败才能按普通请求返回 500，而不是已 flush 的事件流。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
-- 事件格式 `data: {...}\n\n`，`type` 取值 `token` / `tool` / `done` / `error`；`done` 携带 `conversationId` 与 `title`。
+- 事件格式 `data: {...}\n\n`，`type` 取值 `conversation` / `token` / `tool` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）；`done` 携带 `conversationId` 与 `title`。
+- `conversation` 事件（携带 `conversationId`）必须在首个 token / tool 之前补推：新建会话「有产出才保留」与「客户端已知晓会话 ID」由此严格对齐，客户端不会记住一个随后会被回滚删除的会话。
 - 中断必须监听 `res.on('close')`（`req` 的 `close` 在请求体读取完成后即触发，会误中断流式响应），并用 `res.writableEnded` 排除正常结束；中断时通过 `AbortController` 停止模型推理。
 - 客户端主动中断不再回推 `error`；`finally` 中统一 `res.end()`。
-- 仅在答复正文非空时落库，避免保存空回复。
+- 仅在答复正文非空时落库，避免保存空回复；中断与失败路径同样要把已产出的部分回复落库（用「本轮是否已落库」标志防重复写入，落库失败只 warn），否则用户已经看到的内容会在重开会话后消失。
 - 新建会话在本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止）时，必须连同刚写入的提问一起删除，否则列表会残留无回复记录、下次发起对话还会再建一条；已经开始产出内容的会话即便被中断也保留，避免丢掉用户刚发出的输入。已推送 `done` 的会话（含空回复）一律保留，避免前端已记住的 `conversationId` 失效。
 
 ## 6. 数据层

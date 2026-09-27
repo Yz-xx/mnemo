@@ -65,6 +65,9 @@ importers:
 
   apps/agent-client:
     dependencies:
+      '@repo/reusable':
+        specifier: workspace:*
+        version: link:../../packages/reusable
       '@repo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -117,6 +120,9 @@ importers:
       '@repo/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@repo/reusable':
+        specifier: workspace:*
+        version: link:../../packages/reusable
       '@repo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -169,6 +175,8 @@ importers:
         version: 3.5.42(typescript@6.0.3)
 
   packages/logger: {}
+
+  packages/reusable: {}
 
   packages/shared:
     dependencies:

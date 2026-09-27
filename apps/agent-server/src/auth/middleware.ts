@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { HTTP_STATUS } from '@repo/shared';
+import { HTTP_STATUS } from '@repo/reusable';
 import { ERROR_MESSAGE } from '../messages.js';
 import type { SessionStore } from './sessionStore.js';
 

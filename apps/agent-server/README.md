@@ -7,7 +7,7 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 - 存储：MySQL 保存用户、登录会话与对话记录；知识库为本地 LanceDB 向量库
 - 模型：默认本地 Ollama（`qwen2.5:7b` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
-仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；公共工具库见 [@repo/shared](../../packages/shared/README.md)，日志库见 [@repo/logger](../../packages/logger/README.md)。
+仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；通用工具库见 [@repo/shared](../../packages/shared/README.md)，业务可复用库见 [@repo/reusable](../../packages/reusable/README.md)，日志库见 [@repo/logger](../../packages/logger/README.md)。
 
 ---
 
@@ -35,7 +35,7 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 | `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌         |
 | `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删  |
 
-以上状态码统一取自 `@repo/shared` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
+以上状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
 
 三个约定：
 
@@ -73,20 +73,21 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ## 五、SSE 流式协议
 
-`POST /api/chat` 的响应为 `text/event-stream`，每个事件都是 `data: <JSON>\n\n`，共四种：
+`POST /api/chat` 的响应为 `text/event-stream`，每个事件都是 `data: <JSON>\n\n`，共五种：
 
-| 事件    | 载荷                              | 触发时机                           |
-| ------- | --------------------------------- | ---------------------------------- |
-| `token` | `{ type, content }`               | 模型输出增量文本                   |
-| `tool`  | `{ type, name, status }`          | 工具开始（`start`）/ 结束（`end`） |
-| `done`  | `{ type, conversationId, title }` | 答复落库完成，本轮结束             |
-| `error` | `{ type, message }`               | 推理过程异常                       |
+| 事件           | 载荷                              | 触发时机                               |
+| -------------- | --------------------------------- | -------------------------------------- |
+| `conversation` | `{ type, conversationId }`        | 首个产出之前补推：这条会话确定会被保留 |
+| `token`        | `{ type, content }`               | 模型输出增量文本                       |
+| `tool`         | `{ type, name, status }`          | 工具开始（`start`）/ 结束（`end`）     |
+| `done`         | `{ type, conversationId, title }` | 答复落库完成，本轮结束                 |
+| `error`        | `{ type, message }`               | 推理过程异常                           |
 
-中断处理是这段实现里最关键的一处细节：客户端关闭连接时必须立刻停下模型推理。实现上监听的是 `res` 而非 `req`——`req` 的 `close` 在请求体读取完成后就会触发，会误中断正常的流式响应；同时用 `res.writableEnded` 排除“正常结束”这一次回调，只有真正的提前断开才 `controller.abort()`。此外，仅在答复正文非空时落库，避免保存空回复。
+中断处理是这段实现里最关键的一处细节：客户端关闭连接时必须立刻停下模型推理。实现上监听的是 `res` 而非 `req`——`req` 的 `close` 在请求体读取完成后就会触发，会误中断正常的流式响应；同时用 `res.writableEnded` 排除“正常结束”这一次回调，只有真正的提前断开才 `controller.abort()`。此外，仅在答复正文非空时落库，避免保存空回复；中断或出错时也会把已产出的部分回复落库，用户已经看到的内容不会在重开会话后消失。
 
-这一整轮编排都在 `services/chatStream.ts` 的 `streamChatReply()` 中（落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话），`routes/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在 `flushHeaders()` 之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。
+这一整轮编排都在 `services/chatStream.ts` 的 `streamChatReply()` 中（落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话），`routes/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在 `flushHeaders()` 之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。事件本身的结构声明在 `@repo/reusable` 的 `ChatStreamEvent`，服务端与桌面端共用同一份，避免两端各抄一份而漂移。
 
-新建会话若本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止），该会话只剩刚写入的提问，服务会连会话一起删除——否则列表里会留下一条没有回答的记录，用户重新发起对话后就会看到两条。反过来，已经开始产出内容的会话即便被中断（用户点“停止”）也保留，不丢用户刚发出的输入；已推送 `done` 的会话（含模型返回空内容的情形）同样保留，避免前端已记住的 `conversationId` 失效。
+新建会话若本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止），该会话只剩刚写入的提问，服务会连会话一起删除——否则列表里会留下一条没有回答的记录，用户重新发起对话后就会看到两条。反过来，已经开始产出内容的会话即便被中断（用户点“停止”）也保留，不丢用户刚发出的输入，且服务端在首个产出之前就补推了 `conversation` 事件，客户端从此刻起已知道会话 ID，中断后仍能接着这条会话继续发；已推送 `done` 的会话（含模型返回空内容的情形）同样保留，避免前端已记住的 `conversationId` 失效。
 
 ## 六、智能体（AgentService）
 
@@ -224,7 +225,7 @@ pnpm --filter @repo/agent-server run dev
 
 - `pnpm --filter @repo/agent-server run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build` 把 `src/index.ts` 打成单文件 `dist/index.js`（ESM + sourcemap，代码部分已压缩、不含空格与注释）；
 - Vite 走服务端构建（`build.ssr`，`target: node20`），按 Node 环境解析依赖；目录下的 `.env.*` 由 `node --env-file` 在运行时读取，构建时以 `envDir: false` 关闭 Vite 自身的 env 加载；
-- 运行期依赖（含 workspace 的 `@repo/shared`、`@repo/logger`）与 Node 内置模块全部外置，产物中保留裸包名，部署时需一并安装 `dependencies`；
+- 运行期依赖（含 workspace 的 `@repo/shared`、`@repo/reusable`、`@repo/logger`）与 Node 内置模块全部外置，产物中保留裸包名，部署时需一并安装 `dependencies`；
 - 启动：`pnpm --filter @repo/agent-server run start`，即 `node --env-file=.env.production dist/index.js`。
 - 产物中仍可见的换行与缩进都属于字符串内容（多行 SQL、系统提示词、SSE 报文的 `\n\n`），是数据而非格式：`\n\n` 是 SSE 协议分隔符，提示词换行影响模型输入，压缩器不会也不应改写它们。
 

@@ -1,6 +1,6 @@
 # @repo/logger Node 端日志库
 
-Node 环境的结构化日志库，供后端服务共用。包定位：**依赖进程与文件系统，只在 Node 端使用**；可跨端复用的纯逻辑请放 `@repo/shared`，`apps/*` 之间禁止互相 import。
+Node 环境的结构化日志库，供后端服务共用。包定位：**依赖进程与文件系统，只在 Node 端使用**；纯粹的通用工具请放 `@repo/shared`，与业务约定绑定的可复用代码请放 `@repo/reusable`，`apps/*` 之间禁止互相 import。
 
 仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)。
 

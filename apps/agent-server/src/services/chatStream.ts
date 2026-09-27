@@ -1,19 +1,13 @@
 import type { Response } from 'express';
-import { toErrorMessage } from '../errors.js';
-import type { ConversationStore } from '../conversation/store.js';
-import type { AgentService } from '../llm/agent.js';
+import type { ChatStreamEvent } from '@repo/reusable';
+import { toErrorMessage } from '@repo/shared';
 import { preview } from '@repo/logger';
 import type { Logger } from '@repo/logger';
+import type { ConversationStore } from '../conversation/store.js';
+import type { AgentService } from '../llm/agent.js';
 
 /** 出参摘要保留的回复开头长度：足以判断回答是否切题，又不至于把整篇回答写进日志 */
 const ANSWER_PREVIEW = 200;
-
-/** 流式推送的事件：与桌面端消费的事件结构保持一致 */
-export type ChatStreamEvent =
-  | { type: 'token'; content: string }
-  | { type: 'tool'; name: string; status: 'start' | 'end' }
-  | { type: 'done'; conversationId: string; title: string }
-  | { type: 'error'; message: string };
 
 /** SSE 响应头：禁用缓存与缓冲，保证增量内容即时到达客户端 */
 function openEventStream(res: Response): void {
@@ -64,7 +58,17 @@ export async function streamChatReply(input: {
   let responded = false;
   // 本轮是否正常收尾（已推送 done）
   let finished = false;
+  // 本轮正文是否已落库：正常收尾与中断路径都会尝试落库，用标志避免写重复
+  let answerSaved = false;
   const usedTools = new Set<string>();
+
+  /** 仅在有正文时落库，避免保存空回复 */
+  const persistAnswer = async (): Promise<void> => {
+    if (answerSaved || !answer.trim()) return;
+    await conversations.append(userId, conversation.id, 'assistant', answer);
+    answerSaved = true;
+  };
+
   try {
     for await (const event of agent.stream(conversation.messages, {
       userId,
@@ -72,7 +76,12 @@ export async function streamChatReply(input: {
       // 下传请求级子日志：工具内部的检索日志会自带 requestId 与 conversationId
       logger: log,
     })) {
-      responded = true;
+      if (!responded) {
+        // 首个产出之前补推会话 ID：本轮从此刻起一定会保留（回滚只看有没有产出），
+        // 客户端因此在同一时刻知晓会话 ID，不会记住一个稍后会被删掉的会话
+        responded = true;
+        send({ type: 'conversation', conversationId: conversation.id });
+      }
       if (event.type === 'token') answer += event.content;
       if (event.type === 'tool') {
         if (event.status === 'start') usedTools.add(event.name);
@@ -80,8 +89,7 @@ export async function streamChatReply(input: {
       }
       send(event);
     }
-    // 仅在有正文时落库，避免保存空回复
-    if (answer.trim()) await conversations.append(userId, conversation.id, 'assistant', answer);
+    await persistAnswer();
     const latest = await conversations.get(userId, conversation.id);
     log.info('本轮对话完成', {
       durationMs: Date.now() - startedAt,
@@ -97,6 +105,14 @@ export async function streamChatReply(input: {
     });
     finished = true;
   } catch (error) {
+    // 出错与中断都已产出的正文先落库：用户已经看到的内容不能凭空消失，
+    // 否则重开会话时界面上那段回复会不见。落库失败只记警告——
+    // 异常路径无处回推，而它也不该盖住下面真正要处理的原始错误
+    try {
+      await persistAnswer();
+    } catch (saveError) {
+      log.warn('部分回复落库失败', { error: saveError });
+    }
     // 客户端主动中断不算错误，无需回推
     if (controller.signal.aborted) {
       log.info('客户端中断，已停止生成', {

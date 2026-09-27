@@ -17,6 +17,7 @@
     "@langchain/openai": "^1.5.13",
     "@langchain/textsplitters": "^1.0.1",
     "@repo/logger": "workspace:*",
+    "@repo/reusable": "workspace:*",
     "@repo/shared": "workspace:*",
     "apache-arrow": "^18.1.0",
     "express": "^5.2.1",

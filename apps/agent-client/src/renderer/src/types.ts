@@ -43,10 +43,3 @@ export interface KnowledgeDocument {
   chunks: number;
   createdAt: string;
 }
-
-/** 流式对话过程中服务端推送的事件 */
-export type ChatStreamEvent =
-  | { type: 'token'; content: string }
-  | { type: 'tool'; name: string; status: 'start' | 'end'; detail?: string }
-  | { type: 'done'; conversationId: string; title: string }
-  | { type: 'error'; message: string };

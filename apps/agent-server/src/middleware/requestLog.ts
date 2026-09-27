@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { preview, redactValue } from '@repo/logger';
 import type { Logger } from '@repo/logger';
-import { HTTP_STATUS } from '@repo/shared';
+import { HTTP_STATUS } from '@repo/reusable';
 
 /** 请求 ID 取 UUID 前 8 位：足够区分单机并发请求，又便于人工抄读 */
 const REQUEST_ID_LENGTH = 8;

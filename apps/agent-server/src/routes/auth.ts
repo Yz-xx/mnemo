@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { HTTP_STATUS } from '@repo/shared';
+import { HTTP_STATUS } from '@repo/reusable';
 import type { AppDependencies } from '../dependencies.js';
 import { parseCredentials } from '../auth/credentials.js';
 import { createRequireAuth, currentToken, currentUserId } from '../auth/middleware.js';

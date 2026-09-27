@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { HTTP_STATUS } from '@repo/shared';
+import { HTTP_STATUS } from '@repo/reusable';
+import { toErrorMessage } from '@repo/shared';
 import { currentUserId } from '../auth/middleware.js';
 import type { AppDependencies } from '../dependencies.js';
-import { toErrorMessage } from '../errors.js';
 import { requestLogger } from '../middleware/requestLog.js';
 import type { KnowledgeScope, KnowledgeStore } from '../rag/store.js';
+import { addDocument } from '../services/knowledge.js';
 
-/** 新增文档的公共流程：校验内容后入库，失败时给出可读提示 */
+/** 新增文档入口：只做入参校验（400）与状态码，入库编排交给服务层 */
 async function createDocument(
   req: Request,
   res: Response,
@@ -21,38 +22,21 @@ async function createDocument(
     return;
   }
   const title = body.title?.trim() || '未命名文档';
-  const startedAt = Date.now();
 
   try {
-    const document = await knowledge.add({
+    const document = await addDocument(knowledge, requestLogger(res), {
       title,
       content,
       scope: target.scope,
       userId: target.userId,
     });
-    requestLogger(res).info('文档入库完成', {
-      documentId: document.id,
-      title: document.title,
-      scope: document.scope,
-      chunkCount: document.chunks,
-      durationMs: Date.now() - startedAt,
-      userId: target.userId,
-    });
     res.status(HTTP_STATUS.CREATED).json(document);
   } catch (error) {
-    // 向量化依赖本地 embedding 服务，维度或模型不符也在此统一提示
-    const detail = toErrorMessage(error);
-    // 入库失败集中在向量化服务与向量基准两类原因，必须把原始错误落日志才能定位
-    requestLogger(res).error('文档入库失败', {
-      title,
-      scope: target.scope,
-      userId: target.userId,
-      durationMs: Date.now() - startedAt,
-      error,
-    });
     // 同类失败对外只有 500 一种状态码（backend-design 第 3 章）；
     // 文案保留具体原因，便于用户判断是不是向量化服务没起来
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: `文档入库失败：${detail}` });
+    res
+      .status(HTTP_STATUS.INTERNAL_SERVER_ERROR)
+      .json({ message: `文档入库失败：${toErrorMessage(error)}` });
   }
 }
 
@@ -89,10 +73,10 @@ export function createKnowledgeRouter({
   });
 
   router.delete('/documents/:id', async (req, res) => {
-    const removed = await knowledge.remove(req.params.id, {
-      userId: currentUserId(res),
-      isAdmin: isAdmin(req),
-    });
+    const userId = currentUserId(res);
+    // 权限判定只算一次：删除与随后的日志都要用，避免同一次请求里重复比对令牌
+    const admin = isAdmin(req);
+    const removed = await knowledge.remove(req.params.id, { userId, isAdmin: admin });
     if (!removed) {
       res.status(HTTP_STATUS.NOT_FOUND).json({ message: '文档不存在或无权删除' });
       return;
@@ -100,8 +84,8 @@ export function createKnowledgeRouter({
     // 删除不可逆，留一条业务记录便于回溯是谁操作了全局文档
     requestLogger(res).info('文档已删除', {
       documentId: req.params.id,
-      userId: currentUserId(res),
-      isAdmin: isAdmin(req),
+      userId,
+      isAdmin: admin,
     });
     res.status(HTTP_STATUS.NO_CONTENT).end();
   });

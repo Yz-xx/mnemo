@@ -1,14 +1,23 @@
-// 从包根按需引入：@repo/shared 声明了 sideEffects: false，
+// 从包根按需引入：@repo/reusable 与 @repo/shared 均声明了 sideEffects: false，
 // 未用到的模块（连同依赖 crypto-js 的 crypto.ts）不会被打进渲染产物
-import { HTTP_STATUS, toHttpStatusCode, type HttpStatusCode } from '@repo/shared';
+import {
+  HTTP_STATUS,
+  toHttpStatusCode,
+  type ChatStreamEvent,
+  type HttpStatusCode,
+} from '@repo/reusable';
+// 渲染进程只有本模块依赖 @repo/*（见 desktop-design 第 2 章）：其余模块要用共享能力
+// 也经此处转发，避免第二个模块直接引包，让产物里多带无关代码
+export { SESSION_EXPIRED_MESSAGE } from '@repo/reusable';
+export { toErrorMessage } from '@repo/shared';
 import type {
   AuthSession,
   AuthUser,
-  ChatStreamEvent,
   Conversation,
   ConversationSummary,
   KnowledgeDocument,
 } from '../types';
+export type { ChatStreamEvent };
 
 export interface SendChatPayload {
   conversationId?: string;

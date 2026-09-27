@@ -37,7 +37,7 @@ const { documents, title, content, busy, notice, addDocument, removeDocument } =
         <button class="icon-btn" title="删除文档" @click="removeDocument(item.id)">×</button>
       </li>
     </ul>
-    <p v-if="documents.length === 0" class="knowledge__hint">知识库为空</p>
+    <p v-if="documents.length === 0 && !notice" class="knowledge__hint">知识库为空</p>
   </section>
 </template>
 

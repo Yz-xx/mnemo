@@ -22,6 +22,7 @@
     "vue-tsc": "^3.3.11"
   },
   "dependencies": {
+    "@repo/reusable": "workspace:*",
     "@repo/shared": "workspace:*",
     "markdown-it": "^15.0.2"
   }

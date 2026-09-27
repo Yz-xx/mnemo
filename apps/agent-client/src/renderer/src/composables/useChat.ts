@@ -1,15 +1,21 @@
 import { computed, ref } from 'vue';
 import { DEFAULT_BACKEND_URL, readSettings, saveSettings } from '../api/bridge';
-import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client';
-import { toErrorMessage } from '../api/errors';
-import type { ChatMessage, ChatStreamEvent, ConversationSummary } from '../types';
+import {
+  AgentApi,
+  SESSION_EXPIRED_MESSAGE,
+  isUnauthorized,
+  toErrorMessage,
+  type ChatStreamEvent,
+  type HealthInfo,
+} from '../api/client';
+import type { ChatMessage, ConversationSummary } from '../types';
 import { useAuth } from './useAuth';
 
 export type ConnectionState = 'idle' | 'online' | 'offline';
 
 /** 桌面端会话状态与流式对话逻辑 */
 export function useChat() {
-  const { token, clear } = useAuth();
+  const { token, clear, errorMessage: authError } = useAuth();
   const backendUrl = ref(DEFAULT_BACKEND_URL);
   // 令牌变化时自动重建客户端，保证每次请求都携带当前登录态
   const api = computed(() => new AgentApi(backendUrl.value, token.value));
@@ -27,11 +33,19 @@ export function useChat() {
 
   const canSend = computed(() => connection.value === 'online' && !streaming.value);
 
-  /** 统一的请求错误处理：令牌失效时清理登录态，界面自动回到登录页 */
-  function handleError(error: unknown): void {
+  /**
+   * 令牌失效的统一处理：清空登录态把界面交还登录页，并把失效原因留在登录页。
+   * 提示必须写在 clear() 之后——clear() 会清空登录页的提示位，先写会被立刻抹掉。
+   */
+  async function handleUnauthorized(): Promise<void> {
+    await clear();
+    authError.value = SESSION_EXPIRED_MESSAGE;
+  }
+
+  /** 统一的请求错误处理：令牌失效时清理登录态，其余情况把原因留在对话区 */
+  async function handleError(error: unknown): Promise<void> {
     if (isUnauthorized(error)) {
-      errorMessage.value = '登录已失效，请重新登录';
-      void clear();
+      await handleUnauthorized();
       return;
     }
     errorMessage.value = toErrorMessage(error);
@@ -66,7 +80,7 @@ export function useChat() {
       conversations.value = await api.value.listConversations();
     } catch (error) {
       conversations.value = [];
-      if (isUnauthorized(error)) await clear();
+      if (isUnauthorized(error)) await handleUnauthorized();
     }
   }
 
@@ -87,7 +101,7 @@ export function useChat() {
       activeId.value = detail.id;
       messages.value = detail.messages;
     } catch (error) {
-      handleError(error);
+      await handleError(error);
     } finally {
       loadingConversation.value = false;
     }
@@ -99,7 +113,7 @@ export function useChat() {
       if (id === activeId.value) startNewConversation();
       await refreshConversations();
     } catch (error) {
-      handleError(error);
+      await handleError(error);
     }
   }
 
@@ -127,6 +141,11 @@ export function useChat() {
         ),
         assistant.value,
         {
+          // 首个产出时后端即告知会话 ID：新建的会话从此刻起一定保留，
+          // 先记下来，用户中途停止也还能接着这条会话继续发
+          onConversation: (conversationId) => {
+            activeId.value = conversationId;
+          },
           // done 事件由后端确认会话 ID，随后刷新列表以更新标题与排序
           onDone: async (conversationId) => {
             activeId.value = conversationId;
@@ -138,8 +157,8 @@ export function useChat() {
         },
       );
     } catch (error) {
-      // 用户主动中断不算错误
-      if (!currentController.signal.aborted) errorMessage.value = toErrorMessage(error);
+      // 用户主动中断不算错误；令牌失效同样经此收敛到登录页
+      if (!currentController.signal.aborted) await handleError(error);
     } finally {
       streaming.value = false;
       controller = null;
@@ -200,6 +219,8 @@ function createMessage(role: ChatMessage['role'], content: string): ChatMessage 
 
 /** 消费流式事件时需要回传给会话层的副作用 */
 interface ChatStreamHandlers {
+  /** 本轮开始有产出，后端确认该会话会被保留，携带会话 ID */
+  onConversation: (conversationId: string) => void;
   /** 本轮结束，携带后端确认的会话 ID */
   onDone: (conversationId: string) => Promise<void>;
   /** 后端返回的可读错误信息 */
@@ -208,7 +229,7 @@ interface ChatStreamHandlers {
 
 /**
  * 逐条消费 SSE 事件并合并进助手消息：token 累加正文，tool 追加为执行轨迹；
- * 会话级副作用（切换会话、报错提示）通过回调交回调用方，保持此处逻辑纯粹。
+ * 会话级副作用（记住会话 ID、切换会话、报错提示）通过回调交回调用方，保持此处逻辑纯粹。
  */
 async function consumeChatStream(
   stream: AsyncIterable<ChatStreamEvent>,
@@ -221,9 +242,12 @@ async function consumeChatStream(
     } else if (event.type === 'tool') {
       const label = event.status === 'start' ? `调用工具 ${event.name}` : `完成 ${event.name}`;
       message.steps = [...(message.steps ?? []), label];
+    } else if (event.type === 'conversation') {
+      handlers.onConversation(event.conversationId);
     } else if (event.type === 'done') {
       await handlers.onDone(event.conversationId);
     } else {
+      // 联合类型已把其余分支排除，走到这里只剩 error
       handlers.onError(event.message);
     }
   }

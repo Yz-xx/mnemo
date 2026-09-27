@@ -23,11 +23,11 @@ apps/agent-client/src/
 ## 2. 主进程
 
 - 职责按文件拆分，`index.ts` 只保留应用生命周期（单实例锁、`whenReady`、`activate`、`window-all-closed`）：
-  - `settings.ts`：`settings.json` 读写与默认值
+  - `settings.ts`：`settings.json` 读写（默认值定义在 `preload/types.ts`）
   - `theme.ts`：主题同步与窗口底色
   - `window.ts`：主窗口创建与页面加载
   - `ipc.ts`：IPC 处理器注册
-- 设置持久化只经 `settings.ts`（`readSettings` / `writeSettings`，存 `app.getPath('userData')/settings.json`，读取失败回退 `DEFAULT_SETTINGS`）。
+- 设置持久化只经 `settings.ts`（`readSettings` / `writeSettings`，存 `app.getPath('userData')/settings.json`，读取失败回退 `DEFAULT_SETTINGS`）；默认值定义在 `preload/types.ts`——它是主进程与渲染进程共同引用的那一层，两侧不再各存一份。
 - 主题必须写两处，统一走 `theme.ts` 的 `applyTheme`：`nativeTheme.themeSource`（决定渲染进程的 `prefers-color-scheme`）与窗口 `setBackgroundColor`（决定首帧绘制前露出的底色）。只改一处会导致首屏闪烁或系统控件样式不一致。
 - 窗口先 `ready-to-show` 再 `show`，避免白屏；外链交 `shell.openExternal` 并拒绝应用内新开窗口。
 - 安全基线保持 `contextIsolation: true`、`nodeIntegration: false`，不放开渲染进程的 Node 能力。
@@ -47,14 +47,13 @@ renderer/src/
 ├── types.ts         跨组件共享类型（ChatMessage、ConversationSummary 等）
 ├── api/bridge.ts    唯一的桥接入口：设置读写与首帧快照，无桥接时降级
 ├── api/client.ts    唯一的 HTTP 入口 AgentApi
-├── api/errors.ts    错误文案归一化（toErrorMessage）
 ├── composables/     跨组件共享的状态与业务（useAuth、useChat、useTheme）
 ├── App.vue          根组件（门禁与整体布局）
 └── components/      展示与交互，每个组件一个目录
 ```
 
 - `api/bridge.ts` 统一封装 `window.desktopApi`：导出 `initialSettings`（preload 同步注入的首帧快照）与 `readSettings` / `saveSettings`，无桥接时回退默认值，浏览器调试环境因此无需各处判空。
-- `api/client.ts` 负责请求头拼装、中断/超时、错误归一化（`ApiError` 带 `status`，`isUnauthorized` 判定 401），其他模块不直接调用 `fetch`；状态码取自 `@repo/shared` 的 `HTTP_STATUS`（401 触发清除登录态、204 直接返回 `undefined` 不解析响应体），是渲染进程唯一依赖 `@repo/*` 的模块。
+- `api/client.ts` 负责请求头拼装、中断/超时、错误归一化（`ApiError` 带 `status`，`isUnauthorized` 判定 401），其他模块不直接调用 `fetch`；状态码取自 `@repo/reusable` 的 `HTTP_STATUS`（401 触发清除登录态、204 直接返回 `undefined` 不解析响应体），是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖 `@repo/reusable` 与 `@repo/shared`）——其余模块要用共享能力（`toErrorMessage` 来自 `@repo/shared`，`SESSION_EXPIRED_MESSAGE` 来自 `@repo/reusable`）也从这里转发，不再新增第二个引包模块。
 - `composables/` 承载跨组件共享的状态与业务（`useAuth` 的 token 与 user 为模块级单例）；组件私有的状态与交互留在组件目录内，不上提。
 - `components/` 只做展示与交互，通过 props / emit 与 composable 交互。
 - `components/` 下的组件一律以**目录**为单位组织，目录名即组件名：`Xxx/{index.ts, Xxx.vue, Xxx.less}`，按需再加 `useXxx.ts`。`index.ts` 统一 `export { default } from './Xxx.vue'`，消费方按 `import Xxx from '../components/Xxx'` 引入，不写 `.vue` 后缀。
@@ -65,7 +64,8 @@ renderer/src/
 
 - 后端地址或 token 变化时，API 客户端用 `computed` 重建，避免持有过期实例。
 - 401 统一处理：清除登录态并重置业务状态，回到登录页。
-- 流式回复：先入列一条占位助手消息，`token` 事件累加正文；事件消费集中在模块级 `consumeChatStream()`，会话级副作用（切换会话、报错提示）通过回调交回调用方。
+- 流式回复：先入列一条占位助手消息，`token` 事件累加正文；事件消费集中在模块级 `consumeChatStream()`，会话级副作用（切换会话、报错提示）通过回调交回调用方。`conversation` 事件在首个产出之前到达，用于先记住会话 ID（后端此刻已确定该会话会被保留），用户中断后仍能接着这条会话继续发。
+- 事件类型统一取 `@repo/reusable` 的 `ChatStreamEvent`（经 `api/client.ts` 转发），不在渲染进程自行声明联合，避免两端协议漂移。
 - 中断：保留 `AbortController`，停止按钮触发 `abort`，`finally` 中复位 streaming 状态。
 - 用户可见文案一律中文；错误提示区分"网络不可达"与"业务错误"。
 
@@ -89,7 +89,7 @@ renderer/src/
 ## 8. 新增设置项清单
 
 1. `preload/types.ts` 的 `AppSettings` 补字段。
-2. `main/settings.ts` 的 `DEFAULT_SETTINGS` 补默认值。
+2. `preload/types.ts` 的 `DEFAULT_SETTINGS` 补默认值（主进程与渲染进程共用同一份，不各写一处）。
 3. 需要主进程即时生效时，在 `ipc.ts` 的 `settings:save` 分支中处理（如主题、窗口底色）。
 4. 渲染进程经 `api/bridge.ts` 的 `initialSettings` / `readSettings` 读取，不直接引用 `window.desktopApi`，也不自行解析文件。
 

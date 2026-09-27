@@ -131,6 +131,11 @@ export function describeChatModel(config: AppConfig): string {
   return config.llm.provider === 'deepseek' ? config.deepseek.chatModel : config.ollama.chatModel;
 }
 
+/** 当前对话模型服务地址，用于把连接失败翻译成可定位的提示 */
+export function describeChatEndpoint(config: AppConfig): string {
+  return config.llm.provider === 'deepseek' ? config.deepseek.baseUrl : config.ollama.baseUrl;
+}
+
 /** 当前向量模型名称，用于识别知识库是否由同一模型建立 */
 export function describeEmbeddingModel(config: AppConfig): string {
   return config.embedding.provider === 'openai'

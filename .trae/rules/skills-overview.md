@@ -22,7 +22,8 @@ my-monorepo/
 │   ├── agent-client/  Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
 │   └── frontend/      示例 Web 前端（脚手架预留）
 ├── packages/
-│   ├── shared/      @repo/shared 公共能力（strings / common / http；DES 加密走子路径 @repo/shared/crypto）
+│   ├── shared/      @repo/shared 通用工具（strings / common；DES 加密走子路径 @repo/shared/crypto）
+│   ├── reusable/    @repo/reusable 业务可复用代码（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
 │   ├── logger/      @repo/logger Node 端结构化日志库（控制台 + 按天轮转文件）
 │   └── components/  @repo/components 公共 Vue 组件库（Vite 库模式）
 ├── docs/
@@ -34,7 +35,8 @@ my-monorepo/
 
 职责边界：
 
-- 可跨端复用的纯逻辑放 `packages/shared`，可复用的 Vue 组件放 `packages/components`，依赖进程与文件系统的 Node 端能力放 `packages/logger`，禁止 `apps/*` 之间互相 import。
+- 与业务无关的通用工具放 `packages/shared`，与业务约定绑定的可复用代码放 `packages/reusable`（判据是「换一个业务它还用得上吗」，用不上即说明它绑定了本业务的状态码裁剪、对话协议或固定文案），可复用的 Vue 组件放 `packages/components`，依赖进程与文件系统的 Node 端能力放 `packages/logger`，禁止 `apps/*` 之间互相 import。
+- 依赖方向：`@repo/reusable` 可依赖 `@repo/shared`（通用工具不绑定业务），`@repo/shared` 不得反向依赖 `@repo/reusable`。
 - 应用私有逻辑留在应用内，不上提到 `packages`。
 - 新增包或应用时同步 `pnpm-workspace.yaml`、根 `scripts/` 与 `README.md`。
 
@@ -62,7 +64,16 @@ my-monorepo/
 - 新增依赖使用 `pnpm add <包> --filter <包名>`；根依赖只放工具链（eslint / prettier / typescript / vite / vitest 等）。
 - 需要 postinstall 的依赖必须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记，否则安装产物不完整。
 - 跨包引用写 workspace 包名（如 `@repo/shared`），不用相对路径穿透到其他包。
-- `@repo/shared` 的包根只放**不含第三方依赖**的能力（`strings` / `common` / `http`），并声明 `sideEffects: false`；带第三方依赖的能力必须另开子路径入口（DES 依赖 `crypto-js`，位于 `@repo/shared/crypto`）。原因是第三方包常常没有自己的 `sideEffects` 声明，打包器无法证明导入它无副作用，只能为保留副作用而整包引入——实测把 `crypto.ts` 留在包根会让 Electron 渲染产物多出约 215 kB，且 `electron-vite` 不读本包的 `sideEffects`（`vite build` 则能正确剔除）。
+- `@repo/shared` 只放**与业务无关的通用工具**（`strings` / `common`），`@repo/reusable` 放**与业务约定绑定的可复用代码**（HTTP 状态码契约 / 对话协议类型 / 固定文案）；两者都声明 `sideEffects: false`，且**包根只放不含第三方依赖的能力**，带第三方依赖的能力必须另开子路径入口（DES 依赖 `crypto-js`，位于 `@repo/shared/crypto`）。原因是第三方包常常没有自己的 `sideEffects` 声明，打包器无法证明导入它无副作用，只能为保留副作用而整包引入——实测把 `crypto.ts` 留在包根会让 Electron 渲染产物多出约 215 kB，且 `electron-vite` 不读本包的 `sideEffects`（`vite build` 则能正确剔除）。
+
+## 编辑工具约束
+
+同一批并行工具调用中，**同一文件最多只发一条编辑指令**。
+
+- 原因：并行下发的多条编辑各自基于该文件在本轮编辑前的磁盘内容计算差异，落盘时后者覆盖前者——结果是只有最后一条生效，其余**静默丢失**（工具返回成功，不报错）。本仓库已多次因此出现"以为改完其实只改了一半"。
+- 需要改同一文件的多处时：优先**合并为一次编辑**（让一次替换的 `old_string` / `new_string` 一并覆盖几处改动）；无法合并就**按轮次串行**下发，确认上一条落盘后再发下一条。
+- 不同文件的编辑可以且应当并行下发，本条只约束**同一文件**。
+- 每批编辑结束后用 Read / Grep 复核关键改动确实落盘，尤其是规范与文档类改动（它们没有测试兜底）。
 
 ## Git 提交
 

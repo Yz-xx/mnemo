@@ -1,7 +1,6 @@
 import { ref } from 'vue';
 import { readSettings, saveSettings } from '../api/bridge';
-import { AgentApi } from '../api/client';
-import { toErrorMessage } from '../api/errors';
+import { AgentApi, toErrorMessage } from '../api/client';
 import type { AuthUser } from '../types';
 
 export type AuthMode = 'login' | 'register';

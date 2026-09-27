@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { HTTP_STATUS } from '@repo/shared';
+import { HTTP_STATUS } from '@repo/reusable';
 import { currentUserId } from '../auth/middleware.js';
 import type { AppDependencies } from '../dependencies.js';
 import { ERROR_MESSAGE } from '../messages.js';

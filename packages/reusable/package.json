@@ -1,0 +1,25 @@
+{
+  "name": "@repo/reusable",
+  "version": "0.0.0",
+  "private": true,
+  "description": "跨端共享的业务可复用代码（HTTP 契约 / 对话协议类型 / 固定文案）",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run --passWithNoTests"
+  }
+}

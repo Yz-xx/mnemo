@@ -1,7 +1,6 @@
 import { onMounted, ref } from 'vue';
 import type { Ref } from 'vue';
-import { AgentApi } from '../../api/client';
-import { toErrorMessage } from '../../api/errors';
+import { AgentApi, toErrorMessage } from '../../api/client';
 import { useAuth } from '../../composables/useAuth';
 import type { KnowledgeDocument } from '../../types';
 
@@ -36,8 +35,10 @@ export function useKnowledgePanel(props: KnowledgePanelProps): KnowledgePanelCon
   async function loadDocuments(): Promise<void> {
     try {
       documents.value = await createApi().listDocuments();
-    } catch {
+    } catch (error) {
+      // 加载失败与「确实没有文档」必须区分：只清空不提示会让用户误以为知识库被清空
       documents.value = [];
+      notice.value = toErrorMessage(error);
     }
   }
 

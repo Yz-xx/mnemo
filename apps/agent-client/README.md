@@ -6,7 +6,7 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 - 技术栈：Electron 44 + Vue 3 + TypeScript + Less，构建工具为 electron-vite
 - 目录分层：`src/main`（主进程）、`src/preload`（预加载）、`src/renderer`（渲染进程）
 
-仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；后端接口与 SSE 协议见 [@repo/agent-server](../agent-server/README.md)。
+仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；后端接口与 SSE 协议见 [@repo/agent-server](../agent-server/README.md)；跨端可复用代码（状态码契约 / 对话协议类型 / 固定文案）见 [@repo/reusable](../../packages/reusable/README.md)，通用工具见 [@repo/shared](../../packages/shared/README.md)。
 
 ---
 
@@ -41,14 +41,14 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 
 `useChat.ts` 集中管理会话状态（`connection / health / conversations / activeId / messages / streaming / loadingConversation / errorMessage`）与全部请求动作：
 
-- **流式渲染**：先把用户消息与一条空助手消息入列，`token` 事件直接追加到这条消息上，因此首字到达即渲染，不需要重排列表；事件消费由模块级 `consumeChatStream()` 承担，会话级副作用（切换会话、报错提示）以回调交回 composable，便于单独测试；
+- **流式渲染**：先把用户消息与一条空助手消息入列，`token` 事件直接追加到这条消息上，因此首字到达即渲染，不需要重排列表；事件消费由模块级 `consumeChatStream()` 承担，会话级副作用（记住会话 ID、切换会话、报错提示）以回调交回 composable，便于单独测试。`conversation` 事件在首个产出之前到达，此时后端已确定这条会话会被保留，`activeId` 先记下来——用户中途点“停止”后仍能接着这条会话继续发；
 - **工具轨迹**：`tool` 事件映射为“调用工具 xxx”“完成 xxx”标签，追加到该条消息的 `steps`；
 - **中断语义**：`AbortController` 保存在闭包局部变量中再另存引用——用户点“停止”会把外层引用置空，局部引用仍能判断“这次流是否被主动中断”，从而不把中断当成错误提示；
 - **空回复回滚**：流结束后若助手消息仍无内容（例如模型直接失败），就把这条占位消息移除，避免留下空气泡；
 - **连接状态**：`canSend` 要求后端在线且当前不在流式中，因此 `connection === 'offline'` 时输入区自动禁用。
 - **登录态联动**：`api` 是 `computed`，令牌变化即重建客户端，保证每个请求都携带当前令牌；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
 
-`api/client.ts` 负责 HTTP 与 SSE 解析：状态码统一取自 `@repo/shared` 的 `HTTP_STATUS`（如 401 触发重新登录、204 表示无响应体），响应状态码经 `toHttpStatusCode` 收敛后存入 `ApiError.status`，网关 / 代理注入的契约外码统一按 500 处理；`buildHeaders()` 在已登录时统一附加 `Authorization: Bearer <token>`；非 2xx 时抛出携带状态码的 `ApiError`（`isUnauthorized` 据此识别登录失效），错误文案优先取服务端 `message` 字段；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
+`api/client.ts` 负责 HTTP 与 SSE 解析：状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`（如 401 触发重新登录、204 表示无响应体），响应状态码经 `toHttpStatusCode` 收敛后存入 `ApiError.status`，网关 / 代理注入的契约外码统一按 500 处理；`ChatStreamEvent`（SSE 事件类型）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@repo/reusable`，`toErrorMessage` 取自 `@repo/shared`，它是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；`buildHeaders()` 在已登录时统一附加 `Authorization: Bearer <token>`；非 2xx 时抛出携带状态码的 `ApiError`（`isUnauthorized` 据此识别登录失效），错误文案优先取服务端 `message` 字段；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
 
 ## 五、登录态与启动门禁
 

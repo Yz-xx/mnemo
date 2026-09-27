@@ -2,12 +2,12 @@ import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import type { Request, Response } from 'express';
 import { createLogger } from '@repo/logger';
+import type { AgentStreamEvent, ChatStreamEvent } from '@repo/reusable';
 import { handleChatMessage } from '../routes/chat.js';
 import type { Logger } from '@repo/logger';
 import type { Conversation, ConversationSummary, MessageRole } from '../conversation/types.js';
 import type { ConversationStore } from '../conversation/store.js';
-import type { AgentService, AgentStreamEvent } from '../llm/agent.js';
-import type { ChatStreamEvent } from '../services/chatStream.js';
+import type { AgentService } from '../llm/agent.js';
 
 const USER_ID = 1;
 
@@ -179,7 +179,7 @@ describe('handleChatMessage', () => {
     await expect(conversations.list()).resolves.toEqual([]);
   });
 
-  it('中断前已有产出时保留提问，不丢用户输入', async () => {
+  it('中断前已有产出时保留会话，并留下提问与部分回复', async () => {
     const conversations = new FakeConversations();
     const res = new FakeHttpResponse();
     // 先推一段正文（用户已看到内容），再模拟客户端断开并中断本轮
@@ -212,11 +212,16 @@ describe('handleChatMessage', () => {
       res as unknown as Response,
     );
 
-    // 用户主动停止是他的意图：部分回复本就不落库，但刚发出的提问要留在历史里
-    expect(res.events).toEqual([{ type: 'token', content: '正在' }]);
     const [summary] = await conversations.list();
     const saved = await conversations.get(USER_ID, summary.id);
-    expect(saved?.messages.map((message) => message.role)).toEqual(['user']);
+    // 首个产出时就补推会话 ID，客户端因此在中断后仍能接着这条会话发消息
+    expect(res.events).toEqual([
+      { type: 'conversation', conversationId: summary.id },
+      { type: 'token', content: '正在' },
+    ]);
+    // 用户主动停止只是不再继续生成：已看到的正文与刚发出的提问都要留在历史里
+    expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.at(-1)?.content).toBe('正在');
   });
 
   it('回复为空但请求正常结束时保留会话', async () => {

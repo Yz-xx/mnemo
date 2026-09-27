@@ -1,19 +1,16 @@
 import { AIMessage, AIMessageChunk, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import type { BaseMessageChunk } from '@langchain/core/messages';
 import { createAgent } from 'langchain';
-import { describeChatModel } from '../config.js';
+import { describeChatEndpoint, describeChatModel } from '../config.js';
 import { describeConnectionError } from '../errors.js';
 import { createChatModel } from './model.js';
 import { createTools } from './tools.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 import type { AppConfig } from '../config.js';
+import type { AgentStreamEvent } from '@repo/reusable';
 import type { StoredMessage } from '../conversation/types.js';
 import type { Logger } from '@repo/logger';
 import type { KnowledgeStore } from '../rag/store.js';
-
-/** 流式过程中向前端推送的事件 */
-export type AgentStreamEvent =
-  { type: 'token'; content: string } | { type: 'tool'; name: string; status: 'start' | 'end' };
 
 /** 从消息内容中提取纯文本，兼容字符串与内容块两种形式 */
 function extractText(content: BaseMessageChunk['content']): string {
@@ -41,9 +38,7 @@ export class AgentService {
       name: 'agent',
     });
 
-    const endpoint =
-      config.llm.provider === 'deepseek' ? config.deepseek.baseUrl : config.ollama.baseUrl;
-    this.modelTarget = `${config.llm.provider}（${endpoint}，模型 ${describeChatModel(config)}）`;
+    this.modelTarget = `${config.llm.provider}（${describeChatEndpoint(config)}，模型 ${describeChatModel(config)}）`;
   }
 
   /** 把持久化的历史消息还原为 LangChain 消息对象 */

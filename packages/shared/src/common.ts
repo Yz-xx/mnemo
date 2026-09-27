@@ -11,3 +11,12 @@ export function clamp(value: number, min: number, max: number): number {
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * 提取错误消息：非 Error 抛出值（字符串、对象等）转为字符串。
+ * 请求失败与流式中断抛出的都是 unknown，两端都需要同一个降级口径，
+ * 否则界面会渲染成空提示、日志会丢掉原因。
+ */
+export function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

@@ -1,14 +1,7 @@
 // 渲染进程访问 preload 桥接的唯一入口。
 // 浏览器调试环境（如样式预览页）不存在 window.desktopApi，所有读写统一在此降级，
 // 避免各 composable 与组件各写一份 `as DesktopApi | undefined` 与默认值。
-import type { AppSettings, DesktopApi } from '../../../preload/types.js';
-
-/** 设置项默认值：必须与主进程 settings.ts 的 DEFAULT_SETTINGS 保持一致 */
-const DEFAULT_SETTINGS: AppSettings = {
-  backendUrl: 'http://localhost:3000',
-  theme: 'dark',
-  authToken: '',
-};
+import { DEFAULT_SETTINGS, type AppSettings, type DesktopApi } from '../../../preload/types.js';
 
 /** 后端服务默认地址：登录页、对话客户端与设置项共用同一份 */
 export const DEFAULT_BACKEND_URL = DEFAULT_SETTINGS.backendUrl;

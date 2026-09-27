@@ -1,6 +1,6 @@
-# @repo/shared 公共能力库
+# @repo/shared 通用工具库
 
-跨端复用的纯逻辑工具库，供后端与桌面端共同引用。包定位与职责边界：**可跨端复用的纯逻辑放这里，应用私有逻辑留在应用内**，`apps/*` 之间禁止互相 import。
+跨端复用的**通用工具库**，供后端与桌面端共同引用。包定位与职责边界：**只放与业务无关的通用能力**——判据是「换一个业务它还用得上吗」，用不上就说明它绑定了本业务约定（状态码裁剪、对话协议、固定文案），应放 [@repo/reusable](../reusable/README.md)；应用私有逻辑留在应用内。`apps/*` 之间禁止互相 import。
 
 仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)。
 
@@ -8,20 +8,18 @@
 
 ## 一、导出能力
 
-包根 `src/index.ts` 只导出**不含第三方依赖**的能力，业务方从 `@repo/shared` 引入即可按需取用；依赖 `crypto-js` 的 DES 加解密单独放在 `@repo/shared/crypto`（原因见「二、按需引入」）。按模块分为四组：
+包根 `src/index.ts` 只导出**不含第三方依赖**的能力，业务方从 `@repo/shared` 引入即可按需取用；依赖 `crypto-js` 的 DES 加解密单独放在 `@repo/shared/crypto`（原因见「二、按需引入」）。按模块分为三组：
 
-| 模块               | 导出                     | 说明                                                        |
-| ------------------ | ------------------------ | ----------------------------------------------------------- |
-| `strings`          | `isString(value)`        | 类型守卫：判断给定值是否为字符串                            |
-|                    | `capitalize(str)`        | 首字母转大写，其余字符保持不变                              |
-|                    | `truncate(str, maxLen)`  | 截断到指定长度并以省略号结尾（`maxLen` 含省略号，至少为 1） |
-| `common`           | `clamp(value, min, max)` | 将数值限制在 `[min, max]` 区间内                            |
-|                    | `sleep(ms)`              | 延迟指定毫秒数，用于异步流程控制与简单节流                  |
-| `http`             | `HTTP_STATUS`            | HTTP 状态码常量表（`as const` 对象），前后端共用的协议契约  |
-|                    | `HttpStatusCode`         | 由 `HTTP_STATUS` 派生的取值联合类型                         |
-|                    | `toHttpStatusCode(v)`    | 边界收窄：契约外的状态码回落为 500，供调用方安全地按码分支  |
-| `crypto`（子路径） | `desEncrypt(plain)`      | DES 加密，返回 Base64 编码的密文                            |
-|                    | `desDecrypt(cipher)`     | DES 解密；密文非法或密钥不匹配时返回空字符串                |
+| 模块               | 导出                     | 说明                                                          |
+| ------------------ | ------------------------ | ------------------------------------------------------------- |
+| `strings`          | `isString(value)`        | 类型守卫：判断给定值是否为字符串                              |
+|                    | `capitalize(str)`        | 首字母转大写，其余字符保持不变                                |
+|                    | `truncate(str, maxLen)`  | 截断到指定长度并以省略号结尾（`maxLen` 含省略号，至少为 1）   |
+| `common`           | `clamp(value, min, max)` | 将数值限制在 `[min, max]` 区间内                              |
+|                    | `sleep(ms)`              | 延迟指定毫秒数，用于异步流程控制与简单节流                    |
+|                    | `toErrorMessage(error)`  | 提取错误消息：非 Error 抛出值转为字符串，两端共用同一降级口径 |
+| `crypto`（子路径） | `desEncrypt(plain)`      | DES 加密，返回 Base64 编码的密文                              |
+|                    | `desDecrypt(cipher)`     | DES 解密；密文非法或密钥不匹配时返回空字符串                  |
 
 ### DES 加密约定
 
@@ -29,7 +27,7 @@
 
 > DES 为可逆对称加密，仅用于按需求的存储加密；真正的生产系统应改用 bcrypt/argon2 这类加盐哈希。
 
-当前使用方：后端 `UserStore` 用 `desEncrypt`（从 `@repo/shared/crypto` 引入）加密密码后入库，并直接比对密文完成登录校验；后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题；`HTTP_STATUS` 由后端各路由与中间件统一取状态码，桌面端渲染进程也据此识别 `401`（登录失效）与 `204`（无响应体），并把响应状态码经 `toHttpStatusCode` 收敛后存进 `ApiError.status`，契约说明见 [ADR 0001](../../docs/adr/0001-http-status-contract.md)。
+当前使用方：后端 `UserStore` 用 `desEncrypt`（从 `@repo/shared/crypto` 引入）加密密码后入库，并直接比对密文完成登录校验；后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题；`toErrorMessage` 由后端服务层与桌面端（经 `api/client.ts` 转发）统一调用。HTTP 状态码契约（`HTTP_STATUS`）、SSE 对话事件类型（`ChatStreamEvent`）与登录失效固定文案（`SESSION_EXPIRED_MESSAGE`）已随业务约定迁至 [@repo/reusable](../reusable/README.md)，不再由本包提供。
 
 ## 二、按需引入
 
@@ -50,4 +48,4 @@ import { desEncrypt } from '@repo/shared/crypto';
 
 - `pnpm --filter @repo/shared run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）按 `index` 与 `crypto` 两个入口产出 `dist/index.{d.ts,mjs,cjs}` 与 `dist/crypto.{d.ts,mjs,cjs}` 等文件，声明文件由 `vite-plugin-dts` 依 `tsconfig.json` 的 include / exclude 生成（测试目录不参与产物）；
 - 产物保留空格与注释、开启 sourcemap，便于使用方调试；第三方运行时依赖（如 `crypto-js`）外置并保留裸包名，由使用方安装。
-- `pnpm --filter @repo/shared run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖 DES 加解密与 HTTP 状态码契约）。
+- `pnpm --filter @repo/shared run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖 DES 加解密与错误消息提取）。

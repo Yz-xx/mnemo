@@ -1,16 +1,13 @@
 /**
- * 错误处理公共能力：错误消息提取与依赖服务连接错误翻译。
+ * 错误处理公共能力：把依赖服务的连接错误翻译成可定位的提示。
  * 对话模型与向量化服务都是本地依赖，Node 的 fetch 在连接失败时只给出
  * "fetch failed" 而不含目标地址，直接抛给界面无法定位问题，故统一在此翻译。
+ * 提取错误消息的 toErrorMessage 两端用法一致，已收敛到 @repo/shared。
  */
+import { toErrorMessage } from '@repo/shared';
 
 /** 连接类错误的识别：覆盖 fetch 失败与常见 socket 错误码 */
 const CONNECTION_ERROR = /fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up/i;
-
-/** 提取错误消息：非 Error 抛出值（字符串、对象等）转为字符串，保证日志与响应都有可读内容 */
-export function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * 把依赖服务的连接错误翻译成含目标地址的可读提示，其余错误原样保留。
