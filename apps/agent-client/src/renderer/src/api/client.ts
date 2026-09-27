@@ -1,6 +1,6 @@
 // 从包根按需引入：@repo/shared 声明了 sideEffects: false，
 // 未用到的模块（连同依赖 crypto-js 的 crypto.ts）不会被打进渲染产物
-import { HTTP_STATUS } from '@repo/shared';
+import { HTTP_STATUS, toHttpStatusCode, type HttpStatusCode } from '@repo/shared';
 import type {
   AuthSession,
   AuthUser,
@@ -23,10 +23,15 @@ export interface HealthInfo {
   knowledgeEnabled: boolean;
 }
 
-/** 带 HTTP 状态码的请求错误：调用方据此识别 401（登录失效）等需要特殊处理的情况 */
+/**
+ * 带 HTTP 状态码的请求错误：调用方据此识别 401（登录失效）等需要特殊处理的情况。
+ * 状态码经 toHttpStatusCode 收敛到契约取值，网关/代理注入的契约外码统一按 500 处理。
+ * `message` 里仍可能带服务端返回的真实状态码（如「请求失败（HTTP 403）」），与收敛后的
+ * `status` 刻意不一致：前者要可定位，后者要能安全地按契约分支，不要当成 bug 去对齐。
+ */
 export class ApiError extends Error {
   constructor(
-    readonly status: number,
+    readonly status: HttpStatusCode,
     message: string,
   ) {
     super(message);
@@ -60,7 +65,7 @@ export class AgentApi {
       ...init,
       headers: this.buildHeaders(init.headers as Record<string, string> | undefined),
     });
-    if (!res.ok) throw new ApiError(res.status, await this.extractError(res));
+    if (!res.ok) throw new ApiError(toHttpStatusCode(res.status), await this.extractError(res));
     if (res.status === HTTP_STATUS.NO_CONTENT) return undefined as T;
     return (await res.json()) as T;
   }
@@ -139,7 +144,8 @@ export class AgentApi {
       body: JSON.stringify(payload),
       signal,
     });
-    if (!res.ok || !res.body) throw new ApiError(res.status, await this.extractError(res));
+    if (!res.ok || !res.body)
+      throw new ApiError(toHttpStatusCode(res.status), await this.extractError(res));
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

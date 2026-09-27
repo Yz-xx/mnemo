@@ -21,7 +21,7 @@ apps/agent-server/src/
 ├── services/         跨路由的编排逻辑（chatStream.ts）
 ├── auth/             userStore / sessionStore / middleware / credentials
 ├── conversation/     会话与消息持久化
-├── llm/              agent、model、tools
+├── llm/              agent、model、tools、prompt（系统提示词）
 ├── rag/              知识库存储与检索
 ├── db/               pool.ts、schema.ts
 └── __vitest__/       单元测试（不参与编译产物）
@@ -86,7 +86,7 @@ apps/agent-server/src/
 
 ## 7. LLM 与工具
 
-- 智能体由 `createAgent` + `streamMode: 'messages'` 构建，系统提示词统一维护在 `llm/agent.ts`。
+- 智能体由 `createAgent` + `streamMode: 'messages'` 构建，系统提示词统一维护在 `llm/prompt.ts`。
 - 工具实现在 `llm/tools.ts`，必须自校验入参并在非法时抛出中文错误；知识库检索按调用者可见性过滤，结果需带「来源」标注。
 - 模型与嵌入 provider 由 `config.ts` 决定（deepseek 走 `ChatOpenAI`，其余走 `ChatOllama`），业务代码不做 provider 判断。
 - 网络类异常统一转成可读提示（如 `fetch failed` → 「无法连接对话模型服务」）。

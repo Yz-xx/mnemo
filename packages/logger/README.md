@@ -10,13 +10,13 @@ Node 环境的结构化日志库，供后端服务共用。包定位：**依赖�
 
 统一出口为 `src/index.ts`，业务方只需从 `@repo/logger` 引入。
 
-| 导出                                                          | 说明                                                           |
-| ------------------------------------------------------------- | -------------------------------------------------------------- |
-| `createLogger(options)`                                       | 组装日志实例：控制台输出由 `stdio` 控制，文件输出由 `dir` 决定 |
-| `Logger` / `LogLevel` / `LogFields` / `LogRecord` / `LogSink` | 类型定义；业务只依赖 `Logger`，不感知输出实现                  |
-| `preview(value, maxLength)`                                   | 压成单行并截断，用于入参出参摘要                               |
-| `redactValue(value)` / `redactFields(fields)`                 | 按字段名遮蔽密码 / 令牌，递归上限 4 层                         |
-| `formatRecord(record, options)` / `formatDay(time)`           | 文本渲染（含颜色开关）与本地日期（`YYYY-MM-DD`）               |
+| 导出                                                                            | 说明                                                                                                                                                  |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createLogger(options)`                                                         | 组装日志实例：`name` / `level` 必填，`dir` 决定文件输出（留空只输出控制台），`retentionDays` 默认 14 天，`stdio` 默认开启，`sinks` 供注入额外输出目标 |
+| `Logger` / `LoggerOptions` / `LogLevel` / `LogFields` / `LogRecord` / `LogSink` | 类型定义；业务只依赖 `Logger`，不感知输出实现                                                                                                         |
+| `preview(value, maxLength)`                                                     | 压成单行并截断，用于入参出参摘要                                                                                                                      |
+| `redactValue(value)` / `redactFields(fields)`                                   | 按字段名遮蔽密码 / 令牌，递归上限 4 层                                                                                                                |
+| `formatRecord(record, options)` / `formatDay(time)`                             | 文本渲染（含颜色开关）与本地日期（`YYYY-MM-DD`）                                                                                                      |
 
 ### 使用
 
@@ -36,7 +36,7 @@ logger.child({ requestId: 'abcd1234' }).info('请求完成', { method: 'POST', s
 
 `name` 用于日志文件名前缀与写入失败时的降级提示：同日同目录下不同服务各写各的文件（`agent-server-2026-09-26.log`），清理超期文件时只处理自己前缀且日期格式合法的文件，不会误删他人内容。
 
-被写入记录先经 `redactFields` 遮蔽敏感字段，再由 `formatRecord` 渲染：标量字段与消息同处首行便于 grep，多行文本与错误堆栈折叠成缩进块。文件输出不带 ANSI 颜色。
+被写入记录先经 `redactFields` 遮蔽敏感字段，再由 `formatRecord` 渲染：标量字段与消息同处首行便于 grep，多行文本与错误堆栈折叠成缩进块；字段中的 `path` 单独摘出固定渲染为第三列（时间、级别之后），既不与行尾重复，也便于按接口竖向扫读。文件输出不带 ANSI 颜色。
 
 ## 二、引用方式
 

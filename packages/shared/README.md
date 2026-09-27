@@ -19,6 +19,7 @@
 |                    | `sleep(ms)`              | 延迟指定毫秒数，用于异步流程控制与简单节流                  |
 | `http`             | `HTTP_STATUS`            | HTTP 状态码常量表（`as const` 对象），前后端共用的协议契约  |
 |                    | `HttpStatusCode`         | 由 `HTTP_STATUS` 派生的取值联合类型                         |
+|                    | `toHttpStatusCode(v)`    | 边界收窄：契约外的状态码回落为 500，供调用方安全地按码分支  |
 | `crypto`（子路径） | `desEncrypt(plain)`      | DES 加密，返回 Base64 编码的密文                            |
 |                    | `desDecrypt(cipher)`     | DES 解密；密文非法或密钥不匹配时返回空字符串                |
 
@@ -28,7 +29,7 @@
 
 > DES 为可逆对称加密，仅用于按需求的存储加密；真正的生产系统应改用 bcrypt/argon2 这类加盐哈希。
 
-当前使用方：后端 `UserStore` 用 `desEncrypt`（从 `@repo/shared/crypto` 引入）加密密码后入库，并直接比对密文完成登录校验；后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题。
+当前使用方：后端 `UserStore` 用 `desEncrypt`（从 `@repo/shared/crypto` 引入）加密密码后入库，并直接比对密文完成登录校验；后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题；`HTTP_STATUS` 由后端各路由与中间件统一取状态码，桌面端渲染进程也据此识别 `401`（登录失效）与 `204`（无响应体），并把响应状态码经 `toHttpStatusCode` 收敛后存进 `ApiError.status`，契约说明见 [ADR 0001](../../docs/adr/0001-http-status-contract.md)。
 
 ## 二、按需引入
 
@@ -47,6 +48,6 @@ import { desEncrypt } from '@repo/shared/crypto';
 
 ## 三、构建与测试
 
-- `pnpm --filter @repo/shared run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）按 `index` 与 `crypto` 两个入口产出 `dist/index.{d.ts,mjs,cjs}` 与 `dist/crypto.{d.ts,mjs,cjs}` 等文件；
+- `pnpm --filter @repo/shared run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）按 `index` 与 `crypto` 两个入口产出 `dist/index.{d.ts,mjs,cjs}` 与 `dist/crypto.{d.ts,mjs,cjs}` 等文件，声明文件由 `vite-plugin-dts` 依 `tsconfig.json` 的 include / exclude 生成（测试目录不参与产物）；
 - 产物保留空格与注释、开启 sourcemap，便于使用方调试；第三方运行时依赖（如 `crypto-js`）外置并保留裸包名，由使用方安装。
 - `pnpm --filter @repo/shared run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖 DES 加解密与 HTTP 状态码契约）。

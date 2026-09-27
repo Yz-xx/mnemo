@@ -20,7 +20,7 @@ alwaysApply: false
 ## 2. TypeScript
 
 - 导出的函数显式标注返回类型（如 `: Promise<void>`、`: void`）；一次性内部回调可省略。
-- 类型导入统一用 `import type`；导入顺序为 Node 内置 → 第三方 → 仓库内模块 → 纯类型。
+- 类型导入一律带类型标记：只导类型时用 `import type { ... }`，与值同模块混导时用行内 `type` 修饰符（如 `import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client'`）。导入按模块来源分三段：Node 内置 → 第三方 → 仓库内模块（`@repo/*` 与相对路径）；"纯类型"不是第四段——它指只导类型的那一行，随所属模块就地书写即可，不要求集中置后。
 - 对象结构用 `interface`（如 `AppDependencies`、`ChatStreamHandlers`），联合与工具类型用 `type`。
 - 不用 `any`；外部不可信输入用 `unknown`，并在系统边界收窄。
 - 少用 `as` 断言，仅允许出现在边界（如 `req.body`、`JSON.parse` 结果）。
@@ -69,6 +69,6 @@ alwaysApply: false
 ## 7. 通用准则
 
 - 改动最小化：只动与任务相关的代码，不顺手重构无关文件。
-- 先复用再抽象：同一逻辑出现第三次时才抽公共能力，不为一次性需求造抽象、配置项或兼容分支。
+- 先复用再抽象：同一逻辑出现第三次或是有可能被其它地方复用的干净代码时才抽公共能力，不为一次性需求造抽象、配置项或兼容分支。
 - 生成代码前先读同目录既有实现，保持命名、分层与注释风格一致。
 - 交活前自检：`pnpm run lint` 与 `pnpm test`，涉及构建链路再补 `pnpm build`。

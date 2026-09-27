@@ -11,6 +11,8 @@ alwaysApply: true
 
 交付标准不是"能跑"，而是可维护、可验证、可复用，并与既有目录结构、业务规则、交互规范保持一致。动手前先读同目录既有实现，优先复用已有模式与工具，不为同一问题引入第二套做法。
 
+重点：在本仓库做任何任务时必须始终遵守此规则。
+
 ## 仓库结构
 
 ```text
@@ -20,9 +22,11 @@ my-monorepo/
 │   ├── agent-client/  Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
 │   └── frontend/      示例 Web 前端（脚手架预留）
 ├── packages/
-│   ├── shared/      @repo/shared 公共能力（字符串、通用函数、DES 加密）
+│   ├── shared/      @repo/shared 公共能力（strings / common / http；DES 加密走子路径 @repo/shared/crypto）
 │   ├── logger/      @repo/logger Node 端结构化日志库（控制台 + 按天轮转文件）
 │   └── components/  @repo/components 公共 Vue 组件库（Vite 库模式）
+├── docs/
+│   └── adr/         架构决策记录（ADR）：记录刻意偏离常识默认的取舍
 ├── scripts/         根脚本：dev / build / lint / test
 └── .trae/
     └── rules/       工程规范（Trae 项目规则，随仓库入库并统一格式化）
@@ -47,7 +51,7 @@ my-monorepo/
 
 铁律：
 
-- 所有回复和思考过程都必须使用中文。
+- 所有回复和思考过程（包括sub agent）都必须使用中文。
 - 不绕过根脚本直接调用 `tsc` / `vite` / `electron-vite`，除非是在包内排查问题且不改动产物。
 - 构建产物（`dist`、`out`、`release`、`coverage`）不参与 lint，也不入库；工程规范位于 `.trae/rules/`，随仓库入库并交给 prettier 统一格式。
 - 任务收尾必须自检：`pnpm run lint` + `pnpm test`；涉及构建链路再补 `pnpm build`。
@@ -87,3 +91,5 @@ my-monorepo/
 # 技能调用（重要！！！）
 
 执行任务时，必须调用 `ask-matt` 技能获取适合的技能进行调用，比如以下几个技能是必须调用的：任务开始前调用 `grill-with-docs` 技能，编码时调用 `codebase-design` 技能，测试时调用 `code-review` 和 `tdd` 技能。
+
+这些技能现在都能由模型直接调用：`ask-matt` / `grill-with-docs` 的 `disable-model-invocation` 已移除，不再需要等用户手动输入 `/ask-matt`、`/grill-with-docs` 触发。（技能包自带的 `.trae/skills/README.md` 仍把这两个列在「用户调用」下，属未同步的旧说明，以实际能否调用为准。）因此"流程起点调不动"不成立，不得据此跳过整条技能链路；确实不适用的环节（如需求已逐项拍板、无可打磨的想法时），先说明理由再略过。

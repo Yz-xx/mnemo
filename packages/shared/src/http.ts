@@ -26,3 +26,18 @@ export const HTTP_STATUS = {
 
 /** 状态码取值：用于需要把取值范围写进签名的位置（如 ApiError.status） */
 export type HttpStatusCode = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS];
+
+/**
+ * 边界收窄：把响应上拿到的任意状态码收敛到契约取值。
+ * 调用方（如桌面端 ApiError）要按状态码分支，就必须先落在契约集合上：
+ * 网关、代理或异常环境可能注入契约外的码（403/502/0），
+ * 直接断言会给出不属于契约的类型，静默放行又会让分支判断面对未知输入。
+ * 统一按 §3「5xx 对外只用 500」的口径回落，契约外的码不泄漏给调用方。
+ */
+export function toHttpStatusCode(status: number): HttpStatusCode {
+  const contractCodes: readonly number[] = Object.values(HTTP_STATUS);
+  // 此处的 as 落在系统边界上（响应状态码来自外部、不可信），且紧跟契约成员判定，符合 §2 的边界豁免
+  return contractCodes.includes(status)
+    ? (status as HttpStatusCode)
+    : HTTP_STATUS.INTERNAL_SERVER_ERROR;
+}

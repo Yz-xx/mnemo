@@ -39,7 +39,7 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 
 ## 四、渲染进程状态流
 
-`useChat.ts` 集中管理会话状态（`connection / health / conversations / activeId / messages / streaming / errorMessage`）与全部请求动作：
+`useChat.ts` 集中管理会话状态（`connection / health / conversations / activeId / messages / streaming / loadingConversation / errorMessage`）与全部请求动作：
 
 - **流式渲染**：先把用户消息与一条空助手消息入列，`token` 事件直接追加到这条消息上，因此首字到达即渲染，不需要重排列表；事件消费由模块级 `consumeChatStream()` 承担，会话级副作用（切换会话、报错提示）以回调交回 composable，便于单独测试；
 - **工具轨迹**：`tool` 事件映射为“调用工具 xxx”“完成 xxx”标签，追加到该条消息的 `steps`；
@@ -48,7 +48,7 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 - **连接状态**：`canSend` 要求后端在线且当前不在流式中，因此 `connection === 'offline'` 时输入区自动禁用。
 - **登录态联动**：`api` 是 `computed`，令牌变化即重建客户端，保证每个请求都携带当前令牌；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
 
-`api/client.ts` 负责 HTTP 与 SSE 解析：`buildHeaders()` 在已登录时统一附加 `Authorization: Bearer <token>`；非 2xx 时抛出携带状态码的 `ApiError`（`isUnauthorized` 据此识别登录失效），错误文案优先取服务端 `message` 字段；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
+`api/client.ts` 负责 HTTP 与 SSE 解析：状态码统一取自 `@repo/shared` 的 `HTTP_STATUS`（如 401 触发重新登录、204 表示无响应体），响应状态码经 `toHttpStatusCode` 收敛后存入 `ApiError.status`，网关 / 代理注入的契约外码统一按 500 处理；`buildHeaders()` 在已登录时统一附加 `Authorization: Bearer <token>`；非 2xx 时抛出携带状态码的 `ApiError`（`isUnauthorized` 据此识别登录失效），错误文案优先取服务端 `message` 字段；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
 
 ## 五、登录态与启动门禁
 
@@ -115,10 +115,10 @@ Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不�
 
 ## 九、构建与打包
 
-- `electron-vite dev / build / preview`：主进程与 preload 走 SSR 打包，渲染进程走 Vite；
+- 三段式构建由 `electron-vite` 承担（对应根脚本 `pnpm --filter @repo/agent-client run dev / build / preview`）：主进程与 preload 走 SSR 打包，渲染进程走 Vite；
 - `pnpm --filter @repo/agent-client run dist`：`electron-vite build && electron-builder --win`，产物落在 `apps/agent-client/release/`，含 NSIS 安装包 `AgentDesktop Setup <version>.exe` 与免安装目录 `win-unpacked/`；
 - preload 在 `type: module` 下输出为 `index.mjs`，主进程按该扩展名加载；
-- 下载源必须显式指定：Electron 二进制在 `electron-builder.yml` 的 `electronDownload.mirror` 里指向 npmmirror，打包工具链（NSIS / 7zip / winCodeSign）的镜像由 `dist` 脚本用 `cross-env` 注入 `ELECTRON_BUILDER_BINARIES_MIRROR`。原因是 `pnpm run` 不会把 `.npmrc` 的 `electron_mirror` / `electron_builder_binaries_mirror` 注入为环境变量，不声明就会回落到 GitHub 重下整包（约 150 MB）而超时。
+- 下载源必须显式指定：Electron 二进制在 `electron-builder.yml` 的 `electronDownload.mirror` 里指向 npmmirror，打包工具链（NSIS / 7zip / winCodeSign）的镜像由 `dist` 脚本用 `cross-env` 注入 `ELECTRON_BUILDER_BINARIES_MIRROR`。原因是 `pnpm run` 不会把 `.npmrc` 的 `electron_mirror` 注入为环境变量，工具链镜像又只认环境变量、没有可写入的配置文件，不声明就会回落到 GitHub 重下整包（约 150 MB）而超时。
 
 ## 十、启动与验证
 
@@ -128,7 +128,7 @@ Markdown 由 `markdown-it` 渲染；对话内容以文档流形式呈现（不�
 pnpm --filter @repo/agent-client run dev     # electron-vite dev
 ```
 
-视觉改动可在构建产物上做静态验证：`electron-vite build` 后用任意静态服务器指向 `out/renderer`，再以无头 Chrome 截图核对两套主题。
+视觉改动可在构建产物上做静态验证：`pnpm --filter @repo/agent-client run build` 后用任意静态服务器指向 `out/renderer`，再以无头 Chrome 截图核对两套主题。
 
 ## 十一、已知约束与设计取舍
 

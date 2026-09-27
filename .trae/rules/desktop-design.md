@@ -38,20 +38,23 @@ apps/agent-client/src/
 - 增删 IPC 必须三处同步：`main/ipc.ts` 注册 → `preload/index.ts` 白名单暴露 → `preload/types.ts` 类型声明。
 - 预加载只暴露白名单方法，禁止暴露 `ipcRenderer` 本体或任意通道调用入口。
 - 首帧就需要确定的设置用同步通道（`settings:get-sync` → `initialSettings`），其余一律异步。
-- 渲染进程统一通过 `window.desktopApi` 调用，并对 `undefined` 兜底（浏览器调试环境不存在该对象）。
+- 渲染进程一律经 `api/bridge.ts` 读写桥接（模块加载时判定一次 `window.desktopApi` 是否存在，无桥接时降级为默认设置），其它模块不直接引用 `window.desktopApi`。
 
 ## 4. 渲染进程分层
 
 ```text
 renderer/src/
-├── types.ts        跨组件共享类型（ChatMessage、ConversationSummary 等）
-├── api/client.ts   唯一的 HTTP 入口 AgentApi
-├── composables/    跨组件共享的状态与业务（useAuth、useChat、useTheme）
-├── App.vue         根组件（门禁与整体布局）
-└── components/     展示与交互，每个组件一个目录
+├── types.ts         跨组件共享类型（ChatMessage、ConversationSummary 等）
+├── api/bridge.ts    唯一的桥接入口：设置读写与首帧快照，无桥接时降级
+├── api/client.ts    唯一的 HTTP 入口 AgentApi
+├── api/errors.ts    错误文案归一化（toErrorMessage）
+├── composables/     跨组件共享的状态与业务（useAuth、useChat、useTheme）
+├── App.vue          根组件（门禁与整体布局）
+└── components/      展示与交互，每个组件一个目录
 ```
 
-- `api/client.ts` 负责请求头拼装、中断/超时、错误归一化（`ApiError` 带 `status`，`isUnauthorized` 判定 401），其他模块不直接调用 `fetch`。
+- `api/bridge.ts` 统一封装 `window.desktopApi`：导出 `initialSettings`（preload 同步注入的首帧快照）与 `readSettings` / `saveSettings`，无桥接时回退默认值，浏览器调试环境因此无需各处判空。
+- `api/client.ts` 负责请求头拼装、中断/超时、错误归一化（`ApiError` 带 `status`，`isUnauthorized` 判定 401），其他模块不直接调用 `fetch`；状态码取自 `@repo/shared` 的 `HTTP_STATUS`（401 触发清除登录态、204 直接返回 `undefined` 不解析响应体），是渲染进程唯一依赖 `@repo/*` 的模块。
 - `composables/` 承载跨组件共享的状态与业务（`useAuth` 的 token 与 user 为模块级单例）；组件私有的状态与交互留在组件目录内，不上提。
 - `components/` 只做展示与交互，通过 props / emit 与 composable 交互。
 - `components/` 下的组件一律以**目录**为单位组织，目录名即组件名：`Xxx/{index.ts, Xxx.vue, Xxx.less}`，按需再加 `useXxx.ts`。`index.ts` 统一 `export { default } from './Xxx.vue'`，消费方按 `import Xxx from '../components/Xxx'` 引入，不写 `.vue` 后缀。
@@ -88,7 +91,7 @@ renderer/src/
 1. `preload/types.ts` 的 `AppSettings` 补字段。
 2. `main/settings.ts` 的 `DEFAULT_SETTINGS` 补默认值。
 3. 需要主进程即时生效时，在 `ipc.ts` 的 `settings:save` 分支中处理（如主题、窗口底色）。
-4. 渲染进程通过 composable 从 `initialSettings` / `desktopApi` 读取，不自行解析文件。
+4. 渲染进程经 `api/bridge.ts` 的 `initialSettings` / `readSettings` 读取，不直接引用 `window.desktopApi`，也不自行解析文件。
 
 ## 9. 构建与打包
 

@@ -21,8 +21,11 @@ my-monorepo/
 │   │   │   ├── config.ts             # 环境变量 → AppConfig
 │   │   │   ├── app.ts                # createApp：组装中间件、注册路由与错误兜底
 │   │   │   ├── dependencies.ts       # AppDependencies：路由层依赖契约（避免反向依赖）
+│   │   │   ├── errors.ts             # 错误消息提取与依赖服务连接错误翻译
+│   │   │   ├── messages.ts           # 对外固定文案常量表（ERROR_MESSAGE）
 │   │   │   ├── middleware/
 │   │   │   │   ├── cors.ts           # 跨域放行（桌面端 file:// 场景）
+│   │   │   │   ├── requestLog.ts     # 请求级日志（requestId + 入参出参摘要）
 │   │   │   │   └── errorHandler.ts   # 兜底错误处理
 │   │   │   ├── auth/
 │   │   │   │   ├── credentials.ts    # 用户名/密码格式校验
@@ -35,6 +38,7 @@ my-monorepo/
 │   │   │   ├── llm/
 │   │   │   │   ├── model.ts          # 对话模型 / 向量模型工厂
 │   │   │   │   ├── agent.ts          # AgentService：ReAct 智能体与流式桥接
+│   │   │   │   ├── prompt.ts         # system prompt 原文
 │   │   │   │   └── tools.ts          # 三个工具：检索 / 时间 / 计算
 │   │   │   ├── rag/store.ts          # 知识库：切分 + 向量化 + LanceDB 近邻检索
 │   │   │   ├── conversation/store.ts # 会话与消息持久化（MySQL，按用户隔离）
@@ -55,9 +59,10 @@ my-monorepo/
 │   │       └── renderer/             # 渲染进程：Vue 3 界面与状态
 │   └── frontend/             # 示例 Web 前端（脚手架预留）
 ├── packages/
-│   ├── shared/               # 通用工具库（DES 加解密 / capitalize / truncate 等）
+│   ├── shared/               # 跨端通用工具库（字符串 / 通用函数 / HTTP 状态码，DES 走 /crypto 子路径）
 │   ├── logger/               # Node 端日志库（级别过滤 / 脱敏 / 按天轮转文件）
 │   └── components/           # 公共 Vue 组件库（Vite 库模式）
+├── docs/                     # 架构决策记录（ADR）
 ├── scripts/                  # dev / build / lint / test 编排脚本
 ├── pnpm-workspace.yaml
 └── package.json
@@ -118,7 +123,7 @@ my-monorepo/
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | [apps/agent-server/README.md](./apps/agent-server/README.md) | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建    |
 | [apps/agent-client/README.md](./apps/agent-client/README.md) | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证 |
-| [packages/shared/README.md](./packages/shared/README.md)     | 公共能力库的导出索引（字符串 / 通用函数 / DES 加解密）、引用方式与构建                              |
+| [packages/shared/README.md](./packages/shared/README.md)     | 公共能力库的导出索引（字符串 / 通用函数 / HTTP 状态码 / DES 加解密子路径）、引用方式与构建          |
 | [packages/logger/README.md](./packages/logger/README.md)     | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                |
 
 ---
@@ -137,7 +142,7 @@ my-monorepo/
 
 ### 依赖与镜像
 
-- `.npmrc` 将 `electron_mirror` 与 `electron_builder_binaries_mirror` 指向 npmmirror，解决 Electron 及其打包依赖下载失败；
+- `.npmrc` 将 `electron_mirror` 指向 npmmirror，解决 Electron 运行时下载失败；打包工具链（NSIS / 7zip / winCodeSign）的镜像没有对应配置项，由桌面端 `dist` 脚本经 `cross-env` 注入（见 [apps/agent-client/README.md](./apps/agent-client/README.md)）；
 - `pnpm-workspace.yaml` 的 `allowBuilds` 显式放行 `esbuild`、`electron`、`electron-winstaller` 的安装脚本——它们分别需要校验平台原生二进制、下载 Electron 运行时；
 - 提交前由 husky + lint-staged + commitlint（Conventional Commits）把关。
 
@@ -166,7 +171,7 @@ pnpm --filter @repo/agent-client run dev     # electron-vite dev
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（shared 的 DES 加解密、logger 的格式化与文件轮转、后端的凭证校验与知识库检索）
+pnpm test           # 各子包单元测试（shared 的 DES 加解密与 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索）
 pnpm build          # 全仓构建
 ```
 
@@ -174,8 +179,8 @@ pnpm build          # 全仓构建
 
 ## 六、跨端约束与设计取舍
 
-- **密码为 DES 加密而非哈希**：`@repo/shared` 提供 DES 加解密能力，后端按需求用它做存储加密（ECB 定值加密便于直接比对密文）；DES 为可逆对称加密，真正的生产系统应改用 bcrypt/argon2 这类加盐哈希。
+- **密码为 DES 加密而非哈希**：`@repo/shared/crypto`（DES 单独走子路径入口，见 [packages/shared/README.md](./packages/shared/README.md)）提供 DES 加解密能力，后端按需求用它做存储加密（ECB 定值加密便于直接比对密文）；DES 为可逆对称加密，真正的生产系统应改用 bcrypt/argon2 这类加盐哈希。
 - **令牌以明文流转**：登录令牌明文保存在桌面端 `settings.json` 中，并随请求以 Bearer 明文传输（后端只做校验与有效期管理），仅适用于本机/内网场景。
-- 仓库当前尚未提交首个 commit（`git init` 已完成）。
+- **HTTP 状态码契约收敛为 7 项**：前后端共用 `@repo/shared` 的 `HTTP_STATUS`（200/201/204/400/401/404/500），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、知识库入库失败按 500 处理，取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md)。
 
 各端自身的取舍（如后端的单端登录策略、桌面端的主题过渡范围）分别记在对应的子 README 中。

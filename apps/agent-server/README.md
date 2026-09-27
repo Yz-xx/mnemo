@@ -35,6 +35,8 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 | `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌         |
 | `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删  |
 
+以上状态码统一取自 `@repo/shared` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
+
 三个约定：
 
 - **统一鉴权**：除 `/api/health` 与注册/登录外，其余路由都挂载 `requireAuth`；中间件从 `Authorization: Bearer <token>` 解析令牌，成功后将 `userId`/`token` 写入 **`res.locals`**（避免为扩展 `Express.Request` 引入全局类型声明），失败统一返回 `401 { message: '登录已失效，请重新登录' }`。
@@ -95,7 +97,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 - `AIMessageChunk.content` 可能是字符串，也可能是内容块数组，用 `extractText` 统一抽取纯文本；
 - 一次工具调用会分散在多个分片中，用 `startedTools: Set` 去重，保证 `start` 事件只推送一次。
 
-`system prompt` 是保证回答质量的核心约束（原文见 `agent.ts`）：
+`system prompt` 是保证回答质量的核心约束（原文见 `llm/prompt.ts`）：
 
 1. 需要事实信息时优先调用工具，不要凭空编造；
 2. **涉及公司制度、业务流程、产品资料、内部规定、专有知识，或带有“知识库/文档/资料”字样时，必须先调用 `search_knowledge_base` 检索后再作答**，禁止凭记忆直接回答，检索为空时才说明“知识库中未找到相关内容”；
@@ -166,7 +168,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                                           |
 | `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                                           |
 | `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                                         |
-| `MYSQL_PASSWORD`                                               | `123456`                    | MySQL 密码                                           |
+| `MYSQL_PASSWORD`                                               | 空                          | MySQL 密码（默认留空，部署时注入，见第十一章）       |
 | `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                             |
 | `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                               |
 | `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                             |
@@ -200,7 +202,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ## 十一、前置条件与启动
 
-依赖 Node.js ≥ 20、pnpm ≥ 9、本地 **MySQL 8**（默认 `127.0.0.1:3306`，账号 `root` / `123456`，可用环境变量覆盖，见第十章），以及本地 Ollama：
+依赖 Node.js ≥ 20、pnpm ≥ 9、本地 **MySQL 8**（默认 `127.0.0.1:3306`，账号 `root` / `123456`，取自 `.env.development`，可用环境变量覆盖，见第十章），以及本地 Ollama：
 
 ```bash
 mysql -h 127.0.0.1 -P 3306 -u root -p   # 验证 MySQL 可连接（库表会在后端启动时自动创建）
