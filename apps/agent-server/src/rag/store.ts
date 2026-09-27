@@ -6,7 +6,7 @@ import { connect } from '@lancedb/lancedb';
 import type { Connection, Table } from '@lancedb/lancedb';
 import type { Embeddings } from '@langchain/core/embeddings';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
-import { describeConnectionError } from '../errors.js';
+import { describeConnectionError } from '../configuration/errors.js';
 
 /** 文档可见范围：global 全局共享，private 仅上传者本人可见 */
 export type KnowledgeScope = 'global' | 'private';

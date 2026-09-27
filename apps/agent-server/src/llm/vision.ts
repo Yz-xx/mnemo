@@ -1,6 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { ChatOllama } from '@langchain/ollama';
-import type { AppConfig } from '../config.js';
+import type { AppConfig } from '../configuration/config.js';
 
 /**
  * 图片理解能力：对话模型是纯文本模型，看不到图，

@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { currentUserId } from '../auth/middleware.js';
-import type { AppDependencies } from '../dependencies.js';
-import { ERROR_MESSAGE } from '../messages.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
+import { ERROR_MESSAGE } from '../configuration/messages.js';
 
 /** 会话管理接口：全部按当前登录用户隔离 */
 export function createConversationRouter({

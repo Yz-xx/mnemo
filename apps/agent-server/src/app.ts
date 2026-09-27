@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Express } from 'express';
-import type { AppDependencies } from './dependencies.js';
+import type { AppDependencies } from './configuration/dependencies.js';
 import { allowCors } from './middleware/cors.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createRequestLog } from './middleware/requestLog.js';

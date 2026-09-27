@@ -3,7 +3,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { currentUserId } from '../auth/middleware.js';
-import type { AppDependencies } from '../dependencies.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
 import { detectUploadType } from '../files/type.js';
 import { createUploadMiddleware } from '../middleware/upload.js';
 

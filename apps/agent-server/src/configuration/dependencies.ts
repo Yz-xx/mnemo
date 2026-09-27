@@ -1,11 +1,11 @@
 import type { Logger } from '@repo/logger';
-import type { SessionStore } from './auth/sessionStore.js';
-import type { UserStore } from './auth/userStore.js';
+import type { SessionStore } from '../auth/sessionStore.js';
+import type { UserStore } from '../auth/userStore.js';
 import type { AppConfig } from './config.js';
-import type { ConversationStore } from './conversation/store.js';
-import type { FileStore } from './files/store.js';
-import type { AgentService } from './llm/agent.js';
-import type { KnowledgeStore } from './rag/store.js';
+import type { ConversationStore } from '../conversation/store.js';
+import type { FileStore } from '../files/store.js';
+import type { AgentService } from '../llm/agent.js';
+import type { KnowledgeStore } from '../rag/store.js';
 
 /**
  * 应用运行期依赖集合：由组合根 index.ts 统一装配后注入路由层。

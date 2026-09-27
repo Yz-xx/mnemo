@@ -2,8 +2,8 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { currentUserId } from '../auth/middleware.js';
-import type { AppDependencies } from '../dependencies.js';
-import { ERROR_MESSAGE } from '../messages.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
+import { ERROR_MESSAGE } from '../configuration/messages.js';
 import { requestLogger } from '../middleware/requestLog.js';
 import { streamChatReply } from '../services/chatStream.js';
 

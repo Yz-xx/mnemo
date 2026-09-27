@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import { createRequireAuth } from '../auth/middleware.js';
-import type { AppDependencies } from '../dependencies.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
 import { createAuthRouter } from './auth.js';
 import { createChatRouter } from './chat.js';
 import { createConversationRouter } from './conversations.js';

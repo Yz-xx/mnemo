@@ -7,7 +7,7 @@ import {
   describeEmbeddingEndpoint,
   describeEmbeddingModel,
   loadConfig,
-} from './config.js';
+} from './configuration/config.js';
 import { ConversationStore } from './conversation/store.js';
 import { createMysqlPool } from './db/pool.js';
 import { ensureSchema } from './db/schema.js';

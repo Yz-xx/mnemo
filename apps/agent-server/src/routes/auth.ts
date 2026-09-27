@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
-import type { AppDependencies } from '../dependencies.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
 import { parseCredentials } from '../auth/credentials.js';
 import { createRequireAuth, currentToken, currentUserId } from '../auth/middleware.js';
 import type { SessionStore } from '../auth/sessionStore.js';
 import type { UserRecord } from '../auth/userStore.js';
-import { ERROR_MESSAGE } from '../messages.js';
+import { ERROR_MESSAGE } from '../configuration/messages.js';
 import { requestLogger } from '../middleware/requestLog.js';
 
 /** 签发令牌并组装响应体；密码等敏感字段不会出现在响应中 */

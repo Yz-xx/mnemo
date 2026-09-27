@@ -9,6 +9,10 @@ import type { AgentService } from '../llm/agent.js';
 /** 出参摘要保留的回复开头长度：足以判断回答是否切题，又不至于把整篇回答写进日志 */
 const ANSWER_PREVIEW = 200;
 
+/** 集合转数组：空集合给 undefined 而非空数组（落库写 NULL、日志不出现空串） */
+const toOptionalList = (values: Set<string>): string[] | undefined =>
+  values.size > 0 ? [...values] : undefined;
+
 /** SSE 响应头：禁用缓存与缓冲，保证增量内容即时到达客户端 */
 function openEventStream(res: Response): void {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -84,8 +88,8 @@ export async function streamChatReply(input: {
   const persistAnswer = async (): Promise<void> => {
     if (answerSaved || !answer.trim()) return;
     await conversations.append(userId, conversation.id, 'assistant', answer, {
-      tools: usedTools.size > 0 ? [...usedTools] : undefined,
-      sources: usedSources.size > 0 ? [...usedSources] : undefined,
+      tools: toOptionalList(usedTools),
+      sources: toOptionalList(usedSources),
     });
     answerSaved = true;
   };
@@ -122,8 +126,8 @@ export async function streamChatReply(input: {
       answerLength: answer.length,
       // SSE 不走 res.json，出参摘要须在此记录，否则流式接口的回复内容无从追溯
       answerPreview: answer.length > 0 ? preview(answer, ANSWER_PREVIEW) : undefined,
-      tools: usedTools.size > 0 ? [...usedTools].join(',') : undefined,
-      sources: usedSources.size > 0 ? [...usedSources].join(',') : undefined,
+      tools: toOptionalList(usedTools)?.join(','),
+      sources: toOptionalList(usedSources)?.join(','),
     });
     send({
       type: 'done',

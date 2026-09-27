@@ -8,15 +8,15 @@ import {
 import type { BaseMessage, BaseMessageChunk } from '@langchain/core/messages';
 import { createAgent } from 'langchain';
 import { toErrorMessage } from '@repo/shared';
-import { describeChatEndpoint, describeChatModel } from '../config.js';
-import { describeConnectionError } from '../errors.js';
+import { describeChatEndpoint, describeChatModel } from '../configuration/config.js';
+import { describeConnectionError } from '../configuration/errors.js';
 import { createChatModel } from './model.js';
 import { createTools, readAttachmentText } from './tools.js';
 import type { FileSource, GeneratedFileRef } from './tools.js';
 import { createVisionReader } from './vision.js';
 import type { VisionReader } from './vision.js';
 import { SYSTEM_PROMPT } from './prompt.js';
-import type { AppConfig } from '../config.js';
+import type { AppConfig } from '../configuration/config.js';
 import type { AgentStreamEvent } from '@repo/reusable';
 import type { StoredMessage } from '../conversation/types.js';
 import type { Logger } from '@repo/logger';

@@ -1,7 +1,7 @@
 import { ChatOllama, OllamaEmbeddings } from '@langchain/ollama';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import type { Embeddings } from '@langchain/core/embeddings';
-import type { AppConfig } from '../config.js';
+import type { AppConfig } from '../configuration/config.js';
 
 /** 对话模型工厂：通过 LLM_PROVIDER 在本地 Ollama 与线上 DeepSeek 之间切换 */
 export function createChatModel(config: AppConfig): ChatOllama | ChatOpenAI {

@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { toErrorMessage } from '@repo/shared';
 import { currentUserId } from '../auth/middleware.js';
-import type { AppDependencies } from '../dependencies.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
 import { requestLogger } from '../middleware/requestLog.js';
 import type { KnowledgeScope, KnowledgeStore } from '../rag/store.js';
 import { addDocument } from '../services/knowledge.js';

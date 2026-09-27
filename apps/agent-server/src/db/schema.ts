@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 import type { Connection, RowDataPacket } from 'mysql2/promise';
-import type { MysqlConfig } from '../config.js';
+import type { MysqlConfig } from '../configuration/config.js';
 
 /** 建表语句：全部使用 IF NOT EXISTS，可重复执行 */
 const CREATE_TABLES = [

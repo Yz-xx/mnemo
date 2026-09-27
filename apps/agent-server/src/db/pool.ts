@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 import type { Pool } from 'mysql2/promise';
-import type { MysqlConfig } from '../config.js';
+import type { MysqlConfig } from '../configuration/config.js';
 
 /** 创建连接池：复用连接，避免每次查询都重新握手 */
 export function createMysqlPool(config: MysqlConfig): Pool {

@@ -128,7 +128,13 @@
 .chip--source {
   border-color: var(--gold-line-strong);
   background: var(--accent-soft);
-  color: var(--accent);
+  // 文字取 accent-strong 而非 accent：亮色下 accent 叠软金底不足 4.5:1（11px 小字的下限），
+  // accent-strong 在两套主题下都有余量。此处刻意不写具体比值——底色随消息所处的容器背景变化，写死必然失准
+  color: var(--accent-strong);
+  // 文档名长短不可控，要允许标签内折行：用 anywhere 而非 break-word，
+  // 只有前者会把 min-content 一并压小，作为 flex 子项的标签才真折得动
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 // 生成的文件可点击保存：按钮外观沿用标签，只在悬停时提示可交互

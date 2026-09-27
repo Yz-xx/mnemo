@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { SERVICE_NAME, describeChatModel } from '../config.js';
-import type { AppConfig } from '../config.js';
-import type { AppDependencies } from '../dependencies.js';
+import { SERVICE_NAME, describeChatModel } from '../configuration/config.js';
+import type { AppConfig } from '../configuration/config.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
 
 /** 健康检查响应体：字段与 backend-design 第 3 章的约定一一对应 */
 export interface HealthPayload {

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
-import { ERROR_MESSAGE } from '../messages.js';
+import { ERROR_MESSAGE } from '../configuration/messages.js';
 
 /**
  * 兜底错误处理：避免异常导致连接悬挂，

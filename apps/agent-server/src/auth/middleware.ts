@@ -1,6 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
-import { ERROR_MESSAGE } from '../messages.js';
+import { ERROR_MESSAGE } from '../configuration/messages.js';
 import type { SessionStore } from './sessionStore.js';
 
 /** 从 Authorization: Bearer <token> 中取出令牌 */
