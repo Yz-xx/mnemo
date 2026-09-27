@@ -3,6 +3,7 @@ import type { SessionStore } from './auth/sessionStore.js';
 import type { UserStore } from './auth/userStore.js';
 import type { AppConfig } from './config.js';
 import type { ConversationStore } from './conversation/store.js';
+import type { FileStore } from './files/store.js';
 import type { AgentService } from './llm/agent.js';
 import type { KnowledgeStore } from './rag/store.js';
 
@@ -15,6 +16,7 @@ export interface AppDependencies {
   logger: Logger;
   agent: AgentService;
   conversations: ConversationStore;
+  files: FileStore;
   knowledge: KnowledgeStore;
   users: UserStore;
   sessions: SessionStore;

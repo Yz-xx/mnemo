@@ -86,7 +86,7 @@
     border-color @ease-quick,
     color @ease-quick;
 
-  &:hover {
+  &:hover:not(:disabled) {
     border-color: var(--gold-line);
     background: var(--bg-elevated);
     color: var(--accent);
@@ -95,13 +95,31 @@
   &:focus-visible {
     .focus-ring();
   }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  // 描边变体：静止即保留一圈细金边，悬停只提亮线条与图标、不加底色。
+  // 供需要与相邻控件在视觉分量上对等的图标按钮使用（如输入条两端的圆形按钮）
+  &--outline {
+    border-color: var(--gold-line);
+
+    &:hover:not(:disabled) {
+      border-color: var(--gold-line-strong);
+      background: transparent;
+      color: var(--accent);
+    }
+  }
 }
 
 .btn {
   // 次级按钮也走金线镶边，只是线条更弱；与主按钮同一套语汇，差在材质
   .gold-frame(var(--gold-line));
   padding: 9px 20px;
-  border-radius: @radius-sm;
+  // 按钮一律做成胶囊：与输入条两端的圆形 / 胶囊控件收在同一套曲率里
+  border-radius: @radius-pill;
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 14px;

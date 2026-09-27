@@ -34,7 +34,7 @@ apps/agent-client/src/
 
 ## 3. IPC 契约
 
-- 通道命名统一 `域:动作`，现有通道：`app:info`、`settings:get`、`settings:save`、`settings:get-sync`、`window:control`。
+- 通道命名统一 `域:动作`，现有通道：`app:info`、`settings:get`、`settings:save`、`settings:get-sync`、`dialog:open`（选择附件）、`dialog:save`（导出落盘）、`window:control`。
 - 增删 IPC 必须三处同步：`main/ipc.ts` 注册 → `preload/index.ts` 白名单暴露 → `preload/types.ts` 类型声明。
 - 预加载只暴露白名单方法，禁止暴露 `ipcRenderer` 本体或任意通道调用入口。
 - 首帧就需要确定的设置用同步通道（`settings:get-sync` → `initialSettings`），其余一律异步。

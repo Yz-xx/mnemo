@@ -7,8 +7,46 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   createdAt: string;
-  /** 仅前端展示：本轮回复过程中触发的工具调用轨迹 */
-  steps?: string[];
+  /**
+   * 仅前端展示：本轮回复过程中触发的工具调用轨迹。
+   * 流式对话中由 SSE tool 事件累积（带 running 状态）；
+   * 切换历史会话时由服务端返回的 tools 字段还原为已完成状态。
+   */
+  steps?: ChatStep[];
+  /**
+   * 服务端持久化的工具调用轨迹：随助手回复一起落库，
+   * 历史回看时由会话层转成 steps 渲染，标签才不会在切换后消失。
+   */
+  tools?: string[];
+  /**
+   * 用户提问附带的文件名：随提问一起落库，
+   * 切换历史会话时从服务端返回，回看这条消息能看出回答基于哪些文件。
+   * 流式对话中由前端在发送时本地填入，落库后以服务端值为准。
+   */
+  attachments?: string[];
+  /**
+   * 助手本轮检索命中的知识库文档名：流式对话中由 SSE source 事件累积，
+   * 并随回复落库，切换历史会话时从服务端返回，回看这条回复仍能看到出处。
+   * 口径是本轮检索命中的文档，而非模型实际引用的条目——后者服务端无从确知。
+   */
+  sources?: string[];
+  /** 智能体本轮生成的导出文件，随 `file` 流事件下发，点击即可保存到本地 */
+  files?: GeneratedFileInfo[];
+}
+
+/** 助手回复过程中的一次工具调用：执行中与已完成共用同一条记录 */
+export interface ChatStep {
+  /** 工具名，与后端 tool 事件的 name 一致 */
+  name: string;
+  /** 是否仍在执行：为真时标签渲染加载指示 */
+  running: boolean;
+}
+
+/** 智能体生成的导出文件：只有引用信息，内容由客户端按需从后端取回 */
+export interface GeneratedFileInfo {
+  fileId: string;
+  name: string;
+  size: number;
 }
 
 /** 会话列表项（不含完整消息体，减少传输量） */
@@ -42,4 +80,16 @@ export interface KnowledgeDocument {
   title: string;
   chunks: number;
   createdAt: string;
+}
+
+/** 待发送的附件：选中后立即上传，拿到服务端 ID 才能在发送消息时引用 */
+export interface ChatAttachment {
+  /** 本地临时 ID：上传失败或未完成时服务端 ID 尚不存在，列表渲染与移除都靠它 */
+  key: string;
+  name: string;
+  size: number;
+  /** 服务端文件 ID；为空表示仍在上传中或上传已失败 */
+  fileId?: string;
+  /** 上传失败原因；为空表示一切正常 */
+  error?: string;
 }

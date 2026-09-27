@@ -31,6 +31,29 @@ export interface AppInfo {
   platform: string;
 }
 
+/**
+ * 用户在系统文件对话框中选中的附件。
+ * 字节随桥接一并回传：渲染进程没有读本地文件的能力，只有拿到原始内容才能构造上传表单，
+ * 而路径本身在渲染侧毫无用处，传了反而多暴露一份本机目录结构。
+ */
+export interface SelectedFile {
+  /** 原始文件名，用于界面展示与上传时的表单文件名 */
+  name: string;
+  /** 字节数，用于界面展示 */
+  size: number;
+  bytes: Uint8Array;
+}
+
+/**
+ * 需要写到本地的导出文件：字节由渲染进程从后端下载得到，主进程负责落盘。
+ * 与 SelectedFile 同构但语义相反：一个是读进来的，一个是写出去的，故不复用同一类型。
+ */
+export interface ExportedFile {
+  /** 建议文件名（含扩展名），作为系统保存对话框的默认名 */
+  name: string;
+  bytes: Uint8Array;
+}
+
 /** 主进程通过 contextBridge 暴露给渲染进程的能力 */
 export interface DesktopApi {
   /** 预加载阶段同步读取的设置快照，用于在首帧渲染前确定主题 */
@@ -38,6 +61,10 @@ export interface DesktopApi {
   getAppInfo(): Promise<AppInfo>;
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: Partial<AppSettings>): Promise<AppSettings>;
+  /** 打开系统文件对话框挑选附件；用户取消时返回 null */
+  openFile(): Promise<SelectedFile | null>;
+  /** 打开系统保存对话框写出导出文件，返回最终写入路径；用户取消时返回 null */
+  saveFile(file: ExportedFile): Promise<string | null>;
   windowControl(action: WindowAction): void;
 }
 

@@ -32,12 +32,28 @@ export async function streamChatReply(input: {
   conversationId: string | undefined;
   /** 本轮用户提问 */
   content: string;
+  /** 本轮附带的文件 ID：已由路由校验归属，工具据此判断可读范围 */
+  fileIds: string[];
+  /** 本轮附带的文件名：随提问一起落库，历史回看时还原附件标签 */
+  attachmentNames: string[];
 }): Promise<void> {
-  const { res, agent, conversations, logger, userId, conversationId, content } = input;
+  const {
+    res,
+    agent,
+    conversations,
+    logger,
+    userId,
+    conversationId,
+    content,
+    fileIds,
+    attachmentNames,
+  } = input;
 
   // 先落库提问：新会话在这里创建，本轮若没有产出才好整体回滚。
   // 必须在开启 SSE 之前做，落库失败仍按普通请求返回 500，而不是已 flush 的事件流
-  const conversation = await conversations.append(userId, conversationId, 'user', content);
+  const conversation = await conversations.append(userId, conversationId, 'user', content, {
+    attachments: attachmentNames.length > 0 ? attachmentNames : undefined,
+  });
   const log = logger.child({ userId, conversationId: conversation.id });
   const startedAt = Date.now();
   openEventStream(res);
@@ -61,17 +77,23 @@ export async function streamChatReply(input: {
   // 本轮正文是否已落库：正常收尾与中断路径都会尝试落库，用标志避免写重复
   let answerSaved = false;
   const usedTools = new Set<string>();
+  // 本轮检索命中的知识库文档名：随回复一起落库，历史回看时还原来源标签
+  const usedSources = new Set<string>();
 
-  /** 仅在有正文时落库，避免保存空回复 */
+  /** 仅在有正文时落库，避免保存空回复；工具轨迹与检索来源一并落库，历史回看时还原标签 */
   const persistAnswer = async (): Promise<void> => {
     if (answerSaved || !answer.trim()) return;
-    await conversations.append(userId, conversation.id, 'assistant', answer);
+    await conversations.append(userId, conversation.id, 'assistant', answer, {
+      tools: usedTools.size > 0 ? [...usedTools] : undefined,
+      sources: usedSources.size > 0 ? [...usedSources] : undefined,
+    });
     answerSaved = true;
   };
 
   try {
     for await (const event of agent.stream(conversation.messages, {
       userId,
+      fileIds,
       signal: controller.signal,
       // 下传请求级子日志：工具内部的检索日志会自带 requestId 与 conversationId
       logger: log,
@@ -84,9 +106,13 @@ export async function streamChatReply(input: {
       }
       if (event.type === 'token') answer += event.content;
       if (event.type === 'tool') {
-        if (event.status === 'start') usedTools.add(event.name);
+        // 无论 start 还是 end 都记入：某些情况下 start 分片可能丢失，
+        // 只在 start 时 add 会让历史回看漏掉该工具标签
+        usedTools.add(event.name);
         log.debug('工具调用', { tool: event.name, status: event.status });
       }
+      // 检索来源随回复一起落库：切换历史会话时由服务端回读，标签不会凭空消失
+      if (event.type === 'source') usedSources.add(event.name);
       send(event);
     }
     await persistAnswer();
@@ -97,6 +123,7 @@ export async function streamChatReply(input: {
       // SSE 不走 res.json，出参摘要须在此记录，否则流式接口的回复内容无从追溯
       answerPreview: answer.length > 0 ? preview(answer, ANSWER_PREVIEW) : undefined,
       tools: usedTools.size > 0 ? [...usedTools].join(',') : undefined,
+      sources: usedSources.size > 0 ? [...usedSources].join(',') : undefined,
     });
     send({
       type: 'done',

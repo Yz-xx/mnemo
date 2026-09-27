@@ -62,6 +62,9 @@ export function useKnowledgePanel(props: KnowledgePanelProps): KnowledgePanelCon
   async function removeDocument(id: string): Promise<void> {
     try {
       await createApi().deleteDocument(id);
+      // 删除后必须清掉上一次操作的提示：否则列表已被清空，「文档已入库」还挂在上方，
+      // 同时会把「知识库为空」的空态挡住，让人误以为里面还有内容
+      notice.value = '';
       await loadDocuments();
     } catch (error) {
       notice.value = toErrorMessage(error);

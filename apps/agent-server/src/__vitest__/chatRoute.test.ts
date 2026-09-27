@@ -2,11 +2,18 @@ import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import type { Request, Response } from 'express';
 import { createLogger } from '@repo/logger';
+import { HTTP_STATUS } from '@repo/reusable';
 import type { AgentStreamEvent, ChatStreamEvent } from '@repo/reusable';
 import { handleChatMessage } from '../routes/chat.js';
 import type { Logger } from '@repo/logger';
-import type { Conversation, ConversationSummary, MessageRole } from '../conversation/types.js';
+import type {
+  Conversation,
+  ConversationSummary,
+  MessageMeta,
+  MessageRole,
+} from '../conversation/types.js';
 import type { ConversationStore } from '../conversation/store.js';
+import type { FileStore, StoredFile } from '../files/store.js';
 import type { AgentService } from '../llm/agent.js';
 
 const USER_ID = 1;
@@ -33,6 +40,7 @@ class FakeConversations {
     id: string | undefined,
     role: MessageRole,
     content: string,
+    meta: MessageMeta = {},
   ): Promise<Conversation> {
     const now = new Date().toISOString();
     const conversation: Conversation = id
@@ -48,6 +56,10 @@ class FakeConversations {
       id: `m-${conversation.messages.length + 1}`,
       role,
       content,
+      // 仅在有值时落该字段，与真实存储「空值写 null」的行为一致
+      ...(meta.tools?.length ? { tools: meta.tools } : {}),
+      ...(meta.attachments?.length ? { attachments: meta.attachments } : {}),
+      ...(meta.sources?.length ? { sources: meta.sources } : {}),
       createdAt: now,
     });
     // 首条用户消息即会话标题，与真实存储的 buildTitle 行为保持一致
@@ -108,28 +120,59 @@ class FakeHttpResponse extends EventEmitter {
   }
 }
 
-/** 按脚本产出流事件的假智能体；传入 Error 时模拟对话模型服务未启动 */
-function fakeAgent(script: AgentStreamEvent[] | Error): AgentService {
+/**
+ * 按脚本产出流事件的假智能体；传入 Error 时模拟对话模型服务未启动。
+ * onOptions 用于观察透传给智能体的调用参数（如附件 ID）。
+ */
+function fakeAgent(
+  script: AgentStreamEvent[] | Error,
+  onOptions?: (options: { fileIds: string[] }) => void,
+): AgentService {
   return {
-    async *stream() {
+    async *stream(_history: unknown, options: { fileIds: string[] }) {
+      onOptions?.(options);
       if (script instanceof Error) throw script;
       for (const event of script) yield event;
     },
   } as unknown as AgentService;
 }
 
-/** 假依赖集合：会话存储与智能体均为替身，用于隔离数据库与模型服务 */
+/** 内存版文件存储：只维护“当前用户名下有哪些文件”，用于验证附件归属校验 */
+class FakeFiles {
+  constructor(private readonly owned: string[] = []) {}
+
+  async list(_userId: number, ids: string[]): Promise<StoredFile[]> {
+    return ids
+      .filter((id) => this.owned.includes(id))
+      .map((id) => ({
+        id,
+        name: `${id}.docx`,
+        ext: 'docx',
+        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 1024,
+        createdAt: '2026-09-27T00:00:00.000Z',
+      }));
+  }
+}
+
+/** 假依赖集合：会话存储、文件存储与智能体均为替身，用于隔离数据库与模型服务 */
 function fakeDeps(
   conversations: FakeConversations,
   agent: AgentService,
+  files: FakeFiles = new FakeFiles(),
 ): Parameters<typeof handleChatMessage>[0] {
   return {
     agent,
     conversations: conversations as unknown as ConversationStore,
+    files: files as unknown as FileStore,
   };
 }
 
-function fakeRequest(body: { message: string; conversationId?: string }): Request {
+function fakeRequest(body: {
+  message: string;
+  conversationId?: string;
+  fileIds?: unknown;
+}): Request {
   return { body } as unknown as Request;
 }
 
@@ -261,6 +304,30 @@ describe('handleChatMessage', () => {
     });
   });
 
+  it('检索来源既推给客户端，也随回复落库以便历史回看', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      fakeDeps(
+        conversations,
+        fakeAgent([
+          { type: 'tool', name: 'search_knowledge_base', status: 'end' },
+          { type: 'source', name: '公共手册' },
+          { type: 'token', content: '据知识库，苹果是……' },
+        ]),
+      ),
+      fakeRequest({ message: '苹果是什么？' }),
+      res as unknown as Response,
+    );
+
+    // 来源事件原样转发给客户端，界面上据此渲染来源标签
+    expect(res.events).toContainEqual({ type: 'source', name: '公共手册' });
+    const [summary] = await conversations.list();
+    const saved = await conversations.get(USER_ID, summary.id);
+    expect(saved?.messages.at(-1)?.sources).toEqual(['公共手册']);
+  });
+
   it('既有会话续发失败时保留原有记录', async () => {
     const conversations = new FakeConversations();
     // 先造一轮完整对话，模拟用户已有历史记录
@@ -276,5 +343,37 @@ describe('handleChatMessage', () => {
 
     const saved = await conversations.get(USER_ID, id);
     expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
+  });
+
+  it('附件不属于当前用户时返回 404，且不进入流式响应', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      fakeDeps(conversations, fakeAgent([]), new FakeFiles(['f-1'])),
+      fakeRequest({ message: '看看这个文件', fileIds: ['f-2'] }),
+      res as unknown as Response,
+    );
+
+    expect(res.statusCode).toBe(HTTP_STATUS.NOT_FOUND);
+    expect(res.events).toEqual([]);
+    await expect(conversations.list()).resolves.toEqual([]);
+  });
+
+  it('附件 ID 去重后透传给智能体，限定工具可读范围', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+    let received: string[] = [];
+    const agent = fakeAgent([], (options) => {
+      received = options.fileIds;
+    });
+
+    await handleChatMessage(
+      fakeDeps(conversations, agent, new FakeFiles(['f-1'])),
+      fakeRequest({ message: '看看这个文件', fileIds: ['f-1', 'f-1'] }),
+      res as unknown as Response,
+    );
+
+    expect(received).toEqual(['f-1']);
   });
 });

@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import { DEFAULT_BACKEND_URL, readSettings, saveSettings } from '../api/bridge';
+import { DEFAULT_BACKEND_URL, openFile, readSettings, saveFile, saveSettings } from '../api/bridge';
 import {
   AgentApi,
   SESSION_EXPIRED_MESSAGE,
@@ -8,7 +8,7 @@ import {
   type ChatStreamEvent,
   type HealthInfo,
 } from '../api/client';
-import type { ChatMessage, ConversationSummary } from '../types';
+import type { ChatAttachment, ChatMessage, ConversationSummary, GeneratedFileInfo } from '../types';
 import { useAuth } from './useAuth';
 
 export type ConnectionState = 'idle' | 'online' | 'offline';
@@ -28,6 +28,8 @@ export function useChat() {
   const streaming = ref(false);
   const loadingConversation = ref(false);
   const errorMessage = ref('');
+  /** 待发送附件：选中即上传，发送成功后随本轮一起清空 */
+  const attachments = ref<ChatAttachment[]>([]);
 
   let controller: AbortController | null = null;
 
@@ -58,6 +60,7 @@ export function useChat() {
     activeId.value = null;
     conversations.value = [];
     messages.value = [];
+    attachments.value = [];
     errorMessage.value = '';
     connection.value = 'idle';
     health.value = null;
@@ -99,7 +102,16 @@ export function useChat() {
     try {
       const detail = await api.value.getConversation(id);
       activeId.value = detail.id;
-      messages.value = detail.messages;
+      // 服务端存的是工具名数组（tools），渲染层统一用 steps（已完成态）展示，
+      // 这里做一次转换，切换历史会话后工具标签就不会凭空消失
+      messages.value = detail.messages.map((message) =>
+        message.tools?.length
+          ? {
+              ...message,
+              steps: message.tools.map((name) => ({ name, running: false })),
+            }
+          : message,
+      );
     } catch (error) {
       await handleError(error);
     } finally {
@@ -117,12 +129,60 @@ export function useChat() {
     }
   }
 
+  /** 更新指定附件的部分字段：整表替换触发响应式，避免逐项改对象时漏掉更新 */
+  function patchAttachment(key: string, patch: Partial<ChatAttachment>): void {
+    attachments.value = attachments.value.map((item) =>
+      item.key === key ? { ...item, ...patch } : item,
+    );
+  }
+
+  /** 选择附件：选中后立刻上传换取服务端 ID，免得等到发送时才发现类型不支持 */
+  async function addAttachment(): Promise<void> {
+    const selected = await openFile();
+    if (!selected) return;
+
+    const attachment: ChatAttachment = {
+      key: crypto.randomUUID(),
+      name: selected.name,
+      size: selected.size,
+    };
+    attachments.value = [...attachments.value, attachment];
+    try {
+      const stored = await api.value.uploadFile(selected);
+      patchAttachment(attachment.key, { fileId: stored.id });
+    } catch (error) {
+      // 失败原因留在该条附件上：用户可以单独把它移除，不影响其余附件
+      if (isUnauthorized(error)) {
+        await handleUnauthorized();
+        return;
+      }
+      patchAttachment(attachment.key, { error: toErrorMessage(error) });
+    }
+  }
+
+  function removeAttachment(key: string): void {
+    attachments.value = attachments.value.filter((item) => item.key !== key);
+  }
+
   /** 发送消息并以流式方式增量渲染回复 */
   async function sendMessage(text: string): Promise<void> {
     const content = text.trim();
     if (!content || !canSend.value) return;
 
-    messages.value.push(createMessage('user', content));
+    // 只有上传成功、拿到服务端 ID 的附件才随本轮发出；上传中或失败的条目留在输入区由用户处理
+    const ready = attachments.value.filter((item) => item.fileId);
+    const fileIds = ready.map((item) => item.fileId as string);
+
+    messages.value.push(
+      createMessage(
+        'user',
+        content,
+        ready.map((item) => item.name),
+      ),
+    );
+    // 附件已随本轮提交给后端，输入区只清掉这些已就绪的条目，
+    // 上传中或上传失败的仍留在输入区由用户处理，不能被无声吞掉
+    attachments.value = attachments.value.filter((item) => !item.fileId);
     // 预先插入空的助手消息，后续 token 直接追加到该条上
     const assistant = ref(createMessage('assistant', ''));
     messages.value.push(assistant.value);
@@ -136,7 +196,7 @@ export function useChat() {
     try {
       await consumeChatStream(
         api.value.streamChat(
-          { conversationId: activeId.value ?? undefined, message: content },
+          { conversationId: activeId.value ?? undefined, message: content, fileIds },
           currentController.signal,
         ),
         assistant.value,
@@ -162,6 +222,14 @@ export function useChat() {
     } finally {
       streaming.value = false;
       controller = null;
+      // 中断或异常时可能收不到工具的 end 事件，把仍在执行中的标签就地定格，
+      // 否则转圈会一直留在界面上，看起来像还没结束
+      const steps = assistant.value.steps;
+      if (steps?.some((step) => step.running)) {
+        assistant.value.steps = steps.map((step) =>
+          step.running ? { ...step, running: false } : step,
+        );
+      }
       if (!assistant.value.content) {
         messages.value = messages.value.filter((item) => item.id !== assistant.value.id);
       }
@@ -180,6 +248,19 @@ export function useChat() {
     connection.value = 'idle';
     await refreshHealth();
     await refreshConversations();
+  }
+
+  /**
+   * 保存智能体生成的导出文件：从后端取回字节后交主进程写盘。
+   * 用户在保存对话框里取消不算失败，静默结束即可。
+   */
+  async function saveGeneratedFile(file: GeneratedFileInfo): Promise<void> {
+    try {
+      const bytes = await api.value.downloadFile(file.fileId);
+      await saveFile({ name: file.name, bytes: new Uint8Array(bytes) });
+    } catch (error) {
+      await handleError(error);
+    }
   }
 
   /** 启动时读取本地设置并完成首次连接 */
@@ -201,6 +282,9 @@ export function useChat() {
     loadingConversation,
     errorMessage,
     canSend,
+    attachments,
+    addAttachment,
+    removeAttachment,
     init,
     reset,
     refreshHealth,
@@ -210,11 +294,23 @@ export function useChat() {
     selectConversation,
     removeConversation,
     updateBackendUrl,
+    saveGeneratedFile,
   };
 }
 
-function createMessage(role: ChatMessage['role'], content: string): ChatMessage {
-  return { id: crypto.randomUUID(), role, content, createdAt: new Date().toISOString() };
+function createMessage(
+  role: ChatMessage['role'],
+  content: string,
+  attachments?: string[],
+): ChatMessage {
+  return {
+    id: crypto.randomUUID(),
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+    // 无附件的消息不落该字段，省得每条消息都挂一个恒空的属性
+    ...(attachments?.length ? { attachments } : {}),
+  };
 }
 
 /** 消费流式事件时需要回传给会话层的副作用 */
@@ -240,8 +336,29 @@ async function consumeChatStream(
     if (event.type === 'token') {
       message.content += event.content;
     } else if (event.type === 'tool') {
-      const label = event.status === 'start' ? `调用工具 ${event.name}` : `完成 ${event.name}`;
-      message.steps = [...(message.steps ?? []), label];
+      const steps = message.steps ?? [];
+      if (event.status === 'start') {
+        // 先落一条进行中的标签：读文件这类慢工具要立刻给出可见反馈
+        message.steps = [...steps, { name: event.name, running: true }];
+      } else {
+        // 执行结束，把进行中的标签就地定格；后端对同名工具的 start 只推一次，
+        // 配不上时补一条已完成记录，这次调用才不会从前端凭空消失
+        const index = steps.findIndex((step) => step.running && step.name === event.name);
+        message.steps =
+          index === -1
+            ? [...steps, { name: event.name, running: false }]
+            : steps.map((step, i) => (i === index ? { ...step, running: false } : step));
+      }
+    } else if (event.type === 'file') {
+      // 生成的文件挂在助手消息上：客户端据此渲染下载入口，文件本体不随流传输
+      message.files = [
+        ...(message.files ?? []),
+        { fileId: event.fileId, name: event.name, size: event.size },
+      ];
+    } else if (event.type === 'source') {
+      // 检索来源挂在助手消息上：同一份文档被多次命中时只留一个标签
+      const sources = message.sources ?? [];
+      if (!sources.includes(event.name)) message.sources = [...sources, event.name];
     } else if (event.type === 'conversation') {
       handlers.onConversation(event.conversationId);
     } else if (event.type === 'done') {

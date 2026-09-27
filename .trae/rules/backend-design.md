@@ -67,17 +67,22 @@ apps/agent-server/src/
 - 编排集中在 `services/chatStream.ts` 的 `streamChatReply()`：落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话；`routes/chat.ts` 只负责参数校验（400）与会话归属校验（404）。
 - 落库提问必须在 `flushHeaders()` 之前完成，落库失败才能按普通请求返回 500，而不是已 flush 的事件流。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
-- 事件格式 `data: {...}\n\n`，`type` 取值 `conversation` / `token` / `tool` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）；`done` 携带 `conversationId` 与 `title`。
+- 事件格式 `data: {...}\n\n`，`type` 取值 `conversation` / `token` / `tool` / `source` / `file` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）；`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`（工具产出的导出文件在流末尾统一补推，客户端据此下载），`source` 携带 `{ name }`（检索命中的文档名）。
 - `conversation` 事件（携带 `conversationId`）必须在首个 token / tool 之前补推：新建会话「有产出才保留」与「客户端已知晓会话 ID」由此严格对齐，客户端不会记住一个随后会被回滚删除的会话。
 - 中断必须监听 `res.on('close')`（`req` 的 `close` 在请求体读取完成后即触发，会误中断流式响应），并用 `res.writableEnded` 排除正常结束；中断时通过 `AbortController` 停止模型推理。
 - 客户端主动中断不再回推 `error`；`finally` 中统一 `res.end()`。
 - 仅在答复正文非空时落库，避免保存空回复；中断与失败路径同样要把已产出的部分回复落库（用「本轮是否已落库」标志防重复写入，落库失败只 warn），否则用户已经看到的内容会在重开会话后消失。
 - 新建会话在本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止）时，必须连同刚写入的提问一起删除，否则列表会残留无回复记录、下次发起对话还会再建一条；已经开始产出内容的会话即便被中断也保留，避免丢掉用户刚发出的输入。已推送 `done` 的会话（含空回复）一律保留，避免前端已记住的 `conversationId` 失效。
+- 工具产出的结构化结果（导出文件、检索来源）经 `configurable` 上的收集器交回 Agent 层，再由 Agent 转成事件推送：这类信息服务端能确定地摆好，就不要指望模型在正文里自述——提示词层面的要求（如“引用知识库内容必须标注来源”）在小模型上遵循率撑不起主链路。
+- 检索来源在工具结束的同一时刻增量推送并按文档名去重，本轮随后被中断也不会丢掉已检索到的出处。
 
 ## 6. 数据层
 
-- 使用 `mysql2/promise`；连接池由 `db/pool.ts` 创建，建库与建表由 `db/schema.ts` 的 `ensureDatabase` / `ensureTables` 负责，`ensureSchema` 作为启动编排入口。
+- 消息元数据（`tools` / `attachments` / `sources`）与正文分开成列随消息一起落库，空值写 `null` 而非 `[]`；切换历史会话时按原样回读即可还原工具、附件与来源标签，不必把标签信息塞进正文让模型复述。
+- 使用 `mysql2/promise`；连接池由 `db/pool.ts` 创建，建库与建表由 `db/schema.ts` 的 `ensureDatabase` / `ensureTables` 负责，存量表的补列由 `ensureColumns` 负责，`ensureSchema` 作为启动编排入口。
 - 建表语句全部 `CREATE TABLE IF NOT EXISTS`，可重复执行；字符集 utf8mb4，时间列用 `DATETIME(3)`，必要处建联合索引与级联外键。
+- `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表，新增列必须在 `ensureColumns` 里做条件迁移（先查 `information_schema` 判断列是否存在，再决定是否 `ALTER`），整段必须幂等，重复执行不得报错。
+- 查 `information_schema` 时**必须给列起别名**（`SELECT column_name AS name`）：该视图的列定义名是大写 `COLUMN_NAME`，结果对象的键会跟着定义名走，按小写 `column_name` 取值恒为 `undefined`，会把「列已存在」误判成「列不存在」，进而对已有列重复 `ALTER TABLE` 报 `Duplicate column name`。
 - 查询一律参数化（`?` 占位），禁止字符串拼接 SQL；动态标识符用 `mysql.escapeId`。
 - 时间在应用层生成后写入，读取时统一转回 ISO 字符串。
 - 启动时惰性清理过期会话：事务内先删过期记录，再保留每个用户最新一条（自连接删除更早的会话）。
@@ -90,6 +95,9 @@ apps/agent-server/src/
 - 智能体由 `createAgent` + `streamMode: 'messages'` 构建，系统提示词统一维护在 `llm/prompt.ts`。
 - 工具实现在 `llm/tools.ts`，必须自校验入参并在非法时抛出中文错误；知识库检索按调用者可见性过滤，结果需带「来源」标注。
 - 模型与嵌入 provider 由 `config.ts` 决定（deepseek 走 `ChatOpenAI`，其余走 `ChatOllama`），业务代码不做 provider 判断。
+- 文件类工具（`list_files` / `read_file` / `write_file`）只认本轮附件：附件 ID 由路由层校验后经 `configurable.fileIds` 注入，模型编造出的 ID 读不到任何内容，越权读取他人文件不可能发生。
+- 图片附件没有可抽取的文字，交给 `llm/vision.ts` 的视觉模型转述成文字后再回填给对话模型；未配置视觉模型时必须返回可读提示，不允许模型凭文件名猜测图片内容。
+- 本轮附件在作答前由 `AgentService` 预读成文本注入对话（`readAttachmentText`：图片走视觉模型、其余走解析器），读到的内容直接摆在提问旁边，`read_file` 退为复核手段。不要依赖模型自行决定是否调用读文件工具：实测触发率随提问措辞波动，弱措辞下会连续多轮完全不读并编造内容。
 - 网络类异常统一转成可读提示（如 `fetch failed` → 「无法连接对话模型服务」）。
 
 ## 8. 配置与环境文件
@@ -99,6 +107,7 @@ apps/agent-server/src/
 - 配置按环境拆两份：`.env.development` 供 `pnpm dev`（`tsx watch --env-file`）、`.env.production` 供 `pnpm start`（`node --env-file`），走 Node 原生能力，不引入 dotenv 之类的加载库。
 - 系统环境变量优先级高于文件，真实密钥不入库，生产文件只写占位值并在注释中说明注入方式。
 - 路径类配置（如 `DATA_DIR`）写进 env 文件时必须用绝对路径，避免随启动目录漂移。
+- 可选能力用「留空即关闭」表达：如 `OLLAMA_VISION_MODEL` 留空时，图片理解按能力缺失处理（工具返回可读提示而不是报错），部署环境没装多模态模型也无需改代码。
 
 ## 9. ESM 与构建
 

@@ -8,9 +8,15 @@
 /**
  * 智能体自身产出的增量事件：由 LLM 层逐条 yield，服务端原样转发。
  * 单独拆出是因为服务端只负责转发这一类事件，其余事件由服务端自己产生。
+ * `file` 承载工具生成的导出文件：客户端据此提供下载入口，文件内容本身不进对话流。
+ * `source` 承载知识库检索命中的文档名：服务端从检索结果里直接取，不依赖模型在正文中标注
+ * （提示词层面早就要求「引用知识库内容必须标注来源」，但小模型遵循率撑不起主链路）。
  */
 export type AgentStreamEvent =
-  { type: 'token'; content: string } | { type: 'tool'; name: string; status: 'start' | 'end' };
+  | { type: 'token'; content: string }
+  | { type: 'tool'; name: string; status: 'start' | 'end' }
+  | { type: 'file'; fileId: string; name: string; size: number }
+  | { type: 'source'; name: string };
 
 /**
  * 一轮对话可能推送的全部事件。

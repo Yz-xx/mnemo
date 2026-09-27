@@ -45,10 +45,11 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 26px;
+  // 消息间距比原先更宽：去掉头像后，段落之间只能靠留白分出彼此
+  gap: 34px;
   overflow-y: auto;
-  padding-top: 32px;
-  padding-bottom: 32px;
+  padding-top: 44px;
+  padding-bottom: 44px;
   // 稳定滚动条会固定占用 10px，右内边距相应减少，正文右边界才能与顶栏、输入条对齐
   padding-right: ~'max(14px, calc((100% - @{content-max}) / 2 - 10px))';
   // flex 子项默认 min-height:auto 会拒绝收缩，导致滚动条落到 body 上
@@ -119,15 +120,17 @@
   }
 }
 
-// 输入条：文本域与操作按钮共用一个外框，聚焦时整条一起高亮，
-// 避免出现“一个方框加一个孤零零按钮”的拼接感。
+// 输入条内控件的统一高度：附件胶囊与发送圆钮取同一数值，同一条操作行里才对得齐
+@composer-control: 32px;
+
+// 输入条：正文独占上方一行，控件收进下方操作行；容器曲率明显大于内部胶囊控件，
+// 形成「嵌在凹槽里」的层次，而不是一圈边框加一排按钮的拼接感。
 .composer {
   .gold-frame(var(--gold-line));
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  padding: 10px 10px 10px 16px;
-  border-radius: @radius-lg;
+  flex-direction: column;
+  padding: 12px 12px 10px;
+  border-radius: @radius-xl;
   background: var(--bg-panel);
   transition:
     border-color @ease-quick,
@@ -139,15 +142,16 @@
 }
 
 .composer__input {
-  flex: 1;
+  // 铺满容器宽度，上下自带留白：正文与操作行之间的间距不靠容器的 gap 撑开
+  width: 100%;
   min-width: 0;
-  padding: 5px 0;
+  padding: 4px 6px 10px;
   border: none;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 15px;
+  line-height: 1.7;
   resize: none;
   // 聚焦态由外层 .composer 统一表达
   outline: none;
@@ -158,12 +162,144 @@
   }
 }
 
-// 输入条内的按钮：胶囊形，与外框圆角形成内嵌关系。
-// .btn 本体是全局公共控件，这里只覆写尺寸相关的几项
-.composer .btn {
-  padding: 9px 22px;
-  border-radius: @radius-pill;
+// 待发送附件：贴在输入条上方，与输入条共享左右边界
+.composer__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chip--file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+// 文件名可能很长，省略号收尾，附件行才不会把输入条顶变形
+.chip__name {
+  overflow: hidden;
+  max-width: 240px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 上传态与失败原因共用同一位置，失败时换成警告色
+.chip__state {
+  color: var(--text-faint);
+
+  &--error {
+    color: var(--danger);
+  }
+}
+
+.chip__remove {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
   font-size: 13px;
-  // 两字按钮加一点字距，避免拥挤
-  letter-spacing: @tracking-button;
+  line-height: 1;
+  cursor: pointer;
+  transition: color @ease-quick;
+
+  &:hover {
+    color: var(--danger);
+  }
+}
+
+// 操作行：附件在左、当前动作在右，两端各收一个控件
+.composer__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+// 附件入口做成「图标 + 文字」的胶囊，与右侧纯图标的圆形发送钮形成一宽一窄的收尾
+.composer__attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: @composer-control;
+  padding: 0 14px 0 12px;
+  border: 1px solid transparent;
+  border-radius: @radius-pill;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: @tracking-control;
+  transition:
+    background-color @ease-quick,
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover:not(:disabled) {
+    border-color: var(--gold-line);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+// 发送钮：整套界面里唯一的金色实体，做成圆形是为了让它收在操作行末端而不拖出一条边
+.composer__send {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: @composer-control;
+  height: @composer-control;
+  padding: 0;
+  border: 1px solid var(--gold-line-strong);
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+  // 顶亮边 + 底部暗边由 --bevel 提供：与主按钮同一套金箔材质
+  box-shadow: var(--bevel);
+  transition:
+    filter @ease-quick,
+    border-color @ease-quick,
+    opacity @ease-quick;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent-strong);
+    filter: brightness(1.07);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  // 停止：留形不留金。金色在整套界面里始终代表「可以发送 / 前进」，
+  // 中断这个进行中的动作改用危险色，语义才不会与发送钮混为一谈
+  &--stop {
+    border-color: transparent;
+    background: var(--danger);
+    box-shadow: var(--engrave);
+
+    &:hover:not(:disabled) {
+      border-color: transparent;
+      filter: brightness(1.08);
+    }
+  }
+}
+
+// 两个圆形 / 胶囊控件内的图标共用同一尺寸，视觉分量才对等
+.composer__icon {
+  width: 17px;
+  height: 17px;
 }

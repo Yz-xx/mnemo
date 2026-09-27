@@ -6,6 +6,7 @@
 - 后端：Express 5 + LangChain 1.x（`@langchain/ollama` / `@langchain/openai`）+ zod + mysql2
 - 存储：MySQL 保存用户、登录会话与对话记录；知识库为本地 LanceDB 向量库
 - 账号：注册 / 登录 / 登出，密码经 DES 加密后入库，接口以 Bearer 令牌鉴权
+- 文档：支持上传 docx / xlsx / pdf / 图片附件，可理解图片（本地多模态模型），并按需导出 docx / xlsx / pdf
 - 模型：默认本地 Ollama（`qwen2.5:7b` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
 ---
@@ -25,6 +26,7 @@ my-monorepo/
 │   │   │   ├── messages.ts           # 对外固定文案常量表（ERROR_MESSAGE）
 │   │   │   ├── middleware/
 │   │   │   │   ├── cors.ts           # 跨域放行（桌面端 file:// 场景）
+│   │   │   │   ├── upload.ts         # 附件上传中间件（multer 内存解析 + 单文件）
 │   │   │   │   ├── requestLog.ts     # 请求级日志（requestId + 入参出参摘要）
 │   │   │   │   └── errorHandler.ts   # 兜底错误处理
 │   │   │   ├── auth/
@@ -39,7 +41,13 @@ my-monorepo/
 │   │   │   │   ├── model.ts          # 对话模型 / 向量模型工厂
 │   │   │   │   ├── agent.ts          # AgentService：ReAct 智能体与流式桥接
 │   │   │   │   ├── prompt.ts         # system prompt 原文
-│   │   │   │   └── tools.ts          # 三个工具：检索 / 时间 / 计算
+│   │   │   │   ├── vision.ts         # 图片理解：多模态模型转述图片
+│   │   │   │   └── tools.ts          # 六个工具：检索 / 附件清单 / 读文件 / 写文件 / 时间 / 计算
+│   │   │   ├── files/                # 文件能力：上传存储 / 类型判定 / 解析 / 生成
+│   │   │   │   ├── store.ts          # 上传存储：落盘字节 + files 表元数据
+│   │   │   │   ├── type.ts           # magic bytes 判定上传类型
+│   │   │   │   ├── parser.ts         # 正文解析（docx / xlsx / pdf）
+│   │   │   │   └── generate.ts       # 导出生成（docx / xlsx / pdf）
 │   │   │   ├── rag/store.ts          # 知识库：切分 + 向量化 + LanceDB 近邻检索
 │   │   │   ├── conversation/store.ts # 会话与消息持久化（MySQL，按用户隔离）
 │   │   │   ├── services/
@@ -93,7 +101,8 @@ my-monorepo/
 │                                    │                                        │
 │                          AgentService（LangChain createAgent）              │
 │                          ├ system prompt 约束                               │
-│                          ├ 工具：search_knowledge_base / get_current_time   │
+│                          ├ 工具：search_knowledge_base / list_files         │
+│                          │        read_file / write_file / get_current_time │
 │                          │        calculator                                │
 │                          └ 流式：streamMode = 'messages'                    │
 │                                    │                                        │
@@ -107,11 +116,11 @@ my-monorepo/
 ### 一次对话的完整数据流
 
 1. 未登录时先渲染 `LoginView`；登录/注册成功后后端签发令牌（UUID），桌面端把令牌写入 `settings.json` 的 `authToken`，之后所有请求都带上 `Authorization: Bearer <token>`。
-2. 用户在 `ChatWindow` 输入内容，`useChat.sendMessage` 立即把用户消息与一条**空的助手消息**插入列表（占位，用于承载流式 token）。
+2. 用户在 `ChatWindow` 输入内容；若附带附件，`useChat.sendMessage` 先经 `uploadFile()` 上传拿到 `fileId`，随后立即把用户消息与一条**空的助手消息**插入列表（占位，用于承载流式 token）。
 3. `AgentApi.streamChat` 以 `POST /api/chat` 建立连接，用 `AbortController` 支持随时停止。
 4. 后端鉴权中间件由令牌解析出 `userId`，把用户消息写入该用户名下的会话（首次提问时自动创建会话并以首条消息生成标题）。
 5. `AgentService` 把历史消息还原为 LangChain 消息对象，交给 `agent.stream(..., { streamMode: 'messages' })`。
-6. 智能体按需调用工具：需要事实 → 检索/时间/计算；每次工具调用会被转成 `tool` 事件推给前端，形成消息下方的“调用工具 xxx / 完成 xxx”标签。
+6. 智能体按需调用工具：需要事实 → 检索/时间/计算；每次工具调用会被转成 `tool` 事件推给前端，形成消息下方的“调用工具 xxx / 完成 xxx”标签；当调用 `write_file` 产出导出文件时，流末尾会追加 `file` 事件下发，客户端据此下载并经主进程落盘。
 7. 模型增量输出被转成 `token` 事件，前端逐字追加渲染；流结束后后端把完整答复落库，再下发 `done`（携带 `conversationId` 与 `title`）。
 8. 前端收到 `done` 后记录会话 ID 并刷新会话列表；若中途被用户中断，`signal` 会同步取消模型调用，避免继续消耗算力。
 9. 任一请求返回 **401**（令牌过期或被新登录顶掉）时，桌面端清空本地登录态并回到登录页。

@@ -19,21 +19,23 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 
 ## 二、HTTP 接口与鉴权
 
-| 方法     | 路径                              | 鉴权   | 说明                                                    |
-| -------- | --------------------------------- | ------ | ------------------------------------------------------- |
-| `GET`    | `/api/health`                     | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态          |
-| `POST`   | `/api/auth/register`              | 公开   | 注册并直接签发令牌，成功返回 `201`（`{ token, user }`） |
-| `POST`   | `/api/auth/login`                 | 公开   | 登录并签发令牌，凭证错误返回 `401`                      |
-| `POST`   | `/api/auth/logout`                | 需登录 | 删除当前令牌对应的会话，返回 `204`                      |
-| `GET`    | `/api/auth/me`                    | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`          |
-| `POST`   | `/api/chat`                       | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`    |
-| `GET`    | `/api/conversations`              | 需登录 | 当前账号的会话摘要列表（按更新时间倒序）                |
-| `GET`    | `/api/conversations/:id`          | 需登录 | 会话详情（含全部消息），非本人会话返回 `404`            |
-| `DELETE` | `/api/conversations/:id`          | 需登录 | 删除会话（消息随外键级联删除）                          |
-| `GET`    | `/api/knowledge/documents`        | 需登录 | 可见文档列表（全局共享 + 本人私有）                     |
-| `POST`   | `/api/knowledge/documents`        | 需登录 | 新增私有文档（同步完成切分与向量化）                    |
-| `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌         |
-| `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删  |
+| 方法     | 路径                              | 鉴权   | 说明                                                                                             |
+| -------- | --------------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `GET`    | `/api/health`                     | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态                                                   |
+| `POST`   | `/api/auth/register`              | 公开   | 注册并直接签发令牌，成功返回 `201`（`{ token, user }`）                                          |
+| `POST`   | `/api/auth/login`                 | 公开   | 登录并签发令牌，凭证错误返回 `401`                                                               |
+| `POST`   | `/api/auth/logout`                | 需登录 | 删除当前令牌对应的会话，返回 `204`                                                               |
+| `GET`    | `/api/auth/me`                    | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`                                                   |
+| `POST`   | `/api/chat`                       | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`                                             |
+| `GET`    | `/api/conversations`              | 需登录 | 当前账号的会话摘要列表（按更新时间倒序）                                                         |
+| `GET`    | `/api/conversations/:id`          | 需登录 | 会话详情（含全部消息），非本人会话返回 `404`                                                     |
+| `DELETE` | `/api/conversations/:id`          | 需登录 | 删除会话（消息随外键级联删除）                                                                   |
+| `POST`   | `/api/files`                      | 需登录 | 上传附件（multipart，字段名 `file`），按 magic bytes 判定类型并落盘，成功返回 `201` 与文件元数据 |
+| `GET`    | `/api/files/:id/download`         | 需登录 | 按 ID 下载附件或智能体生成的导出文件，非本人文件返回 `404`                                       |
+| `GET`    | `/api/knowledge/documents`        | 需登录 | 可见文档列表（全局共享 + 本人私有）                                                              |
+| `POST`   | `/api/knowledge/documents`        | 需登录 | 新增私有文档（同步完成切分与向量化）                                                             |
+| `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌                                                  |
+| `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删                                           |
 
 以上状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
 
@@ -60,28 +62,31 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ## 四、数据表设计
 
-`ensureSchema` 在启动时先以**不指定 database** 的连接 `CREATE DATABASE IF NOT EXISTS`，再连到该库执行建表（全部 `IF NOT EXISTS`，可重复执行）。四张表统一 `utf8mb4` / InnoDB：
+`ensureSchema` 在启动时先以**不指定 database** 的连接 `CREATE DATABASE IF NOT EXISTS`，再连到该库执行建表（全部 `IF NOT EXISTS`，可重复执行）。五张表统一 `utf8mb4` / InnoDB：
 
-| 表              | 关键字段                                                                         | 说明                                               |
-| --------------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `users`         | `id` 主键、`username` 唯一、`password`（DES 密文）                               | 账号表                                             |
-| `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                       | 登录会话表，单端登录下每个账号至多一行             |
-| `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引） | 对话表，列表查询走该复合索引                       |
-| `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）         | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息 |
+| 表              | 关键字段                                                                                                          | 说明                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `users`         | `id` 主键、`username` 唯一、`password`（DES 密文）                                                                | 账号表                                                                            |
+| `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                                                        | 登录会话表，单端登录下每个账号至多一行                                            |
+| `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引）                                  | 对话表，列表查询走该复合索引                                                      |
+| `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）                                          | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息                                |
+| `files`         | `id` 主键、`user_id`、`name`（原始文件名，仅作展示）、`ext` / `mime`（由 magic bytes 判定）、`size`、`created_at` | 上传文件元数据表；原始字节落在 `<UPLOAD_DIR>/<userId>/<fileId>.<ext>`，不进数据库 |
 
 > 之所以用自增 `seq` 而非 `created_at` 排序：同一毫秒内写入的多条消息时间戳可能相同，`seq` 能提供严格稳定的顺序。
 
 ## 五、SSE 流式协议
 
-`POST /api/chat` 的响应为 `text/event-stream`，每个事件都是 `data: <JSON>\n\n`，共五种：
+`POST /api/chat` 的响应为 `text/event-stream`，每个事件都是 `data: <JSON>\n\n`，共七种：
 
-| 事件           | 载荷                              | 触发时机                               |
-| -------------- | --------------------------------- | -------------------------------------- |
-| `conversation` | `{ type, conversationId }`        | 首个产出之前补推：这条会话确定会被保留 |
-| `token`        | `{ type, content }`               | 模型输出增量文本                       |
-| `tool`         | `{ type, name, status }`          | 工具开始（`start`）/ 结束（`end`）     |
-| `done`         | `{ type, conversationId, title }` | 答复落库完成，本轮结束                 |
-| `error`        | `{ type, message }`               | 推理过程异常                           |
+| 事件           | 载荷                              | 触发时机                                                     |
+| -------------- | --------------------------------- | ------------------------------------------------------------ |
+| `conversation` | `{ type, conversationId }`        | 首个产出之前补推：这条会话确定会被保留                       |
+| `token`        | `{ type, content }`               | 模型输出增量文本                                             |
+| `tool`         | `{ type, name, status }`          | 工具开始（`start`）/ 结束（`end`）                           |
+| `source`       | `{ type, name }`                  | 检索工具结束时增量推送命中的知识库文档名，客户端据此标注来源 |
+| `file`         | `{ type, fileId, name, size }`    | `write_file` 产出文件后于流末尾统一推送，客户端据此提供下载  |
+| `done`         | `{ type, conversationId, title }` | 答复落库完成，本轮结束                                       |
+| `error`        | `{ type, message }`               | 推理过程异常                                                 |
 
 中断处理是这段实现里最关键的一处细节：客户端关闭连接时必须立刻停下模型推理。实现上监听的是 `res` 而非 `req`——`req` 的 `close` 在请求体读取完成后就会触发，会误中断正常的流式响应；同时用 `res.writableEnded` 排除“正常结束”这一次回调，只有真正的提前断开才 `controller.abort()`。此外，仅在答复正文非空时落库，避免保存空回复；中断或出错时也会把已产出的部分回复落库，用户已经看到的内容不会在重开会话后消失。
 
@@ -105,19 +110,28 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 3. 涉及“今天/现在”等时间概念时调用 `get_current_time`；
 4. 涉及算术运算时调用 `calculator`，不要心算；
 5. 引用知识库内容时标注来源文档名称；
-6. 使用简体中文、条理清晰，必要时用列表。
+6. 本轮对话附带文件时，附件内容已随消息预先给出，必须直接据此回答，不要凭文件名或常识猜测；需要复核原文或内容缺失时才调用 `read_file`，读不到就如实说明；
+7. 需要把结果整理成文件交给用户（导出、转换格式、另存一份）时调用 `write_file`；正文必须写完整，不要用“同上”“略”之类的省略，也不要在回答里重复整篇文件内容；
+8. 使用简体中文回答，条理清晰，必要时使用列表。
 
 > 约束 2 是必需的：本地小模型在无强制要求时倾向于直接作答而不检索，这条规则把它拉回“先查后答”的链路。
 
 ## 七、工具层
 
-| 工具                    | 参数                 | 说明                                                                   |
-| ----------------------- | -------------------- | ---------------------------------------------------------------------- |
-| `search_knowledge_base` | `query: string`      | 按当前用户可见性检索知识库，命中后以「【片段 n】来源《标题》」格式回填 |
-| `get_current_time`      | 无                   | 返回 `Asia/Shanghai` 时区的当前时间                                    |
-| `calculator`            | `expression: string` | 计算 `+ - * / ( )` 算术表达式                                          |
+| 工具                    | 参数                                                               | 说明                                                                             |
+| ----------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `search_knowledge_base` | `query: string`                                                    | 按当前用户可见性检索知识库，命中后以「【片段 n】来源《标题》」格式回填           |
+| `list_files`            | 无                                                                 | 列出本轮附件的 `ID｜文件名｜扩展名｜大小`                                        |
+| `read_file`             | `fileId: string`                                                   | 复核附件原文（优先用预读内容）：docx / xlsx / pdf 走解析器，图片交给视觉模型转述 |
+| `write_file`            | `name: string` / `format: docx \| xlsx \| pdf` / `content: string` | 按指定格式生成导出文件，登记到本轮导出收集器                                     |
+| `get_current_time`      | 无                                                                 | 返回 `Asia/Shanghai` 时区的当前时间                                              |
+| `calculator`            | `expression: string`                                               | 计算 `+ - * / ( )` 算术表达式                                                    |
 
 工具参数全部用 **zod schema** 声明，由框架负责校验与描述注入。
+
+`write_file` 产出的文件由流末尾的 `file` 事件推给客户端；`read_file` 只允许读本轮附件（名单经 `configurable.fileIds` 注入，模型编造的 ID 读不到），单次读取正文超过 8000 字会截断并说明。`search_knowledge_base` 命中的文档名则在工具结束时由 `source` 事件增量推出（同一文档多次命中只出一个标签），来源标签因此由服务端确定地给出——提示词早就要求「引用知识库内容必须标注来源」，但指望小模型在正文里照抄出处会漏标。
+
+**附件在作答前被预读**：`AgentService.appendAttachments` 对 `fileIds` 逐个调用 `readAttachmentText`（图片走视觉模型、其余走解析器），把结果以 `SystemMessage` 追加到对话末尾，模型不必自行决定是否调用 `read_file`。原因是实测同一张图在「我上传了一张图片…」这类强措辞下能触发读取，换成「图片里是什么」则连续 6 轮一次都不读、直接编造答案——小模型对工具调用指令的遵循率撑不起主链路。`read_file` 因此退为复核手段，仍予保留；单个附件读不到（文件失效、视觉模型不可用）只如实注明，不中断整轮对话。
 
 `calculator` 不直接 `eval` 任意代码，而是先做**白名单字符校验**（仅允许数字、运算符、括号与空白），通过后用 `new Function` 求值，并校验结果必须是有限数字；任何一步失败都返回可读提示而非抛错中断对话。
 
@@ -186,6 +200,11 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `KNOWLEDGE_TOP_K`                                              | `4`                         | 检索返回片段数                                       |
 | `KNOWLEDGE_MIN_SCORE`                                          | `0.6`                       | 检索相似度下限（低于该分数的片段丢弃）               |
 | `KNOWLEDGE_ADMIN_TOKEN`                                        | 空                          | 全局知识库管理令牌（留空即关闭全局写入）             |
+| `OLLAMA_VISION_MODEL`                                          | `qwen3-vl:8b`               | 图片理解用的本地多模态模型（**留空即关闭图片理解**） |
+| `UPLOAD_MAX_BYTES`                                             | `20971520`                  | 上传单文件字节上限                                   |
+| `UPLOAD_MAX_FILES`                                             | `1`                         | 单请求文件数上限                                     |
+| `UPLOAD_ALLOWED_TYPES`                                         | `docx,xlsx,pdf,png,jpg`     | 允许的扩展名白名单，与 magic bytes 判定结果比对      |
+| `UPLOAD_DIR`                                                   | `<数据目录>/uploads`        | 上传文件落盘根目录                                   |
 
 对话模型与向量模型**分开配置**：DeepSeek 不提供 embedding 接口，所以即便对话走线上，向量仍可继续使用本地 Ollama。
 
@@ -199,7 +218,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 知识库检索的命中片段数与最高相似度记在 `debug` 级别，排查"答非所问 / 未命中"时把 `LOG_LEVEL` 调为 `debug` 即可看到。
 
-请求级日志同时记录**入参**（查询串、请求体）与**出参**（JSON 响应体）：两者都先脱敏再截断到 500 字符，长度超过 100 字符的字段会折叠成缩进块单独成行，因此首行的「时间 + 接口路径 + 事件 + 短字段」始终便于扫读。流式接口 `/api/chat` 不走 JSON 响应，其出参以 `answerLength` 与 `answerPreview`（回复开头 200 字符）记录，另有 `tools` 列出本轮用到的工具。
+请求级日志同时记录**入参**（查询串、请求体）与**出参**（JSON 响应体）：两者都先脱敏再截断到 500 字符，长度超过 100 字符的字段会折叠成缩进块单独成行，因此首行的「时间 + 接口路径 + 事件 + 短字段」始终便于扫读。流式接口 `/api/chat` 不走 JSON 响应，其出参以 `answerLength` 与 `answerPreview`（回复开头 200 字符）记录，另有 `tools` 与 `sources` 分别列出本轮用到的工具与检索命中的知识库文档。
 
 ## 十一、前置条件与启动
 
@@ -210,6 +229,7 @@ mysql -h 127.0.0.1 -P 3306 -u root -p   # 验证 MySQL 可连接（库表会在�
 
 ollama pull qwen2.5:7b          # 对话模型（必须支持工具调用）
 ollama pull nomic-embed-text    # 向量模型
+ollama pull qwen3-vl:8b         # 图片理解（可选；把 OLLAMA_VISION_MODEL 留空即关闭）
 ollama serve
 ```
 

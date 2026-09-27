@@ -1,6 +1,6 @@
 import { nextTick, ref, watch } from 'vue';
 import type { Ref } from 'vue';
-import type { ChatMessage } from '../../types';
+import type { ChatAttachment, ChatMessage, GeneratedFileInfo } from '../../types';
 
 /** ChatWindow 的入参：消息与流式状态由父级持有，本组件只渲染与上报 */
 export interface ChatWindowProps {
@@ -10,12 +10,20 @@ export interface ChatWindowProps {
   errorMessage: string;
   model: string;
   provider: string;
+  /** 待发送附件；为空表示本轮不带文件 */
+  attachments: ChatAttachment[];
 }
 
-/** ChatWindow 的上抛事件：发送文本与停止流式 */
+/** ChatWindow 的上抛事件：发送文本、停止流式与附件增删 */
 export interface ChatWindowEmits {
   send: [text: string];
   stop: [];
+  /** 请求打开系统文件对话框挑选附件 */
+  attach: [];
+  /** 移除某个待发送附件，参数为附件的本地临时 ID */
+  removeAttachment: [key: string];
+  /** 保存智能体生成的导出文件到本地 */
+  download: [file: GeneratedFileInfo];
 }
 
 /** 距底部小于该距离时视为“跟随最新内容”，超出则说明用户正在上翻阅读 */

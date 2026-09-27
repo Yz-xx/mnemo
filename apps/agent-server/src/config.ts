@@ -42,6 +42,8 @@ export interface AppConfig {
     baseUrl: string;
     chatModel: string;
     embeddingModel: string;
+    /** 视觉模型：用于理解图片附件；留空表示关闭图片理解 */
+    visionModel: string;
   };
   deepseek: {
     apiKey: string;
@@ -63,6 +65,26 @@ export interface AppConfig {
     /** 全局知识库管理令牌；留空表示不开放全局文档写入接口 */
     adminToken: string;
   };
+  upload: {
+    /** 落盘根目录；路径类配置一律绝对路径，默认落在数据目录下 */
+    dir: string;
+    /** 单文件字节上限 */
+    maxBytes: number;
+    /** 单请求文件数上限 */
+    maxFiles: number;
+    /** 允许的扩展名白名单：与 magic bytes 判定结果比对，不看客户端给的扩展名 */
+    allowedTypes: string[];
+  };
+}
+
+/** 逗号分隔列表：去空白、统一小写、去重，避免大小写或多余空格让白名单静默失效 */
+function toList(value: string | undefined, fallback: string[]): string[] {
+  if (!value?.trim()) return fallback;
+  const items = value
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  return [...new Set(items)];
 }
 
 function toNumber(value: string | undefined, fallback: number): number {
@@ -104,6 +126,8 @@ export function loadConfig(): AppConfig {
       baseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
       chatModel: process.env.OLLAMA_CHAT_MODEL ?? 'qwen2.5:7b',
       embeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? 'nomic-embed-text',
+      // 默认指向本机已装的视觉模型；置空字符串即关闭图片理解
+      visionModel: process.env.OLLAMA_VISION_MODEL ?? 'qwen3-vl:8b',
     },
     deepseek: {
       apiKey: process.env.DEEPSEEK_API_KEY ?? '',
@@ -122,6 +146,12 @@ export function loadConfig(): AppConfig {
       topK: toNumber(process.env.KNOWLEDGE_TOP_K, 4),
       minScore: toNumber(process.env.KNOWLEDGE_MIN_SCORE, 0.6),
       adminToken: process.env.KNOWLEDGE_ADMIN_TOKEN ?? '',
+    },
+    upload: {
+      dir: process.env.UPLOAD_DIR ?? path.join(dataDir, 'uploads'),
+      maxBytes: toNumber(process.env.UPLOAD_MAX_BYTES, 20 * 1024 * 1024),
+      maxFiles: toNumber(process.env.UPLOAD_MAX_FILES, 1),
+      allowedTypes: toList(process.env.UPLOAD_ALLOWED_TYPES, ['docx', 'xlsx', 'pdf', 'png', 'jpg']),
     },
   };
 }

@@ -11,6 +11,7 @@ import {
 import { ConversationStore } from './conversation/store.js';
 import { createMysqlPool } from './db/pool.js';
 import { ensureSchema } from './db/schema.js';
+import { FileStore } from './files/store.js';
 import { AgentService } from './llm/agent.js';
 import { createEmbeddings } from './llm/model.js';
 import { createLogger } from '@repo/logger';
@@ -37,6 +38,7 @@ async function bootstrap(): Promise<void> {
   // 启动清理：清掉过期会话，并把历史遗留的同账号重复会话收敛为单端登录
   const prunedSessions = await sessions.prune();
   const conversations = new ConversationStore(pool);
+  const files = new FileStore(pool, config.upload.dir);
   const knowledge = new KnowledgeStore(config.dataDir, createEmbeddings(config), {
     chunkSize: config.knowledge.chunkSize,
     chunkOverlap: config.knowledge.chunkOverlap,
@@ -45,9 +47,18 @@ async function bootstrap(): Promise<void> {
     embeddingModel: describeEmbeddingModel(config),
     embeddingEndpoint: describeEmbeddingEndpoint(config),
   });
-  const agent = new AgentService(config, knowledge);
+  const agent = new AgentService(config, knowledge, files);
 
-  const app = createApp({ config, logger, agent, conversations, knowledge, users, sessions });
+  const app = createApp({
+    config,
+    logger,
+    agent,
+    conversations,
+    files,
+    knowledge,
+    users,
+    sessions,
+  });
 
   app.listen(config.port, () => {
     logger.info('智能体服务已启动', {
@@ -56,6 +67,7 @@ async function bootstrap(): Promise<void> {
       embeddingModel: `${config.embedding.provider} / ${describeEmbeddingModel(config)}`,
       mysql: `${config.mysql.host}:${config.mysql.port}/${config.mysql.database}`,
       dataDir: config.dataDir,
+      uploadDir: config.upload.dir,
       logDir: config.log.dir,
       logLevel: config.log.level,
     });

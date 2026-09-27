@@ -20,6 +20,9 @@ const {
   streaming,
   canSend,
   errorMessage,
+  attachments,
+  addAttachment,
+  removeAttachment,
   init,
   reset,
   sendMessage,
@@ -28,6 +31,7 @@ const {
   selectConversation,
   removeConversation,
   updateBackendUrl,
+  saveGeneratedFile,
 } = useChat();
 
 const settingsVisible = ref(false);
@@ -74,8 +78,12 @@ onMounted(async () => {
       :error-message="errorMessage"
       :model="health?.model ?? ''"
       :provider="health?.provider ?? ''"
+      :attachments="attachments"
       @send="sendMessage"
       @stop="stopStreaming"
+      @attach="addAttachment"
+      @remove-attachment="removeAttachment"
+      @download="saveGeneratedFile"
     />
 
     <SettingsDrawer

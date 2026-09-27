@@ -2,69 +2,29 @@
 @import (reference) '../../styles/mixins.less';
 @import (reference) '../../styles/motion.less';
 
-// 消息共用一套骨架：外侧说话者标记 + 内容块，两者的内边距节奏完全一致。
-// AI 用左侧金线界定发言范围，用户用镶金底的块——线 / 面的镜像关系即是对称的来源。
+// 消息不再用「头像 + 内容块」两列骨架：角色只靠对齐与底色区分——
+// 提问靠右、收成一块圆角底色；回复靠左、直接排在纸面上。
+// 少掉一层装饰后，正文的起笔位置与顶栏、输入条落在同一条边上。
 .message {
   .enter();
-  display: flex;
-  gap: 12px;
   width: 100%;
   max-width: @content-max;
   margin: 0 auto;
 
-  // 用户消息靠右并与标记左右镜像
-  &--user {
-    flex-direction: row-reverse;
-
-    .message__avatar {
-      border-color: var(--gold-line-strong);
-      background: var(--accent-gradient);
-      // 金箔块上的深墨字，与主按钮同一套材质
-      color: var(--on-accent);
-    }
-
-    .message__body {
-      max-width: 78%;
-    }
-
-    .message__content {
-      .gold-frame();
-      padding: 10px 14px;
-      border-radius: @radius;
-      background-color: var(--bg-elevated);
-      // 从左上角洇开的淡金光，让“用户说的话”也带上一层薄金
-      background-image: linear-gradient(150deg, var(--accent-soft), transparent 72%);
-    }
+  // 提问块收在右侧并留出余量，长短句都不会横贯整列。
+  // 必须显式 fit-content：块级元素 width 为 auto 时会顶满父宽，此时 max-width 只是把上限压到 78%，
+  // 短句照样被撑成一条长条；收缩到内容宽度后 margin-left: auto 才有余量可推，真正右对齐。
+  &--user .message__body {
+    width: fit-content;
+    margin-left: auto;
+    max-width: 78%;
   }
 
-  // AI 回复排入文档流，仅以一条金线界定范围，不再包气泡
-  &--assistant .message__content {
-    padding: 10px 0 10px 14px;
-    border-left: 2px solid var(--gold-line-strong);
+  &--user .message__content {
+    padding: 10px 14px;
+    border-radius: @radius-lg;
+    background-color: var(--bg-elevated);
   }
-
-  // 工具标签与正文文字左对齐（金线 2px + 内边距 14px）
-  &--assistant .message__steps {
-    padding-left: 16px;
-  }
-}
-
-// 说话者标记：等宽方形标签，两侧规格一致，只用材质区分角色；
-// 与内容块首行文字垂直居中（内容块上内边距 10px，行高约 24.75px）。
-.message__avatar {
-  .eyebrow();
-  flex: none;
-  align-self: flex-start;
-  width: 26px;
-  height: 26px;
-  margin-top: 9px;
-  border: 1px solid var(--gold-line);
-  border-radius: @radius-sm;
-  color: var(--accent);
-  line-height: 24px;
-  text-align: center;
-  // 抵消 letter-spacing 在末尾留下的空隙，让字面真正居中
-  text-indent: 0.14em;
 }
 
 .message__body {
@@ -74,6 +34,9 @@
 .message__content {
   white-space: pre-wrap;
   word-break: break-word;
+  // 正文比界面控件略大一档、行距更松，长回答才读得下去
+  font-size: 16px;
+  line-height: 1.75;
 
   // 等待首个 token 时只留三点脉冲，避免出现“正在思考…”这类静态文案
   &--pending {
@@ -82,6 +45,51 @@
     gap: 5px;
     height: 24px;
   }
+}
+
+// 操作行：静止时不出现，指针进入这条消息或键盘聚焦时才浮出——
+// 每条回复下方因此保持干净，需要复制时又抬手可及
+.message__actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity @ease-quick;
+
+  .message:hover &,
+  &:focus-within {
+    opacity: 1;
+  }
+}
+
+.message__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-faint);
+  transition:
+    background-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    background: var(--bg-elevated);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+.message__action-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .thinking-dot {
@@ -101,11 +109,64 @@
   }
 }
 
-.message__steps {
+.message__steps,
+.message__sources,
+.message__files {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+
+// 用户消息靠右，附件标签随之收在同一侧，与气泡右边界对齐
+.message--user .message__files {
+  justify-content: flex-end;
+}
+
+// 检索来源标签：本轮命中的知识库文档。软金底把它与「执行过程」的普通标签分开——
+// 它交代的是答案的出处，与工具是否跑完不是一回事
+.chip--source {
+  border-color: var(--gold-line-strong);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+// 生成的文件可点击保存：按钮外观沿用标签，只在悬停时提示可交互
+.chip--download {
+  cursor: pointer;
+  transition:
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    border-color: var(--gold-line-strong);
+    color: var(--accent);
+  }
+}
+
+// 执行中的工具标签：转圈 + 点亮金线，与已完成的静态标签一眼可分
+.chip--running {
+  border-color: var(--gold-line-strong);
+  color: var(--accent);
+}
+
+.chip__spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  border: 1.5px solid currentColor;
+  // 留一段缺口，旋转时才有转动的观感
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 // 等待首个 token 时的三点脉冲；只服务于本组件，故随样式一并下沉

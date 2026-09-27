@@ -22,6 +22,8 @@ export type { ChatStreamEvent };
 export interface SendChatPayload {
   conversationId?: string;
   message: string;
+  /** 本轮随提问一起交给智能体读取的附件 ID；服务端会校验其归属当前用户 */
+  fileIds?: string[];
 }
 
 /** 服务端健康信息，用于界面展示当前模型与知识库状态 */
@@ -30,6 +32,16 @@ export interface HealthInfo {
   provider: string;
   model: string;
   knowledgeEnabled: boolean;
+}
+
+/** 服务端登记完成的上传文件：id 用于随消息引用，其余字段用于界面展示 */
+export interface UploadedFileInfo {
+  id: string;
+  name: string;
+  ext: string;
+  mime: string;
+  size: number;
+  createdAt: string;
 }
 
 /**
@@ -60,10 +72,17 @@ export class AgentApi {
     private readonly token = '',
   ) {}
 
-  /** 统一构造请求头，未登录时不发送 Authorization */
-  private buildHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  /**
+   * 统一构造请求头，未登录时不发送 Authorization。
+   * 请求体是 FormData 时不能写 Content-Type：multipart 的 boundary 必须由运行时生成，
+   * 手写 application/json 会让后端完全解析不出文件。
+   */
+  private buildHeaders(
+    body?: BodyInit | null,
+    extra?: Record<string, string>,
+  ): Record<string, string> {
     return {
-      'Content-Type': 'application/json',
+      ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
       ...extra,
     };
@@ -72,7 +91,7 @@ export class AgentApi {
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const res = await fetch(`${this.baseUrl}${path}`, {
       ...init,
-      headers: this.buildHeaders(init.headers as Record<string, string> | undefined),
+      headers: this.buildHeaders(init.body, init.headers as Record<string, string> | undefined),
     });
     if (!res.ok) throw new ApiError(toHttpStatusCode(res.status), await this.extractError(res));
     if (res.status === HTTP_STATUS.NO_CONTENT) return undefined as T;
@@ -109,6 +128,29 @@ export class AgentApi {
 
   logout(): Promise<void> {
     return this.request<void>('/api/auth/logout', { method: 'POST' });
+  }
+
+  /** 上传附件：由服务端按文件头复核类型并存档，返回的 id 用于随消息引用 */
+  uploadFile(file: { name: string; bytes: Uint8Array }): Promise<UploadedFileInfo> {
+    const form = new FormData();
+    // 先拷出精确长度的 ArrayBuffer：传入的 Uint8Array 可能只是大缓冲上的一个视图，
+    // 直接交给 Blob 会带上视图之外的字节（类型上也不满足 BlobPart 对 ArrayBuffer 的要求）
+    const buffer = file.bytes.buffer.slice(
+      file.bytes.byteOffset,
+      file.bytes.byteOffset + file.bytes.byteLength,
+    ) as ArrayBuffer;
+    // 第三参显式给文件名：FormData 取不到 Blob 的名字，而服务端正是拿它做展示名
+    form.append('file', new Blob([buffer]), file.name);
+    return this.request<UploadedFileInfo>('/api/files', { method: 'POST', body: form });
+  }
+
+  /** 取回文件字节：附件的原始内容与智能体生成的导出文件都经此下载 */
+  async downloadFile(id: string): Promise<ArrayBuffer> {
+    const res = await fetch(`${this.baseUrl}/api/files/${id}/download`, {
+      headers: this.buildHeaders(),
+    });
+    if (!res.ok) throw new ApiError(toHttpStatusCode(res.status), await this.extractError(res));
+    return res.arrayBuffer();
   }
 
   currentUser(): Promise<AuthUser> {

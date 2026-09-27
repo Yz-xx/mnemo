@@ -10,6 +10,8 @@ const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+  openFile: () => ipcRenderer.invoke('dialog:open'),
+  saveFile: (file) => ipcRenderer.invoke('dialog:save', file),
   windowControl: (action: WindowAction) => ipcRenderer.send('window:control', action),
 };
 

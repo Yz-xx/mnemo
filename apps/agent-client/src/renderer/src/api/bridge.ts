@@ -1,7 +1,13 @@
 // 渲染进程访问 preload 桥接的唯一入口。
 // 浏览器调试环境（如样式预览页）不存在 window.desktopApi，所有读写统一在此降级，
 // 避免各 composable 与组件各写一份 `as DesktopApi | undefined` 与默认值。
-import { DEFAULT_SETTINGS, type AppSettings, type DesktopApi } from '../../../preload/types.js';
+import {
+  DEFAULT_SETTINGS,
+  type AppSettings,
+  type DesktopApi,
+  type ExportedFile,
+  type SelectedFile,
+} from '../../../preload/types.js';
 
 /** 后端服务默认地址：登录页、对话客户端与设置项共用同一份 */
 export const DEFAULT_BACKEND_URL = DEFAULT_SETTINGS.backendUrl;
@@ -21,4 +27,14 @@ export async function readSettings(): Promise<AppSettings> {
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   if (!bridge) return { ...DEFAULT_SETTINGS, ...patch };
   return bridge.saveSettings(patch);
+}
+
+/** 打开文件对话框挑选附件；浏览器调试环境没有该能力，一律按“未选择”处理 */
+export async function openFile(): Promise<SelectedFile | null> {
+  return (await bridge?.openFile()) ?? null;
+}
+
+/** 写出导出文件到本地；无桥接（浏览器调试环境）或用户取消时返回 null */
+export async function saveFile(file: ExportedFile): Promise<string | null> {
+  return (await bridge?.saveFile(file)) ?? null;
 }
