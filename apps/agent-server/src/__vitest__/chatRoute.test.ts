@@ -1,20 +1,20 @@
-import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
-import type { Request, Response } from 'express';
-import { createLogger } from '@repo/logger';
-import { HTTP_STATUS } from '@repo/reusable';
-import type { AgentStreamEvent, ChatStreamEvent } from '@repo/reusable';
-import { handleChatMessage } from '../routes/chat.js';
-import type { Logger } from '@repo/logger';
+import type { ConversationStore } from '../conversation/store/index.js';
 import type {
   Conversation,
   ConversationSummary,
   MessageMeta,
   MessageRole,
 } from '../conversation/types.js';
-import type { ConversationStore } from '../conversation/store.js';
 import type { FileStore, StoredFile } from '../files/store.js';
 import type { AgentService } from '../llm/agent.js';
+import type { Logger } from '@repo/logger';
+import type { AgentStreamEvent, ChatStreamEvent } from '@repo/reusable';
+import type { Request, Response } from 'express';
+import { EventEmitter } from 'node:events';
+import { describe, expect, it } from 'vitest';
+import { createLogger } from '@repo/logger';
+import { HTTP_STATUS } from '@repo/reusable';
+import { handleChatMessage } from '../routes/client/chat.js';
 
 const USER_ID = 1;
 

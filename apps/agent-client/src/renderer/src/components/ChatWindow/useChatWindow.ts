@@ -1,6 +1,6 @@
-import { nextTick, ref, watch } from 'vue';
-import type { Ref } from 'vue';
 import type { ChatAttachment, ChatMessage, GeneratedFileInfo } from '../../types';
+import type { Ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 
 /** ChatWindow 的入参：消息与流式状态由父级持有，本组件只渲染与上报 */
 export interface ChatWindowProps {

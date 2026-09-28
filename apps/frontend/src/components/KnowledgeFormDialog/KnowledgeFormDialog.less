@@ -1,0 +1,49 @@
+.knowledge-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &__label {
+    color: var(--text-muted);
+    font-size: 12px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__input {
+    padding: 8px 10px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition);
+
+    &:focus {
+      border-color: var(--primary-strong);
+    }
+
+    // 正文可能很长，允许纵向拉伸但不允许横向撑破弹窗
+    &--area {
+      resize: vertical;
+      line-height: 1.7;
+    }
+  }
+
+  &__error {
+    margin: 0;
+    padding: 8px 12px;
+    background-color: var(--danger-soft);
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+}

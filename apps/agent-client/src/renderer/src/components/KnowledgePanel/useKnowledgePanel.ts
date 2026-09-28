@@ -1,8 +1,8 @@
-import { onMounted, ref } from 'vue';
+import type { KnowledgeDocument } from '../../types';
 import type { Ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { AgentApi, toErrorMessage } from '../../api/client';
 import { useAuth } from '../../composables/useAuth';
-import type { KnowledgeDocument } from '../../types';
 
 /** KnowledgePanel 的入参：地址由抽屉传入，优先取其未保存的草稿 */
 export interface KnowledgePanelProps {

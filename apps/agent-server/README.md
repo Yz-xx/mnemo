@@ -45,6 +45,42 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 - **CORS 全放开**。桌面端在打包后可能以 `file://` 加载页面（Origin 为 `null`），因此统一返回 `Access-Control-Allow-Origin: *`，并在 `Access-Control-Allow-Headers` 中放行 `Authorization`。
 - **兜底错误处理**。统一错误中间件透传 `error.status`（如 400/404），5xx 只把错误挂到 `res.locals` 交由请求日志统一记录（含堆栈），对外返回「服务内部错误」，避免异常导致连接悬挂。
 
+### 管理端接口（`/api/admin/*`）
+
+管理端走独立的 `requireAdmin`，入口在 `/api/admin` 下按模块再分一层：
+
+| 方法     | 路径                                          | 说明                                                    |
+| -------- | --------------------------------------------- | ------------------------------------------------------- |
+| `GET`    | `/api/admin/stats`                            | 总览统计（用户规模、会话与消息量、近 7 天趋势、文档数） |
+| `GET`    | `/api/admin/health`                           | 运行状态（健康检查六项 + 运行时长 + MySQL 目标）        |
+| `GET`    | `/api/admin/users`                            | 账号列表（用户名包含匹配 + 分页）                       |
+| `POST`   | `/api/admin/users`                            | 新建账号，成功 `201`                                    |
+| `PATCH`  | `/api/admin/users/:id`                        | 变更角色或状态                                          |
+| `DELETE` | `/api/admin/users/:id`                        | 删除账号（连带清理其会话、对话与上传文件），成功 `204`  |
+| `POST`   | `/api/admin/users/batch-status`               | 批量停用 / 启用，回 `{ updated }`                       |
+| `POST`   | `/api/admin/users/batch-delete`               | 批量删除账号，成功 `204`                                |
+| `GET`    | `/api/admin/knowledge/documents`              | 文档列表（管理视角，私有文档带归属账号名）              |
+| `POST`   | `/api/admin/knowledge/documents`              | 新增全局共享文档                                        |
+| `DELETE` | `/api/admin/knowledge/documents/:id`          | 删除任意文档，成功 `204`                                |
+| `POST`   | `/api/admin/knowledge/documents/batch-delete` | 批量删除文档，成功 `204`                                |
+| `GET`    | `/api/admin/conversations`                    | 会话列表（全账号）                                      |
+| `GET`    | `/api/admin/conversations/:id`                | 会话详情（含全部消息）                                  |
+| `DELETE` | `/api/admin/conversations/:id`                | 删除任意会话，成功 `204`                                |
+| `POST`   | `/api/admin/conversations/batch-delete`       | 批量删除会话，成功 `204`                                |
+| `GET`    | `/api/admin/files`                            | 上传文件列表（全账号）                                  |
+| `DELETE` | `/api/admin/files/:id`                        | 删除文件（元数据与落盘字节），成功 `204`                |
+| `POST`   | `/api/admin/files/batch-delete`               | 批量删除文件，成功 `204`                                |
+| `GET`    | `/api/admin/logs`                             | 接口日志（路径关键词 / 方法 / 状态档位 + 分页）         |
+| `GET`    | `/api/admin/audit`                            | 操作审计（路径关键词 + 分页）                           |
+| `GET`    | `/api/admin/system/tools`                     | LLM 工具清单（名称、用途、参数名）                      |
+| `GET`    | `/api/admin/system/config`                    | 运行配置只读视图（密钥类只回是否已配置）                |
+
+**批量接口的语义**：一个请求处理一整批，不让前端循环调单条——自锁与「至少保留一名可登录管理员」是跨条目的判定，拆成 N 次单条请求就判不出来。用户类接口（停用 / 启用、删除）先整体预检再执行，任一项命中规则即**整批拒绝**并说明原因；文档 / 文件 / 会话的批量删除没有业务规则，按**幂等**处理（已不存在的条目视为已完成），因此不引入跨 Store 事务。`ids` 去重后不能为空，含非法项一律 `400`；用户类接口在目标已消失时回 `404`。取舍理由见 [ADR 0003](../../docs/adr/0003-batch-operation-semantics.md)。
+
+**两条入口**：运维超级令牌（请求头 `x-admin-token`，与知识库全局文档写入共用同一枚 `KNOWLEDGE_ADMIN_TOKEN`，留空即关闭）与管理员会话（Bearer 令牌对应用户 `role=admin` 且 `status=active`）。无令牌返回 `401`；已登录但权限不足按「资源不存在」返回 `404`，不向非管理员暴露管理接口的存在。
+
+**中间件顺序**：管理端每个模块各自挂同一组 `adminGuard`（先 `requireAdmin`、再 `createAdminAudit`，只对 POST/PUT/PATCH/DELETE 记一笔审计）。守卫在注册表 `routes/index.ts` 里声明，新增管理接口不必再记得补记一笔；操作人从 `res.locals.admin` 取，鉴权没过就走不到这里。**更具体的路径必须登记在 `/api/admin`（总览）之前**：`app.use` 是前缀匹配，若总览排在前面，同一次请求会先跑一遍守卫、再落到具体模块，鉴权与审计都会重复一遍（回归用例见 `__vitest__/adminRoutes.test.ts`）。
+
 ## 三、账号与鉴权实现
 
 **密码存储**：`UserStore` 直接复用 `@repo/shared` 的 `desEncrypt` 对密码加密后入库，不保存明文。采用 **ECB + PKCS7**（同一明文结果恒定），因此登录校验只需比对密文，无需解密；`authenticate` 对“用户不存在”与“密码错误”返回同一结果，由路由统一回以“用户名或密码错误”，不暴露账号是否已注册。注册走 `INSERT IGNORE`，命中 `username` 唯一索引时 `affectedRows = 0`，据此返回 `400`（用户名冲突归入“参数非法”：HTTP 约定只保留 400/401/404/500 四档错误码）。
@@ -62,15 +98,17 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ## 四、数据表设计
 
-`ensureSchema` 在启动时先以**不指定 database** 的连接 `CREATE DATABASE IF NOT EXISTS`，再连到该库执行建表（全部 `IF NOT EXISTS`，可重复执行）。五张表统一 `utf8mb4` / InnoDB：
+`ensureSchema` 在启动时先以**不指定 database** 的连接 `CREATE DATABASE IF NOT EXISTS`，再连到该库执行建表（全部 `IF NOT EXISTS`，可重复执行）。七张表统一 `utf8mb4` / InnoDB：
 
-| 表              | 关键字段                                                                                                          | 说明                                                                              |
-| --------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `users`         | `id` 主键、`username` 唯一、`password`（DES 密文）                                                                | 账号表                                                                            |
-| `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                                                        | 登录会话表，单端登录下每个账号至多一行                                            |
-| `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引）                                  | 对话表，列表查询走该复合索引                                                      |
-| `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）                                          | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息                                |
-| `files`         | `id` 主键、`user_id`、`name`（原始文件名，仅作展示）、`ext` / `mime`（由 magic bytes 判定）、`size`、`created_at` | 上传文件元数据表；原始字节落在 `<UPLOAD_DIR>/<userId>/<fileId>.<ext>`，不进数据库 |
+| 表              | 关键字段                                                                                                                  | 说明                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `users`         | `id` 主键、`username` 唯一、`password`（DES 密文）                                                                        | 账号表                                                                              |
+| `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                                                                | 登录会话表，单端登录下每个账号至多一行                                              |
+| `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引）                                          | 对话表，列表查询走该复合索引                                                        |
+| `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）                                                  | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息                                  |
+| `files`         | `id` 主键、`user_id`、`name`（原始文件名，仅作展示）、`ext` / `mime`（由 magic bytes 判定）、`size`、`created_at`         | 上传文件元数据表；原始字节落在 `<UPLOAD_DIR>/<userId>/<fileId>.<ext>`，不进数据库   |
+| `api_logs`      | `id` 自增主键、`request_id`（8 位）、`method` / `path` / `status` / `duration_ms`、`user_id` 可空、摘要三列、`created_at` | 接口请求日志表，由请求日志中间件在响应结束时落库；`user_id` 为 NULL 表示未登录入口  |
+| `audit_logs`    | `id` 自增主键、`actor_id` 可空、`method` / `path` / `status`、`detail`（请求体摘要）、`created_at`                        | 管理端写操作审计表，由审计中间件在写操作结束时落库；超级令牌入口 `actor_id` 为 NULL |
 
 > 之所以用自增 `seq` 而非 `created_at` 排序：同一毫秒内写入的多条消息时间戳可能相同，`seq` 能提供严格稳定的顺序。
 
@@ -90,7 +128,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 中断处理是这段实现里最关键的一处细节：客户端关闭连接时必须立刻停下模型推理。实现上监听的是 `res` 而非 `req`——`req` 的 `close` 在请求体读取完成后就会触发，会误中断正常的流式响应；同时用 `res.writableEnded` 排除“正常结束”这一次回调，只有真正的提前断开才 `controller.abort()`。此外，仅在答复正文非空时落库，避免保存空回复；中断或出错时也会把已产出的部分回复落库，用户已经看到的内容不会在重开会话后消失。
 
-这一整轮编排都在 `services/chatStream.ts` 的 `streamChatReply()` 中（落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话），`routes/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在 `flushHeaders()` 之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。事件本身的结构声明在 `@repo/reusable` 的 `ChatStreamEvent`，服务端与桌面端共用同一份，避免两端各抄一份而漂移。
+这一整轮编排都在 `services/chatStream.ts` 的 `streamChatReply()` 中（落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话），`routes/client/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在 `flushHeaders()` 之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。事件本身的结构声明在 `@repo/reusable` 的 `ChatStreamEvent`，服务端与桌面端共用同一份，避免两端各抄一份而漂移。
 
 新建会话若本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止），该会话只剩刚写入的提问，服务会连会话一起删除——否则列表里会留下一条没有回答的记录，用户重新发起对话后就会看到两条。反过来，已经开始产出内容的会话即便被中断（用户点“停止”）也保留，不丢用户刚发出的输入，且服务端在首个产出之前就补推了 `conversation` 事件，客户端从此刻起已知道会话 ID，中断后仍能接着这条会话继续发；已推送 `done` 的会话（含模型返回空内容的情形）同样保留，避免前端已记住的 `conversationId` 失效。
 

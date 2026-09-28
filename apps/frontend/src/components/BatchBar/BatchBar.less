@@ -1,0 +1,39 @@
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background-color: var(--bg-active);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+
+  &__count {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-left: auto;
+  }
+
+  &__clear {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    color: var(--text-faint);
+    font-size: 12px;
+    transition: color var(--transition);
+
+    &:hover {
+      color: var(--text);
+    }
+  }
+}

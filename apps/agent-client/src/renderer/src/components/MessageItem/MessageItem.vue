@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import MarkdownIt from 'markdown-it';
 import type { ChatMessage, GeneratedFileInfo } from '../../types';
+import MarkdownIt from 'markdown-it';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{ message: ChatMessage }>();
 

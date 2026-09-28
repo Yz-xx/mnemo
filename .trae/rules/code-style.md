@@ -20,7 +20,7 @@ alwaysApply: false
 ## 2. TypeScript
 
 - 导出的函数显式标注返回类型（如 `: Promise<void>`、`: void`）；一次性内部回调可省略。
-- 类型导入一律带类型标记：只导类型时用 `import type { ... }`，与值同模块混导时用行内 `type` 修饰符（如 `import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client'`）。导入按模块来源分三段：Node 内置 → 第三方 → 仓库内模块（`@repo/*` 与相对路径）；"纯类型"不是第四段——它指只导类型的那一行，随所属模块就地书写即可，不要求集中置后。
+- 类型导入一律带类型标记：只导类型时用 `import type { ... }`，与值同模块混导时用行内 `type` 修饰符（如 `import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client'`）。**`import type` 行统一集中在文件最上方**，其后是值导入，按模块来源分段：Node 内置 → 第三方 → 仓库内模块（`@repo/*` 与 `@/*` 别名）→ 相对路径。顺序由 prettier 的 `@ianvs/prettier-plugin-sort-imports` 强制（`.prettierrc.json` 的 `importOrder: ["<TYPES>", "<BUILTIN_MODULES>", "<THIRD_PARTY_MODULES>", "^@repo/", "^@/", "^[.]"]`），`pnpm format` 自动修复，无需手写。
 - 对象结构用 `interface`（如 `AppDependencies`、`ChatStreamHandlers`），联合与工具类型用 `type`。
 - 不用 `any`；外部不可信输入用 `unknown`，并在系统边界收窄。
 - 少用 `as` 断言，仅允许出现在边界（如 `req.body`、`JSON.parse` 结果）。

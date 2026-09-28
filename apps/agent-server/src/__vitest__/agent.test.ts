@@ -1,13 +1,13 @@
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import type { BaseMessage } from '@langchain/core/messages';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AgentService } from '../llm/agent.js';
-import type { AppConfig } from '../config.js';
+import type { AppConfig } from '../configuration/config/index.js';
+import type { StoredMessage } from '../conversation/types.js';
 import type { FileStore, StoredFile } from '../files/store.js';
 import type { VisionReader } from '../llm/vision.js';
-import type { KnowledgeStore } from '../rag/store.js';
-import type { StoredMessage } from '../conversation/types.js';
+import type { KnowledgeStore } from '../rag/index.js';
+import type { BaseMessage } from '@langchain/core/messages';
 import type { AgentStreamEvent } from '@repo/reusable';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentService } from '../llm/agent.js';
 
 /**
  * 捕获 createAgent 收到的对话消息：把真实 agent 换成只记录入参的替身，

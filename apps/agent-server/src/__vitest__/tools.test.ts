@@ -1,19 +1,19 @@
+import type { FileStore, StoredFile } from '../files/store.js';
+import type { GeneratedFileRef } from '../llm/tools/index.js';
+import type { VisionReader } from '../llm/vision.js';
+import type { BaseMessage } from '@langchain/core/messages';
+import type { LogSink } from '@repo/logger';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AIMessage } from '@langchain/core/messages';
-import type { BaseMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
-import { createAgent } from 'langchain';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
+import { createAgent } from 'langchain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createTools } from '../llm/tools.js';
-import type { GeneratedFileRef } from '../llm/tools.js';
-import { DISABLED_VISION, VISION_DISABLED_MESSAGE } from '../llm/vision.js';
-import type { VisionReader } from '../llm/vision.js';
 import { createLogger } from '@repo/logger';
-import type { LogSink } from '@repo/logger';
-import { KnowledgeStore } from '../rag/store.js';
-import type { FileStore, StoredFile } from '../files/store.js';
+import { createTools } from '../llm/tools/index.js';
+import { DISABLED_VISION, VISION_DISABLED_MESSAGE } from '../llm/vision.js';
+import { KnowledgeStore } from '../rag/index.js';
 import { FakeEmbeddings, TEST_ROOT } from './fakeEmbeddings.js';
 
 const OPTIONS = {

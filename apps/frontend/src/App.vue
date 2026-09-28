@@ -1,30 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { capitalize } from '@repo/shared';
-import { MyButton } from '@repo/components';
+// 根组件：布局分发器。login 页的 <route> 块设 meta.layout='blank'，独立渲染；
+// 其余页套 AdminLayout（其内部 <router-view/> 渲染当前路由组件）。
+// App.vue 保持单文件形态（见 code-style 第 4 节根组件例外），不掺业务逻辑。
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
+import AdminLayout from '@/layouts/AdminLayout.vue';
 
-// 演示跨包复用：shared 工具函数 + components 组件
-const message = ref(capitalize('hello monorepo'));
-const clickCount = ref(0);
-
-function handleClick() {
-  clickCount.value += 1;
-}
+const route = useRoute();
+const isBlank = computed(() => route.meta.layout === 'blank');
 </script>
 
 <template>
-  <main class="app">
-    <h1>{{ message }}</h1>
-    <p>组件库按钮点击次数：{{ clickCount }}</p>
-    <MyButton type="primary" @click="handleClick">点我 +1</MyButton>
-  </main>
+  <AdminLayout v-if="!isBlank" />
+  <router-view v-else />
 </template>
-
-<style scoped>
-.app {
-  max-width: 720px;
-  margin: 80px auto;
-  text-align: center;
-  font-family: system-ui, sans-serif;
-}
-</style>

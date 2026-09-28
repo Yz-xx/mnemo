@@ -1,9 +1,9 @@
+import type { PDFFont } from 'pdf-lib';
 import fs from 'node:fs/promises';
 import fontkit from '@pdf-lib/fontkit';
 import { Document, HeadingLevel, Packer, Paragraph } from 'docx';
 import ExcelJS from 'exceljs';
 import { PDFDocument } from 'pdf-lib';
-import type { PDFFont } from 'pdf-lib';
 
 /** 支持的导出格式：取值集合同时供工具层的枚举校验使用，避免两处各写一遍 */
 export const EXPORT_FORMATS = ['docx', 'xlsx', 'pdf'] as const;

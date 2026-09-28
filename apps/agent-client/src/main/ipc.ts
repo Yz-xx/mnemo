@@ -1,7 +1,3 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import type { OpenDialogOptions, SaveDialogOptions } from 'electron';
 import type {
   AppInfo,
   AppSettings,
@@ -9,6 +5,10 @@ import type {
   SelectedFile,
   WindowAction,
 } from '../preload/types.js';
+import type { OpenDialogOptions, SaveDialogOptions } from 'electron';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { readSettings, writeSettings } from './settings.js';
 import { applyTheme } from './theme.js';
 

@@ -12,30 +12,39 @@ alwaysApply: false
 apps/agent-server/src/
 ├── index.ts          组合根：读配置 → 建库表 → 建连接池 → 装配 Store/Service → createApp → listen
 ├── app.ts            createApp：仅"通用中间件 → 注册路由 → 错误兜底"三段骨架
-├── dependencies.ts   AppDependencies 接口，运行期依赖集合
-├── config.ts         env 读取 + 默认值 + describe* 系列（当前模型 / 服务地址）
-├── errors.ts         依赖服务连接错误翻译（跨层共用）
-├── messages.ts       对外固定文案常量表（ERROR_MESSAGE）
-├── middleware/       cors.ts、requestLog.ts、errorHandler.ts
-├── routes/           各接口路由；index.ts 统一注册前缀与鉴权
-├── services/         跨路由的编排逻辑（chatStream.ts、knowledge.ts）
+├── configuration/    config/（env 读取、默认值与运行视图）、dependencies.ts、errors.ts、messages.ts
+├── middleware/       cors.ts、requestLog.ts、adminAudit.ts、upload.ts、errorHandler.ts
+├── routes/           client/ 客户端接口、admin/ 管理端接口；index.ts 注册前缀与鉴权，pagination.ts 为共用工具
+├── services/         跨路由的编排逻辑（chatStream.ts、knowledge.ts、adminUsers.ts、health.ts）
 ├── auth/             userStore / sessionStore / middleware / credentials
-├── conversation/     会话与消息持久化
-├── llm/              agent、model、tools、prompt（系统提示词）
-├── rag/              知识库存储与检索
+├── conversation/     会话与消息持久化；store/ 下按关注点分文件
+├── llm/              agent、model、prompt、vision；tools/ 下按关注点分文件
+├── rag/              知识库存储与检索，按关注点分文件
+├── files/            附件解析、导出与存储
+├── audit/ logging/   操作审计与接口日志存储
 ├── db/               pool.ts、schema.ts
 └── __vitest__/       单元测试（不参与编译产物）
 ```
 
 - 依赖方向单向：`routes → services → store/llm/db`，下层不得反向 import 上层。
+- `routes/` 下**不导出 Router 的纯工具**（如 `pagination.ts` 的分页参数解析）不算「横向依赖」：它不含路由、不依赖任何 Store，被多个路由 import 是复用。判断标准是「这个文件是否导出了 Router」。
 - 依赖一律显式注入：`AppDependencies` 定义在 `dependencies.ts`，路由只 import 该类型，避免反向依赖 `app.ts`。
-- 模块内不 import 单例、不直接读 `process.env`，配置只经 `config.ts` 获取。
+- 模块内不 import 单例、不直接读 `process.env`，配置只经 `configuration/config` 获取。
 - 新增依赖项时同步 `AppDependencies` 与 `index.ts` 的装配代码。
+
+### 文件与目录组织
+
+- **单文件行数上限 250 行**（含注释），约束对象是 `src/` 下的源码模块：`__vitest__/` 的用例文件按被测模块组织，长度由用例数决定，不受此限。超过就按关注点拆进同名子目录，子目录的 `index.ts` 只做聚合导出，不承载实现。
+- **父目录原本只有这一个文件时不建同名子目录**，直接平铺：`rag/store.ts` 拆出的文件就落在 `rag/` 下，而不是再套一层 `rag/store/`（拆分前 `rag/` 只有它一个文件）。父目录已有其他模块并存时子目录才有区分意义，如 `llm/tools/`、`configuration/config/`、`conversation/store/`。
+- 拆分以「关注点」为单位：抽走可独立成模块的辅助函数与类型定义即可。**不把一个 class 切成多个互相转发的 class**——类本身通常已经是深模块，拆开只会得到一组更浅的模块。
+- `routes/` 按访问者分层：客户端接口收进 `routes/client/`，管理端接口收进 `routes/admin/`，一个模块一个文件，模块内部只写相对路径。根目录只留 `index.ts`（注册表）与 `pagination.ts`（两端共用的纯工具）。
+- 管理端各模块**各自挂一遍 `adminGuard`**，并把更具体的路径登记在 `/api/admin` 之前：`app.use('/api/admin', ...)` 会前缀匹配全部 `/api/admin/*`，排在前面时同一次请求会先跑一遍守卫、再落到具体模块，鉴权与审计记录都会重复一遍。
+- 目录导入在 NodeNext 下必须写全：`../routes/admin/users.js`、`./conversation/store/index.js`、`./rag/index.js`，省略 `index.js` 后 Node 无法解析。
 
 ## 2. 新增接口的标准动作
 
-1. 在 `routes/<name>.ts` 导出 `create<Name>Router(deps)` 工厂，路由体内只做参数校验、状态码与调用下层，不写业务编排。工厂签名用 `Pick<AppDependencies, 'a' | 'b'>` 只声明本模块真正用到的依赖：调用处不必关心中间件与其余依赖，`registerRoutes` 里各路由形状一致，测试也只需构造用到的那几项。
-2. 在 `routes/index.ts` 追加一行 `app.use('/api/<name>', [requireAuth,] create<Name>Router(...))`。
+1. 在 `routes/client/<name>.ts`（管理端为 `routes/admin/<name>.ts`）导出 `create<Name>Router(deps)` 工厂，路由体内只做参数校验、状态码与调用下层，不写业务编排。工厂签名用 `Pick<AppDependencies, 'a' | 'b'>` 只声明本模块真正用到的依赖：调用处不必关心中间件与其余依赖，`registerRoutes` 里各路由形状一致，测试也只需构造用到的那几项。
+2. 在 `routes/index.ts` 追加一行 `app.use('/api/<name>', [requireAuth,] create<Name>Router(...))`。**挂载前缀与模块路由内的路径只能有一处写模块名**：挂在 `/api/admin/logs` 的模块，内部就写 `/` 与 `/:id`。两处都写会拼出 `/api/admin/logs/logs` 这类路径，前端一律 404，而类型检查、lint 与「直调处理函数」的单测全是绿的——这类缺陷只能靠真实请求发现，回归用例见 `__vitest__/adminRoutes.test.ts`。
 3. 鉴权策略在 `registerRoutes` 集中声明，不在单个路由内部重复校验。
 4. 需要新能力时先在 `services/` 或对应领域目录实现，再在路由调用。
 5. 补 `src/__vitest__/` 用例。
@@ -93,8 +102,8 @@ apps/agent-server/src/
 ## 7. LLM 与工具
 
 - 智能体由 `createAgent` + `streamMode: 'messages'` 构建，系统提示词统一维护在 `llm/prompt.ts`。
-- 工具实现在 `llm/tools.ts`，必须自校验入参并在非法时抛出中文错误；知识库检索按调用者可见性过滤，结果需带「来源」标注。
-- 模型与嵌入 provider 由 `config.ts` 决定（deepseek 走 `ChatOpenAI`，其余走 `ChatOllama`），业务代码不做 provider 判断。
+- 工具实现在 `llm/tools/`（按关注点分文件），必须自校验入参并在非法时抛出中文错误；知识库检索按调用者可见性过滤，结果需带「来源」标注。
+- 模型与嵌入 provider 由 `configuration/config/` 决定（deepseek 走 `ChatOpenAI`，其余走 `ChatOllama`），业务代码不做 provider 判断。
 - 文件类工具（`list_files` / `read_file` / `write_file`）只认本轮附件：附件 ID 由路由层校验后经 `configurable.fileIds` 注入，模型编造出的 ID 读不到任何内容，越权读取他人文件不可能发生。
 - 图片附件没有可抽取的文字，交给 `llm/vision.ts` 的视觉模型转述成文字后再回填给对话模型；未配置视觉模型时必须返回可读提示，不允许模型凭文件名猜测图片内容。
 - 本轮附件在作答前由 `AgentService` 预读成文本注入对话（`readAttachmentText`：图片走视觉模型、其余走解析器），读到的内容直接摆在提问旁边，`read_file` 退为复核手段。不要依赖模型自行决定是否调用读文件工具：实测触发率随提问措辞波动，弱措辞下会连续多轮完全不读并编造内容。
@@ -102,7 +111,7 @@ apps/agent-server/src/
 
 ## 8. 配置与环境文件
 
-- 环境变量只在 `config.ts` 读取并映射为 `AppConfig`，其它模块一律使用注入的 config，不直接读 `process.env`。
+- 环境变量只在 `configuration/config/` 读取并映射为 `AppConfig`，其它模块一律使用注入的 config，不直接读 `process.env`。
 - 新增配置项的标准动作：`AppConfig` 加字段 → `loadConfig()` 读环境变量并给默认值 → 同步 `.env.development` 与 `.env.production` → 同步 `apps/agent-server/README.md` 的配置表。
 - 配置按环境拆两份：`.env.development` 供 `pnpm dev`（`tsx watch --env-file`）、`.env.production` 供 `pnpm start`（`node --env-file`），走 Node 原生能力，不引入 dotenv 之类的加载库。
 - 系统环境变量优先级高于文件，真实密钥不入库，生产文件只写占位值并在注释中说明注入方式。

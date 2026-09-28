@@ -1,5 +1,5 @@
-import { emitKeypressEvents } from 'node:readline';
 import process from 'node:process';
+import { emitKeypressEvents } from 'node:readline';
 
 /**
  * 终端多选列表：↑/↓ 移动光标，空格切换选中，a 全选/全不选，回车确认，Esc/Ctrl+C 取消。

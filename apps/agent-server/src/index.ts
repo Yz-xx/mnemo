@@ -1,21 +1,23 @@
+import { createLogger } from '@repo/logger';
 import { createApp } from './app.js';
+import { AuditLogStore } from './audit/store.js';
 import { SessionStore } from './auth/sessionStore.js';
 import { UserStore } from './auth/userStore.js';
 import {
-  SERVICE_NAME,
   describeChatModel,
   describeEmbeddingEndpoint,
   describeEmbeddingModel,
   loadConfig,
-} from './configuration/config.js';
-import { ConversationStore } from './conversation/store.js';
+  SERVICE_NAME,
+} from './configuration/config/index.js';
+import { ConversationStore } from './conversation/store/index.js';
 import { createMysqlPool } from './db/pool.js';
 import { ensureSchema } from './db/schema.js';
 import { FileStore } from './files/store.js';
 import { AgentService } from './llm/agent.js';
 import { createEmbeddings } from './llm/model.js';
-import { createLogger } from '@repo/logger';
-import { KnowledgeStore } from './rag/store.js';
+import { ApiLogStore } from './logging/store.js';
+import { KnowledgeStore } from './rag/index.js';
 
 // 配置与日志先于其它依赖建立：建库、连接池等启动环节失败时也能留下可排查的记录
 const config = loadConfig();
@@ -33,6 +35,8 @@ async function bootstrap(): Promise<void> {
   await ensureSchema(config.mysql);
   const pool = createMysqlPool(config.mysql);
 
+  const apiLogs = new ApiLogStore(pool);
+  const auditLogs = new AuditLogStore(pool);
   const users = new UserStore(pool);
   const sessions = new SessionStore(pool);
   // 启动清理：清掉过期会话，并把历史遗留的同账号重复会话收敛为单端登录
@@ -53,6 +57,8 @@ async function bootstrap(): Promise<void> {
     config,
     logger,
     agent,
+    apiLogs,
+    auditLogs,
     conversations,
     files,
     knowledge,

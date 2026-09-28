@@ -1,10 +1,10 @@
 // ESLint 9 统一扁平配置（Flat Config）
 // 全仓共用：JS 推荐规则 + TypeScript 推荐规则 + Vue3 推荐规则，并关闭与 Prettier 冲突的格式规则
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import vue from 'eslint-plugin-vue';
 import prettier from 'eslint-config-prettier';
+import vue from 'eslint-plugin-vue';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   // 全局忽略：构建产物、依赖目录与 Trae 规则目录（仅含 Markdown）
@@ -61,6 +61,15 @@ export default tseslint.config(
     ],
     languageOptions: {
       globals: globals.node,
+    },
+  },
+
+  // 路由页文件名（index / login / [...all] 等）由 unplugin-vue-router 按文件系统约定解析，
+  // 不需要多词组件名，对 pages 目录关闭 multi-word-component-names
+  {
+    files: ['apps/frontend/src/pages/**/*.vue'],
+    rules: {
+      'vue/multi-word-component-names': 'off',
     },
   },
 

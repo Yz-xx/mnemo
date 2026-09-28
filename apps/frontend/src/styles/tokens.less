@@ -1,0 +1,82 @@
+// 设计令牌：固定亮色的「编辑台」风格——克制的极简 + 强排版层级。
+// 品牌主色沿用金色（与桌面端一致），另设朱红点缀色用于激活指示与关键标记；
+// 字体分三族：展示层走衬线、数据走等宽、正文走系统中文族，不引外部字体。
+// 色值一律经 CSS 变量引用，禁止在组件内写死颜色（见 code-style 第 5 节）。
+:root {
+  // 字体族
+  --font-display: Georgia, 'Times New Roman', 'Songti SC', SimSun, serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
+
+  // 字距：展示层略收紧、小标签疏排、数字略放宽，避免各处手写字距值
+  --tracking-display: -0.01em;
+  --tracking-label: 0.12em;
+  --tracking-mono: 0.02em;
+
+  // 背景：面板底色比纯白低一档，配合网格线做氛围而非纯色平铺
+  --bg: #ffffff;
+  --bg-panel: #f6f7f9;
+  --bg-hover: #eef0f3;
+  --bg-active: #e6e9ee;
+  /** 重墨块：品牌区与强调面板的深底 */
+  --bg-ink: #17191e;
+
+  // 文字：三档层级均满足白底 4.5:1（--text-faint 用于最小号元信息，取 4.9:1）
+  --text: #14181f;
+  --text-muted: #545c68;
+  --text-faint: #6e7681;
+  --text-inverse: #ffffff;
+  /** 重墨底上的次级文字，对比度 6.1:1 */
+  --text-inverse-muted: #a8b0bb;
+
+  // 边框
+  --border: #e4e7eb;
+  --border-strong: #cfd4da;
+
+  // 氛围网格线：极淡，仅用于页面背景的细网格
+  --grid-line: rgba(20, 24, 31, 0.045);
+
+  // 品牌（扁平金）
+  --primary: #b8860b;
+  --primary-soft: #f5eddc;
+  --primary-strong: #8a6508;
+
+  // 点缀（朱红）：激活指示条、关键标记，白底 6.2:1
+  --accent: #b3342a;
+  --accent-soft: #fbeae7;
+  --accent-strong: #992b22;
+
+  // 语义
+  // -strong 用于「深色语义字压浅色底」的场景（状态徽标、错误提示条）：
+  // --danger / --success 直接叠在各自的 -soft 上对比度只有 3.0~4.0:1，达不到正文 4.5:1
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --danger-soft: #fee2e2;
+  --success: #16a34a;
+  --success-strong: #15803d;
+  --success-soft: #dcfce7;
+  --warning: #d97706;
+  --warning-strong: #b45309;
+  --warning-soft: #fef3c7;
+
+  // 遮罩：弹窗背后的压暗层
+  --mask: rgba(20, 24, 31, 0.4);
+
+  // 尺寸：编辑台气质靠细线与小圆角，故圆角整体收紧
+  --radius-sm: 2px;
+  --radius: 3px;
+  --radius-lg: 4px;
+  --sidebar-width: 236px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 56px;
+
+  // 阴影：常态不投影，靠边框分层；只有弹窗与浮层用可见阴影
+  --shadow-sm: 0 1px 0 rgba(20, 24, 31, 0.03);
+  --shadow: 0 12px 32px rgba(20, 24, 31, 0.12);
+
+  // 过渡
+  --transition: 150ms ease;
+  /** 首屏错落揭示的单步时长与步长，配合 animation-delay 使用 */
+  --reveal-duration: 320ms;
+  --reveal-step: 60ms;
+}

@@ -1,45 +1,22 @@
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-// 类型类必须直接从 apache-arrow 取：LanceDB 的 CJS 入口透传导出无法被 ESM 静态识别
-import { Field, FixedSizeList, Float32, Float64, Schema, Utf8 } from 'apache-arrow';
-import { connect } from '@lancedb/lancedb';
+import type { KnowledgeActor, KnowledgeDocument, KnowledgeUpload } from './documents.js';
+import type { KnowledgeSearchResult } from './search.js';
 import type { Connection, Table } from '@lancedb/lancedb';
 import type { Embeddings } from '@langchain/core/embeddings';
+import type { Schema } from 'apache-arrow';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { connect } from '@lancedb/lancedb';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { describeConnectionError } from '../configuration/errors.js';
-
-/** 文档可见范围：global 全局共享，private 仅上传者本人可见 */
-export type KnowledgeScope = 'global' | 'private';
-
-export interface KnowledgeDocument {
-  id: string;
-  title: string;
-  scope: KnowledgeScope;
-  /** 私有文档的归属用户；全局文档为 null */
-  ownerUserId: number | null;
-  chunks: number;
-  createdAt: string;
-}
-
-export interface KnowledgeSearchResult {
-  title: string;
-  content: string;
-  score: number;
-}
-
-/** 写入目标：scope 决定归属，全局文档只能由管理入口写入 */
-export interface KnowledgeUpload {
-  title: string;
-  content: string;
-  scope: KnowledgeScope;
-  userId: number;
-}
-
-/** 操作者身份：私有文档仅归属者可删除，全局文档仅管理员可删除 */
-export interface KnowledgeActor {
-  userId: number;
-  isAdmin: boolean;
-}
+import { readOwner, toDocument } from './documents.js';
+import {
+  CHUNKS_TABLE,
+  chunksSchema,
+  DOCUMENT_ID,
+  DOCUMENTS_TABLE,
+  documentsSchema,
+} from './lance.js';
+import { visibilityFilter } from './search.js';
 
 export interface KnowledgeStoreOptions {
   chunkSize: number;
@@ -51,66 +28,6 @@ export interface KnowledgeStoreOptions {
   embeddingModel: string;
   /** 向量化服务地址，用于把连接失败翻译成可定位的提示 */
   embeddingEndpoint: string;
-}
-
-const DOCUMENTS_TABLE = 'documents';
-const CHUNKS_TABLE = 'chunks';
-
-/** 文档 ID 为 UUID，按白名单校验后再拼进过滤表达式，避免注入 */
-const DOCUMENT_ID = /^[0-9a-fA-F-]{36}$/;
-
-/**
- * 文档表结构：显式声明列类型，避免按首行数据推断类型出错
- * （owner_user_id 需要可空，数值列统一用 Float64 以免读出 BigInt）
- */
-function documentsSchema(): Schema {
-  return new Schema([
-    new Field('id', new Utf8(), false),
-    new Field('title', new Utf8(), false),
-    new Field('scope', new Utf8(), false),
-    new Field('owner_user_id', new Float64(), true),
-    new Field('chunks', new Float64(), false),
-    new Field('embedding_model', new Utf8(), false),
-    new Field('dim', new Float64(), false),
-    new Field('created_at', new Utf8(), false),
-  ]);
-}
-
-/** 片段表结构：向量维度在建表时固定，维度不符时写入会直接失败 */
-function chunksSchema(dim: number): Schema {
-  return new Schema([
-    new Field('id', new Utf8(), false),
-    new Field('document_id', new Utf8(), false),
-    new Field('title', new Utf8(), false),
-    new Field('content', new Utf8(), false),
-    new Field('scope', new Utf8(), false),
-    new Field('owner_user_id', new Float64(), true),
-    new Field('created_at', new Utf8(), false),
-    new Field('vector', new FixedSizeList(dim, new Field('item', new Float32(), false)), false),
-  ]);
-}
-
-/** 可见性过滤：全局文档对所有人生效，私有文档只对归属者生效 */
-function visibilityFilter(userId: number): string {
-  if (!Number.isInteger(userId)) throw new Error('用户 ID 非法');
-  return `(scope = 'global' OR owner_user_id = ${userId})`;
-}
-
-function readOwner(row: Record<string, unknown>): number | null {
-  return row.owner_user_id === null || row.owner_user_id === undefined
-    ? null
-    : Number(row.owner_user_id);
-}
-
-function toDocument(row: Record<string, unknown>): KnowledgeDocument {
-  return {
-    id: String(row.id),
-    title: String(row.title),
-    scope: row.scope === 'global' ? 'global' : 'private',
-    ownerUserId: readOwner(row),
-    chunks: Number(row.chunks),
-    createdAt: String(row.created_at),
-  };
 }
 
 /**
@@ -201,6 +118,23 @@ export class KnowledgeStore {
     return rows.map(toDocument).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  /**
+   * 管理端列表：不做可见性过滤，返回全部文档（含各用户的私有文档）。
+   * 后台看的是整体归置情况，“谁的文档”由归属字段表达，因此不能套用可见性过滤。
+   */
+  async listAll(): Promise<KnowledgeDocument[]> {
+    const table = await this.openTable(DOCUMENTS_TABLE);
+    if (!table) return [];
+    const rows = await table.query().toArray();
+    return rows.map(toDocument).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** 文档总数（含全局与全部私有文档）：总览看整体规模，不做可见性过滤 */
+  async count(): Promise<number> {
+    const table = await this.openTable(DOCUMENTS_TABLE);
+    return table ? table.countRows() : 0;
+  }
+
   /** 写入文档：切分 → 批量向量化 → 分别写入文档表与片段表 */
   async add(input: KnowledgeUpload): Promise<KnowledgeDocument> {
     const splitter = new RecursiveCharacterTextSplitter({
@@ -256,7 +190,7 @@ export class KnowledgeStore {
     return document;
   }
 
-  /** 删除文档及其片段：校验归属，权限不足按“不存在”处理，不泄漏他文档信息 */
+  /** 删除文档及其片段：管理员可删任意文档，普通用户仅限自己上传的；权限不足一律按“不存在”处理 */
   async remove(id: string, actor: KnowledgeActor): Promise<boolean> {
     if (!DOCUMENT_ID.test(id)) return false;
     const documents = await this.openTable(DOCUMENTS_TABLE);
@@ -265,7 +199,7 @@ export class KnowledgeStore {
     const [row] = await documents.query().where(`id = '${id}'`).limit(1).toArray();
     if (!row) return false;
     const owner = readOwner(row);
-    const allowed = owner === null ? actor.isAdmin : owner === actor.userId;
+    const allowed = actor.isAdmin || owner === actor.userId;
     if (!allowed) return false;
 
     await documents.delete(`id = '${id}'`);

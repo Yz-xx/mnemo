@@ -1,31 +1,30 @@
-import { randomUUID } from 'node:crypto';
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { preview, redactValue } from '@repo/logger';
+import type { ApiLogStore } from '../logging/store.js';
 import type { Logger } from '@repo/logger';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { randomUUID } from 'node:crypto';
 import { HTTP_STATUS } from '@repo/reusable';
+import { hasContent, summarize } from '../logging/summarize.js';
 
 /** 请求 ID 取 UUID 前 8 位：足够区分单机并发请求，又便于人工抄读 */
 const REQUEST_ID_LENGTH = 8;
 
-/** 入参出参摘要长度上限：只记录开头，避免整包报文把日志文件撑大 */
-const PAYLOAD_PREVIEW = 500;
+/** 不落库的路径：健康检查被客户端按秒轮询，记进来只会把真正要排查的请求挤下去 */
+const SKIP_RECORD_PATHS = new Set(['/api/health']);
 
-/** 空对象不写日志（express.json 在无请求体时会给出 {}） */
-function hasContent(value: unknown): boolean {
-  return value !== null && typeof value === 'object' && Object.keys(value).length > 0;
-}
-
-/** 先脱敏再截断：顺序不能反，否则截断后只剩字符串，嵌套的密码就遮蔽不到了 */
-function summarize(value: unknown): string {
-  return preview(redactValue(value), PAYLOAD_PREVIEW);
+/** 错误摘要：message 与 stack 都是不可枚举属性，先取成普通对象再脱敏截断 */
+function summarizeError(error: Error): string {
+  return summarize({ message: error.message, stack: error.stack });
 }
 
 /**
  * 请求日志：为每个请求生成短 ID 并挂到 res.locals，供路由层取用；
  * 响应结束时汇总一条结果：入参（查询串、请求体）、出参（响应体）、状态码、耗时与用户，
  * 5xx 附带错误堆栈。SSE 接口不走 res.json，其出参由业务层自行记录。
+ *
+ * 同一份汇总同时写入 api_logs 表（即管理后台的「API 日志」页），落库是 fire-and-forget：
+ * 失败只告警，不影响已经返回给客户端的响应。
  */
-export function createRequestLog(logger: Logger): RequestHandler {
+export function createRequestLog(logger: Logger, apiLogs: ApiLogStore): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     const requestId = randomUUID().slice(0, REQUEST_ID_LENGTH);
     const log = logger.child({ requestId });
@@ -45,20 +44,43 @@ export function createRequestLog(logger: Logger): RequestHandler {
     res.on('finish', () => {
       const status = res.statusCode;
       const error = res.locals.error as Error | undefined;
+      const path = req.originalUrl.split('?')[0];
+      const durationMs = Date.now() - startedAt;
+      const queryParams = hasContent(req.query) ? summarize(req.query) : undefined;
+      const requestBody = hasContent(req.body) ? summarize(req.body) : undefined;
+      const responseBody = res.locals.responseBody as string | undefined;
+      const { userId } = res.locals;
+
       const fields = {
         method: req.method,
-        path: req.originalUrl.split('?')[0],
-        queryParams: hasContent(req.query) ? summarize(req.query) : undefined,
-        requestBody: hasContent(req.body) ? summarize(req.body) : undefined,
+        path,
+        queryParams,
+        requestBody,
         status,
-        durationMs: Date.now() - startedAt,
-        userId: res.locals.userId,
-        responseBody: res.locals.responseBody,
+        durationMs,
+        userId,
+        responseBody,
         error,
       };
       if (status >= HTTP_STATUS.INTERNAL_SERVER_ERROR) log.error('请求处理失败', fields);
       else if (status >= HTTP_STATUS.BAD_REQUEST) log.warn('请求被拒绝', fields);
       else log.info('请求完成', fields);
+
+      if (SKIP_RECORD_PATHS.has(path)) return;
+      void apiLogs
+        .record({
+          requestId,
+          method: req.method,
+          path,
+          status,
+          durationMs,
+          userId: typeof userId === 'number' ? userId : null,
+          queryParams: queryParams ?? null,
+          requestBody: requestBody ?? null,
+          responseBody: responseBody ?? null,
+          error: error ? summarizeError(error) : null,
+        })
+        .catch((recordError: unknown) => log.warn('接口日志落库失败', { error: recordError }));
     });
 
     next();

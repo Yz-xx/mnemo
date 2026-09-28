@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useKnowledgePanel } from './useKnowledgePanel';
 import type { KnowledgePanelProps } from './useKnowledgePanel';
+import { useKnowledgePanel } from './useKnowledgePanel';
 
 const props = defineProps<KnowledgePanelProps>();
 

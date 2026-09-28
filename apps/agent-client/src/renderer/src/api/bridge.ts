@@ -1,13 +1,14 @@
+import type {
+  AppSettings,
+  DesktopApi,
+  ExportedFile,
+  SelectedFile,
+} from '../../../preload/types.js';
+import { DEFAULT_SETTINGS } from '../../../preload/types.js';
+
 // 渲染进程访问 preload 桥接的唯一入口。
 // 浏览器调试环境（如样式预览页）不存在 window.desktopApi，所有读写统一在此降级，
 // 避免各 composable 与组件各写一份 `as DesktopApi | undefined` 与默认值。
-import {
-  DEFAULT_SETTINGS,
-  type AppSettings,
-  type DesktopApi,
-  type ExportedFile,
-  type SelectedFile,
-} from '../../../preload/types.js';
 
 /** 后端服务默认地址：登录页、对话客户端与设置项共用同一份 */
 export const DEFAULT_BACKEND_URL = DEFAULT_SETTINGS.backendUrl;

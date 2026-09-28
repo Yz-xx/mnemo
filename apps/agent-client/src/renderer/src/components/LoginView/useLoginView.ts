@@ -1,9 +1,9 @@
-import { computed, onMounted, ref, watch } from 'vue';
+import type { AuthMode } from '../../composables/useAuth';
 import type { ComputedRef, Ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { DEFAULT_BACKEND_URL, readSettings, saveSettings } from '../../api/bridge';
 import { AgentApi } from '../../api/client';
 import { useAuth } from '../../composables/useAuth';
-import type { AuthMode } from '../../composables/useAuth';
 
 const MODE_TEXT: Record<AuthMode, { title: string; action: string; hint: string }> = {
   login: { title: '登录', action: '登录', hint: '登录后即可开始与智能体对话' },

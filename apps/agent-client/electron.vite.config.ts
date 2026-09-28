@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import vue from '@vitejs/plugin-vue';
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
 // Electron 三段式构建配置：主进程 / 预加载 / 渲染进程
 export default defineConfig({

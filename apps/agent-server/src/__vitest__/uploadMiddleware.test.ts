@@ -1,9 +1,9 @@
+import type { AppConfig } from '../configuration/config/index.js';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { Buffer } from 'node:buffer';
 import express from 'express';
 import { describe, expect, it } from 'vitest';
-import type { Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import type { AppConfig } from '../config.js';
 import { errorHandler } from '../middleware/errorHandler.js';
 import { createUploadMiddleware } from '../middleware/upload.js';
 

@@ -1,16 +1,26 @@
+import type { PluginOption } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import VueRouter from 'unplugin-vue-router/vite';
+import { defineConfig } from 'vite';
 
-// Vite 配置：Vue 插件 + workspace 公共包源码别名 + 后端接口代理
+// Vite 配置：
+// - unplugin-vue-router 提供 src/pages 下的文件式自动路由
+// - workspace 公共包源码别名（直接编译源码，无需先产出 dist）
+// - /api 开头的请求代理到 Express 后端
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    // unplugin-vue-router 的 Plugin 类型与本地 vite 实例因 @types/node peer 解析分裂而
+    // 不兼容（同版本两实例），此处属构建配置边界，用断言对齐 PluginOption
+    VueRouter({ routesFolder: 'src/pages' }) as PluginOption,
+    vue(),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@repo/shared': fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)),
-      '@repo/components': fileURLToPath(
-        new URL('../../packages/components/src/index.ts', import.meta.url),
+      // 只别名真正用到的包：多留一条别名会让一次误 import 悄悄通过（如把 crypto-js 拖进产物）
+      '@repo/reusable': fileURLToPath(
+        new URL('../../packages/reusable/src/index.ts', import.meta.url),
       ),
     },
   },

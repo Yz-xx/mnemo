@@ -1,0 +1,42 @@
+.user-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &__label {
+    color: var(--text-muted);
+    font-size: 12px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__input {
+    height: 34px;
+    padding: 0 10px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition);
+
+    &:focus {
+      border-color: var(--primary);
+    }
+  }
+
+  &__error {
+    margin: 0;
+    padding: 8px 12px;
+    background-color: var(--danger-soft);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+}

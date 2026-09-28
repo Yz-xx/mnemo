@@ -25,8 +25,8 @@
 跨包引用统一写 workspace 包名，不用相对路径穿透到其他包。包已声明 `sideEffects: false`，并声明了 `exports` 条件导出：包根为 `types` → `dist/index.d.ts`、`import` → `dist/index.mjs`、`require` → `dist/index.cjs`。
 
 ```ts
-import { HTTP_STATUS, toHttpStatusCode } from '@repo/reusable';
 import type { ChatStreamEvent } from '@repo/reusable';
+import { HTTP_STATUS, toHttpStatusCode } from '@repo/reusable';
 ```
 
 **依赖方向。** `@repo/reusable` 可以依赖 `@repo/shared`（通用工具不认识业务约定，单向才成立）；`@repo/shared` 不得反向依赖本包，否则通用工具会被业务概念污染。当前本包为零依赖。规则同样要求**包根不出现带第三方依赖的模块**：第三方包常无自己的 `sideEffects` 声明，打包器无法证明「导入它无副作用」，即使一个绑定都没用到也会为保留副作用而整包引入。理由与实测数据与 `@repo/shared` 的 DES 段落同源，详见 [packages/shared/README.md 的「二、按需引入」](../shared/README.md)。将来若引入带第三方依赖的业务能力，照 `@repo/shared/crypto` 的做法另开子路径入口（`build.lib.entry` 加一项 + `exports` 加一段），不要指望消费方的打包器替我们剔除。

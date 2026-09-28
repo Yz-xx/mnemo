@@ -1,7 +1,7 @@
+import type { LogFields, Logger, LogLevel, LogRecord, LogSink } from './types.js';
 import { createFileSink } from './fileSink.js';
 import { formatRecord } from './format.js';
 import { redactFields } from './redact.js';
-import type { LogFields, LogLevel, LogRecord, LogSink, Logger } from './types.js';
 
 // 统一出口：业务方只从 '@repo/logger' 引入
 export { formatDay, formatRecord } from './format.js';

@@ -1,11 +1,13 @@
-import type { Logger } from '@repo/logger';
+import type { AuditLogStore } from '../audit/store.js';
 import type { SessionStore } from '../auth/sessionStore.js';
 import type { UserStore } from '../auth/userStore.js';
-import type { AppConfig } from './config.js';
-import type { ConversationStore } from '../conversation/store.js';
+import type { ConversationStore } from '../conversation/store/index.js';
 import type { FileStore } from '../files/store.js';
 import type { AgentService } from '../llm/agent.js';
-import type { KnowledgeStore } from '../rag/store.js';
+import type { ApiLogStore } from '../logging/store.js';
+import type { KnowledgeStore } from '../rag/index.js';
+import type { AppConfig } from './config/index.js';
+import type { Logger } from '@repo/logger';
 
 /**
  * 应用运行期依赖集合：由组合根 index.ts 统一装配后注入路由层。
@@ -15,6 +17,10 @@ export interface AppDependencies {
   config: AppConfig;
   logger: Logger;
   agent: AgentService;
+  /** 接口请求日志：requestLog 中间件写入，管理端「API 日志」页读取 */
+  apiLogs: ApiLogStore;
+  /** 操作审计：adminAudit 中间件写入，管理端「操作审计」页读取 */
+  auditLogs: AuditLogStore;
   conversations: ConversationStore;
   files: FileStore;
   knowledge: KnowledgeStore;

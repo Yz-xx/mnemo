@@ -1,8 +1,8 @@
 import { Buffer } from 'node:buffer';
-import { describe, expect, it } from 'vitest';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import ExcelJS from 'exceljs';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { describe, expect, it } from 'vitest';
 import { extractText } from '../files/parser.js';
 
 /** 用 docx 库生成真实 docx 字节：解析器要面对真实文件结构，手工拼的伪字节证明不了什么 */

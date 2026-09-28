@@ -1,5 +1,5 @@
-import { BrowserWindow, nativeTheme } from 'electron';
 import type { ThemeMode } from '../preload/types.js';
+import { BrowserWindow, nativeTheme } from 'electron';
 
 /**
  * 窗口底色需与主题一致：窗口出现到首个渲染帧之间露出的是这个颜色，

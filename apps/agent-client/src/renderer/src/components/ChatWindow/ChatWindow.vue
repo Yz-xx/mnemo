@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import type { ChatWindowEmits, ChatWindowProps } from './useChatWindow';
 import MessageItem from '../MessageItem';
 import { useChatWindow } from './useChatWindow';
-import type { ChatWindowEmits, ChatWindowProps } from './useChatWindow';
 
 const props = defineProps<ChatWindowProps>();
 

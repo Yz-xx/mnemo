@@ -1,7 +1,7 @@
-import multer from 'multer';
+import type { AppConfig } from '../configuration/config/index.js';
 import type { RequestHandler } from 'express';
+import multer from 'multer';
 import { HTTP_STATUS } from '@repo/reusable';
-import type { AppConfig } from '../configuration/config.js';
 
 /** 上传失败文案：multer 自带的是英文消息，不适合直接透给用户 */
 const UPLOAD_FAILED = '文件上传失败，请检查文件大小与格式';

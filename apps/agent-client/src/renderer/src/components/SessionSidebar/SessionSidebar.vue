@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useSessionSidebar } from './useSessionSidebar';
 import type { SessionSidebarEmits, SessionSidebarProps } from './useSessionSidebar';
+import { useSessionSidebar } from './useSessionSidebar';
 
 const props = defineProps<SessionSidebarProps>();
 

@@ -1,12 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["vite/client", "node"],
+    "types": ["vite/client", "node", "unplugin-vue-router/client"],
     "paths": {
-      // 开发 / 构建时直接编译公共库源码，无需等待公共库先产出 dist
-      "@repo/shared": ["../../packages/shared/src/index.ts"],
-      "@repo/components": ["../../packages/components/src/index.ts"]
+      // 开发 / 构建时直接编译公共库源码，无需等待公共库先产出 dist；
+      // 只登记真正用到的包，多余的映射会让一次误 import 静默通过
+      "@repo/reusable": ["../../packages/reusable/src/index.ts"],
+      // 应用内绝对路径别名，与 vite.config.ts 的 resolve.alias 保持一致
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"]
+  // typed-router.d.ts 由 unplugin-vue-router 生成（文件头也建议入库并登记到 include），
+  // 登记后 router.push('/users') 一类的路径才会被类型检查
+  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts", "typed-router.d.ts"]
 }

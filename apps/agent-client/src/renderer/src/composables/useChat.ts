@@ -1,14 +1,8 @@
+import type { ChatStreamEvent, HealthInfo } from '../api/client';
+import type { ChatAttachment, ChatMessage, ConversationSummary, GeneratedFileInfo } from '../types';
 import { computed, ref } from 'vue';
 import { DEFAULT_BACKEND_URL, openFile, readSettings, saveFile, saveSettings } from '../api/bridge';
-import {
-  AgentApi,
-  SESSION_EXPIRED_MESSAGE,
-  isUnauthorized,
-  toErrorMessage,
-  type ChatStreamEvent,
-  type HealthInfo,
-} from '../api/client';
-import type { ChatAttachment, ChatMessage, ConversationSummary, GeneratedFileInfo } from '../types';
+import { AgentApi, isUnauthorized, SESSION_EXPIRED_MESSAGE, toErrorMessage } from '../api/client';
 import { useAuth } from './useAuth';
 
 export type ConnectionState = 'idle' | 'online' | 'offline';

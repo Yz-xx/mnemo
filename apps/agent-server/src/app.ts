@@ -1,6 +1,6 @@
-import express from 'express';
-import type { Express } from 'express';
 import type { AppDependencies } from './configuration/dependencies.js';
+import type { Express } from 'express';
+import express from 'express';
 import { allowCors } from './middleware/cors.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createRequestLog } from './middleware/requestLog.js';
@@ -16,7 +16,7 @@ export function createApp(deps: AppDependencies): Express {
 
   app.use(allowCors);
   app.use(express.json({ limit: '2mb' }));
-  app.use(createRequestLog(deps.logger));
+  app.use(createRequestLog(deps.logger, deps.apiLogs));
   registerRoutes(app, deps);
   app.use(errorHandler);
 

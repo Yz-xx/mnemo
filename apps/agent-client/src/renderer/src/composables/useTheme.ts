@@ -1,6 +1,6 @@
-import { ref, watch } from 'vue';
-import type { Ref } from 'vue';
 import type { ThemeMode } from '../../../preload/types.js';
+import type { Ref } from 'vue';
+import { ref, watch } from 'vue';
 import { initialSettings, saveSettings } from '../api/bridge';
 
 interface ThemeControls {

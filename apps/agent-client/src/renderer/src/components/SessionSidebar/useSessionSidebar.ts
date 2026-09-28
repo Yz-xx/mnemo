@@ -1,9 +1,9 @@
-import { computed } from 'vue';
-import type { ComputedRef, Ref } from 'vue';
 import type { ThemeMode } from '../../../../preload/types.js';
-import { useTheme } from '../../composables/useTheme';
 import type { ConnectionState } from '../../composables/useChat';
 import type { AuthUser, ConversationSummary } from '../../types';
+import type { ComputedRef, Ref } from 'vue';
+import { computed } from 'vue';
+import { useTheme } from '../../composables/useTheme';
 
 /** SessionSidebar 的入参：会话列表与当前用户由 App 持有 */
 export interface SessionSidebarProps {

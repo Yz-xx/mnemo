@@ -43,8 +43,8 @@ logger.child({ requestId: 'abcd1234' }).info('请求完成', { method: 'POST', s
 跨包引用统一写 workspace 包名，不用相对路径穿透到其他包：
 
 ```ts
-import { createLogger } from '@repo/logger';
 import type { Logger } from '@repo/logger';
+import { createLogger } from '@repo/logger';
 ```
 
 包已声明 `exports` 条件导出：`types` → `dist/index.d.ts`、`import` → `dist/index.mjs`、`require` → `dist/index.cjs`。本包无第三方运行时依赖，Node 内置模块在打包时外置。

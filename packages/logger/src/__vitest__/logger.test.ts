@@ -1,3 +1,4 @@
+import type { LogSink } from '../types.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -5,7 +6,6 @@ import { formatDay } from '../format.js';
 import { createLogger } from '../index.js';
 import { preview } from '../preview.js';
 import { redactValue } from '../redact.js';
-import type { LogSink } from '../types.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

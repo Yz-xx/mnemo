@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { randomUUID } from 'node:crypto';
 
 /** 登录有效期：7 天，超时后需重新登录 */
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -58,6 +58,11 @@ export class SessionStore {
 
   async remove(token: string): Promise<void> {
     await this.pool.execute('DELETE FROM user_sessions WHERE token = ?', [token]);
+  }
+
+  /** 删除某账号的全部会话：账号被删除时一并清理，避免残留可用的登录态 */
+  async removeAllByUser(userId: number): Promise<void> {
+    await this.pool.execute('DELETE FROM user_sessions WHERE user_id = ?', [userId]);
   }
 
   /**

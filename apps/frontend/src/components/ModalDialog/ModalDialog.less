@@ -1,0 +1,118 @@
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &__mask {
+    position: absolute;
+    inset: 0;
+    background-color: var(--mask);
+  }
+
+  &__card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 80px);
+    background-color: var(--bg);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__title {
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  &__close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background-color: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    transition: all var(--transition);
+
+    &:hover {
+      background-color: var(--bg-hover);
+      color: var(--text);
+    }
+  }
+
+  &__body {
+    padding: 18px;
+    overflow-y: auto;
+  }
+
+  &__foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+  }
+
+  &__button {
+    height: 32px;
+    padding: 0 16px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 13px;
+    transition: all var(--transition);
+
+    &:hover:not(:disabled) {
+      background-color: var(--bg-hover);
+      color: var(--text);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    // 品牌与危险色底都用 --primary-strong / --danger：白字在其上对比度分别为 5.3:1 / 4.8:1
+    &--primary {
+      background-color: var(--primary-strong);
+      border-color: var(--primary-strong);
+      color: var(--text-inverse);
+
+      &:hover:not(:disabled) {
+        background-color: var(--primary-strong);
+        color: var(--text-inverse);
+        filter: brightness(0.92);
+      }
+    }
+
+    &--danger {
+      background-color: var(--danger);
+      border-color: var(--danger);
+      color: var(--text-inverse);
+
+      &:hover:not(:disabled) {
+        background-color: var(--danger);
+        color: var(--text-inverse);
+        filter: brightness(0.92);
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron';
 import type { AppSettings, DesktopApi, WindowAction } from './types.js';
+import { contextBridge, ipcRenderer } from 'electron';
 
 // 同步读取一次设置：主题需要在页面首帧渲染前确定，异步 IPC 来不及
 const initialSettings = ipcRenderer.sendSync('settings:get-sync') as AppSettings;

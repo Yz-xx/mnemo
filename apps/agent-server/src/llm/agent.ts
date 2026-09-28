@@ -1,3 +1,11 @@
+import type { AppConfig } from '../configuration/config/index.js';
+import type { StoredMessage } from '../conversation/types.js';
+import type { KnowledgeStore } from '../rag/index.js';
+import type { AgentTool, FileSource, GeneratedFileRef, ToolDescriptor } from './tools/index.js';
+import type { VisionReader } from './vision.js';
+import type { BaseMessage, BaseMessageChunk } from '@langchain/core/messages';
+import type { Logger } from '@repo/logger';
+import type { AgentStreamEvent } from '@repo/reusable';
 import {
   AIMessage,
   AIMessageChunk,
@@ -5,22 +13,14 @@ import {
   SystemMessage,
   ToolMessage,
 } from '@langchain/core/messages';
-import type { BaseMessage, BaseMessageChunk } from '@langchain/core/messages';
 import { createAgent } from 'langchain';
 import { toErrorMessage } from '@repo/shared';
-import { describeChatEndpoint, describeChatModel } from '../configuration/config.js';
+import { describeChatEndpoint, describeChatModel } from '../configuration/config/index.js';
 import { describeConnectionError } from '../configuration/errors.js';
 import { createChatModel } from './model.js';
-import { createTools, readAttachmentText } from './tools.js';
-import type { FileSource, GeneratedFileRef } from './tools.js';
-import { createVisionReader } from './vision.js';
-import type { VisionReader } from './vision.js';
 import { SYSTEM_PROMPT } from './prompt.js';
-import type { AppConfig } from '../configuration/config.js';
-import type { AgentStreamEvent } from '@repo/reusable';
-import type { StoredMessage } from '../conversation/types.js';
-import type { Logger } from '@repo/logger';
-import type { KnowledgeStore } from '../rag/store.js';
+import { createTools, describeTools, readAttachmentText } from './tools/index.js';
+import { createVisionReader } from './vision.js';
 
 /** 从消息内容中提取纯文本，兼容字符串与内容块两种形式 */
 function extractText(content: BaseMessageChunk['content']): string {
@@ -37,6 +37,8 @@ function extractText(content: BaseMessageChunk['content']): string {
 /** 智能体服务：封装 ReAct Agent 的构建与流式调用 */
 export class AgentService {
   private readonly agent: ReturnType<typeof createAgent>;
+  /** 注入 Agent 的工具：保留一份引用，管理后台的工具清单据此生成而不是另存一份 */
+  private readonly tools: AgentTool[];
   /** 附件存储：预读本轮附件时需要按 ID 取回元数据与字节 */
   private readonly files: FileSource;
   /** 视觉读取器：图片附件由它转述成文字；经构造参数注入，便于测试用替身隔离模型服务 */
@@ -52,14 +54,20 @@ export class AgentService {
   ) {
     this.files = files;
     this.vision = vision;
+    this.tools = createTools(knowledge, files, vision);
     this.agent = createAgent({
       model: createChatModel(config),
-      tools: createTools(knowledge, files, vision),
+      tools: this.tools,
       systemPrompt: SYSTEM_PROMPT,
       name: 'agent',
     });
 
     this.modelTarget = `${config.llm.provider}（${describeChatEndpoint(config)}，模型 ${describeChatModel(config)}）`;
+  }
+
+  /** 工具清单：管理后台只读展示，字段取自注入 Agent 的同一份工具定义 */
+  listTools(): ToolDescriptor[] {
+    return describeTools(this.tools);
   }
 
   /** 把持久化的历史消息还原为 LangChain 消息对象；返回基类数组，因为随后还会追加附件预读结果 */

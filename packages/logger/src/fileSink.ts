@@ -1,7 +1,7 @@
+import type { LogSink } from './types.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { formatDay } from './format.js';
-import type { LogSink } from './types.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

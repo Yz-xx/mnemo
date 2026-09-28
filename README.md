@@ -19,11 +19,12 @@ my-monorepo/
 │   ├── agent-server/         # 智能体后端服务（Express + LangChain）
 │   │   ├── src/
 │   │   │   ├── index.ts              # 组合根：装配依赖、启动清理会话并监听端口
-│   │   │   ├── config.ts             # 环境变量 → AppConfig
 │   │   │   ├── app.ts                # createApp：组装中间件、注册路由与错误兜底
-│   │   │   ├── dependencies.ts       # AppDependencies：路由层依赖契约（避免反向依赖）
-│   │   │   ├── errors.ts             # 依赖服务连接错误翻译（toErrorMessage 在 @repo/shared）
-│   │   │   ├── messages.ts           # 对外固定文案常量表（ERROR_MESSAGE）
+│   │   │   ├── configuration/        # 配置与契约（config.ts 超 250 行后目录化）
+│   │   │   │   ├── config/           # env.ts 环境变量 → AppConfig、systemView.ts 只读视图、index.ts 聚合
+│   │   │   │   ├── dependencies.ts   # AppDependencies：路由层依赖契约（避免反向依赖）
+│   │   │   │   ├── errors.ts         # 依赖服务连接错误翻译（toErrorMessage 在 @repo/shared）
+│   │   │   │   └── messages.ts       # 对外固定文案常量表（ERROR_MESSAGE）
 │   │   │   ├── middleware/
 │   │   │   │   ├── cors.ts           # 跨域放行（桌面端 file:// 场景）
 │   │   │   │   ├── upload.ts         # 附件上传中间件（multer 内存解析 + 单文件）
@@ -42,18 +43,18 @@ my-monorepo/
 │   │   │   │   ├── agent.ts          # AgentService：ReAct 智能体与流式桥接
 │   │   │   │   ├── prompt.ts         # system prompt 原文
 │   │   │   │   ├── vision.ts         # 图片理解：多模态模型转述图片
-│   │   │   │   └── tools.ts          # 六个工具：检索 / 附件清单 / 读文件 / 写文件 / 时间 / 计算
+│   │   │   │   └── tools/            # 六个工具：index（聚合）/ assemble（装配）/ knowledge / files / utility / runtime
 │   │   │   ├── files/                # 文件能力：上传存储 / 类型判定 / 解析 / 生成
 │   │   │   │   ├── store.ts          # 上传存储：落盘字节 + files 表元数据
 │   │   │   │   ├── type.ts           # magic bytes 判定上传类型
 │   │   │   │   ├── parser.ts         # 正文解析（docx / xlsx / pdf）
 │   │   │   │   └── generate.ts       # 导出生成（docx / xlsx / pdf）
-│   │   │   ├── rag/store.ts          # 知识库：切分 + 向量化 + LanceDB 近邻检索
-│   │   │   ├── conversation/store.ts # 会话与消息持久化（MySQL，按用户隔离）
+│   │   │   ├── rag/                  # 知识库：切分 + 向量化 + LanceDB 近邻检索（按关注点分文件）
+│   │   │   ├── conversation/store/   # 会话与消息持久化（MySQL，按用户隔离，按关注点分文件）
 │   │   │   ├── services/
 │   │   │   │   ├── chatStream.ts     # SSE 流式回复编排（推送事件 + 落库）
 │   │   │   │   └── knowledge.ts      # 文档入库编排（计时 + 日志）
-│   │   │   ├── routes/               # 各接口路由，index.ts 统一注册（含健康检查）
+│   │   │   ├── routes/               # client/ 客户端接口、admin/ 管理端接口，index.ts 为注册表
 │   │   │   └── __vitest__/           # 单元测试（vitest 运行，不参与编译）
 │   │   ├── .env.development          # 开发环境配置（pnpm dev 加载）
 │   │   ├── .env.production           # 生产环境配置（pnpm start 加载）
@@ -67,7 +68,19 @@ my-monorepo/
 │   │       │   └── ipc.ts            # IPC 处理器注册
 │   │       ├── preload/              # 预加载层：contextBridge 白名单 API
 │   │       └── renderer/             # 渲染进程：Vue 3 界面与状态
-│   └── frontend/             # 示例 Web 前端（脚手架预留）
+│   └── frontend/             # 后台管理网站（Vue 3 + 自动路由 + pinia + echarts，自建 UI 组件）
+│       ├── src/
+│       │   ├── main.ts               # 入口：装 pinia / router，恢复登录态并注入 401 处理
+│       │   ├── App.vue               # 布局分发器：login 独立渲染，其余套 AdminLayout
+│       │   ├── api/                  # client（adminApi 实例与 token 读写）/ auth / admin / types
+│       │   ├── router/               # index（文件式路由表）+ guards（登录态 + 管理员角色）
+│       │   ├── stores/auth.ts        # 登录态 store（token 落 localStorage）
+│       │   ├── layouts/AdminLayout.vue  # 顶栏 + 可收起侧边栏 + 内容区
+│       │   ├── pages/                # 文件式路由页：index（总览）/ users / knowledge / conversations
+│       │   │                         #   / files / logs / audit / tools / config / login / 占位页
+│       │   ├── components/           # 7 个目录化自建组件（DataTable / ModalDialog 等）
+│       │   └── styles/               # base.less + tokens.less（固定亮色令牌）
+│       └── typed-router.d.ts         # 自动路由生成的路由类型（入库并登记 tsconfig include）
 ├── packages/
 │   ├── shared/               # 跨端通用工具库（与业务无关：字符串 / 通用函数，DES 走 /crypto 子路径）
 │   ├── reusable/             # 业务可复用库（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
@@ -113,6 +126,8 @@ my-monorepo/
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
+**后台管理网站（`apps/frontend`）**是同一后端的第二个客户端，与对话链路完全分离：管理员登录换取 Bearer 令牌后只调 `/api/auth/*` 与 `/api/admin/*`，不参与会话与工具调用；管理接口另支持运维超级令牌（`x-admin-token`）作为应急入口。详见 [apps/frontend/README.md](./apps/frontend/README.md)。
+
 ### 一次对话的完整数据流
 
 1. 未登录时先渲染 `LoginView`；登录/注册成功后后端签发令牌（UUID），桌面端把令牌写入 `settings.json` 的 `authToken`，之后所有请求都带上 `Authorization: Bearer <token>`。
@@ -131,13 +146,14 @@ my-monorepo/
 
 各端的设计细节、配置项与构建方式分别维护在各自的 README 中，本文只保留跨端的概览与约定：
 
-| 文档                                                         | 内容范围                                                                                            |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| [apps/agent-server/README.md](./apps/agent-server/README.md) | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建    |
-| [apps/agent-client/README.md](./apps/agent-client/README.md) | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证 |
-| [packages/shared/README.md](./packages/shared/README.md)     | 通用工具库的导出索引（字符串 / 通用函数 / DES 加解密子路径）、引用方式与构建                        |
-| [packages/reusable/README.md](./packages/reusable/README.md) | 业务可复用库的导出索引（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）、引用方式与构建             |
-| [packages/logger/README.md](./packages/logger/README.md)     | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                |
+| 文档                                                         | 内容范围                                                                                               |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| [apps/agent-server/README.md](./apps/agent-server/README.md) | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建       |
+| [apps/agent-client/README.md](./apps/agent-client/README.md) | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证    |
+| [apps/frontend/README.md](./apps/frontend/README.md)         | 后台管理网站的目录结构、技术选型取舍、鉴权与登录态、接口清单、页面与组件、样式令牌、开发构建与后续模块 |
+| [packages/shared/README.md](./packages/shared/README.md)     | 通用工具库的导出索引（字符串 / 通用函数 / DES 加解密子路径）、引用方式与构建                           |
+| [packages/reusable/README.md](./packages/reusable/README.md) | 业务可复用库的导出索引（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）、引用方式与构建                |
+| [packages/logger/README.md](./packages/logger/README.md)     | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                   |
 
 ---
 
@@ -176,15 +192,16 @@ pnpm dev agent-server agent-client   # 也可直接指定，支持目录名（ag
 ```bash
 pnpm --filter @repo/agent-server run dev     # tsx watch，默认 3000 端口
 pnpm --filter @repo/agent-client run dev     # electron-vite dev
+pnpm --filter @repo/frontend run dev         # vite dev，默认 5173，/api 代理到 3000
 ```
 
-前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 MySQL 8 与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)。
+前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 MySQL 8 与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)；后台管理网站还需一个 `role` 为 `admin` 的账号与运行中的后端，见 [apps/frontend/README.md](./apps/frontend/README.md)。
 
 质量校验：
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（shared 的 DES 加解密与错误消息提取、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索）
+pnpm test           # 各子包单元测试（shared 的 DES 加解密与错误消息提取、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索；后台管理网站暂无单测）
 pnpm build          # 全仓构建
 ```
 
@@ -196,4 +213,4 @@ pnpm build          # 全仓构建
 - **令牌以明文流转**：登录令牌明文保存在桌面端 `settings.json` 中，并随请求以 Bearer 明文传输（后端只做校验与有效期管理），仅适用于本机/内网场景。
 - **HTTP 状态码契约收敛为 7 项**：前后端共用 `@repo/reusable` 的 `HTTP_STATUS`（200/201/204/400/401/404/500），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、知识库入库失败按 500 处理，取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md)。
 
-各端自身的取舍（如后端的单端登录策略、桌面端的主题过渡范围）分别记在对应的子 README 中。
+各端自身的取舍（如后端的单端登录策略、桌面端的主题过渡范围、后台管理网站的固定亮色与自建 UI 组件）分别记在对应的子 README 中。

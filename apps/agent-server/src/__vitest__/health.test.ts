@@ -1,6 +1,6 @@
+import type { AppConfig } from '../configuration/config/index.js';
 import { describe, expect, it } from 'vitest';
-import { describeHealth } from '../routes/health.js';
-import type { AppConfig } from '../config.js';
+import { describeHealth } from '../services/health.js';
 
 /** 只填健康检查会读取的字段：本用例关注响应内容，不需要完整配置 */
 function configWith(provider: 'ollama' | 'deepseek', model: string): AppConfig {

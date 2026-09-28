@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import type { HealthInfo } from '../../api/client';
 import { ref } from 'vue';
 import KnowledgePanel from '../KnowledgePanel';
-import type { HealthInfo } from '../../api/client';
 
 const props = defineProps<{
   backendUrl: string;

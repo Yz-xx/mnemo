@@ -1,7 +1,8 @@
+import type { AppSettings } from '../preload/types.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
-import { DEFAULT_SETTINGS, type AppSettings } from '../preload/types.js';
+import { DEFAULT_SETTINGS } from '../preload/types.js';
 
 /** 设置文件放在用户数据目录，避免写入安装目录导致权限问题 */
 const getSettingsFile = (): string => path.join(app.getPath('userData'), 'settings.json');

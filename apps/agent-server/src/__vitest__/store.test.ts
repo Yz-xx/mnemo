@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { KnowledgeStore } from '../rag/store.js';
+import { KnowledgeStore } from '../rag/index.js';
 import { FakeEmbeddings, OfflineEmbeddings, TEST_ROOT } from './fakeEmbeddings.js';
 
 const OPTIONS = {
@@ -118,6 +118,46 @@ describe('KnowledgeStore', () => {
     });
 
     await expect(store.remove(document.id, { userId: 1, isAdmin: false })).resolves.toBe(false);
+    await expect(store.remove(document.id, { userId: 2, isAdmin: true })).resolves.toBe(true);
+  });
+
+  it('管理端列表不过滤可见性，私有文档带归属信息一并返回', async () => {
+    await store.add({
+      title: '公共手册',
+      content: '苹果是全公司共享资料。',
+      scope: 'global',
+      userId: 1,
+    });
+    const mine = await store.add({
+      title: '我的笔记',
+      content: '香蕉是我的私有资料。',
+      scope: 'private',
+      userId: 1,
+    });
+    const other = await store.add({
+      title: '他人笔记',
+      content: '橘子是别人的私有资料。',
+      scope: 'private',
+      userId: 2,
+    });
+
+    // 用户 2 的可见列表看不到用户 1 的私有文档，管理端列表则全部可见
+    expect((await store.list(2)).map((item) => item.id)).not.toContain(mine.id);
+    const all = await store.listAll();
+    expect(all.map((item) => item.id)).toEqual(expect.arrayContaining([mine.id, other.id]));
+    expect(all.find((item) => item.id === mine.id)?.ownerUserId).toBe(1);
+    expect(all.find((item) => item.id === other.id)?.ownerUserId).toBe(2);
+  });
+
+  it('管理员可删除他人的私有文档', async () => {
+    const document = await store.add({
+      title: '我的笔记',
+      content: '香蕉是我的私有资料。',
+      scope: 'private',
+      userId: 1,
+    });
+
+    // isAdmin 为真时不再比对归属：后台需要能清理任意用户的文档
     await expect(store.remove(document.id, { userId: 2, isAdmin: true })).resolves.toBe(true);
   });
 

@@ -1,10 +1,10 @@
-import type { Response } from 'express';
-import type { ChatStreamEvent } from '@repo/reusable';
-import { toErrorMessage } from '@repo/shared';
-import { preview } from '@repo/logger';
-import type { Logger } from '@repo/logger';
-import type { ConversationStore } from '../conversation/store.js';
+import type { ConversationStore } from '../conversation/store/index.js';
 import type { AgentService } from '../llm/agent.js';
+import type { Logger } from '@repo/logger';
+import type { ChatStreamEvent } from '@repo/reusable';
+import type { Response } from 'express';
+import { preview } from '@repo/logger';
+import { toErrorMessage } from '@repo/shared';
 
 /** 出参摘要保留的回复开头长度：足以判断回答是否切题，又不至于把整篇回答写进日志 */
 const ANSWER_PREVIEW = 200;

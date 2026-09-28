@@ -1,11 +1,11 @@
+import type { AppConfig } from '../configuration/config/index.js';
+import type { FileStore, UploadedFile } from '../files/store.js';
+import type { Request, Response } from 'express';
 import { Buffer } from 'node:buffer';
 import { describe, expect, it } from 'vitest';
-import type { Request, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
-import type { AppConfig } from '../config.js';
-import type { FileStore, UploadedFile } from '../files/store.js';
 import { detectUploadType } from '../files/type.js';
-import { handleUploadFile } from '../routes/files.js';
+import { handleUploadFile } from '../routes/client/files.js';
 
 /** 最小 PNG 文件头：magic bytes 前 8 字节 + IHDR 块标识，足以判定为图片 */
 const PNG_HEADER = Buffer.concat([
