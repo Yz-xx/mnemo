@@ -45,6 +45,8 @@ alwaysApply: false
 - composable 内部状态用 `ref` / `computed`，需要跨组件共享时用模块级单例（参考 `useAuth`），对外只暴露只读状态与操作函数。
 - 父子通信走 props 与 emit，子组件不直接改父级状态。
 - 模板类名遵循 BEM（`块__元素`、`块--修饰`）；`components/` 下的组件以目录组织（`Xxx/{index.ts, Xxx.vue, Xxx.less, useXxx.ts}`），私有样式写同目录 `Xxx.less` 并由 `.vue` 以 `<style src="./Xxx.less" lang="less" scoped>` 引入；根组件 `App.vue` 例外，保持单文件与内联 scoped 样式块。
+- `pages/` 下超过 200 行的页面按同一口径拆：`<目录>/index.vue` 只留模板与 `useXxxPage()` 的绑定解构，逻辑进同目录 `<目录>.ts`（导出 `useXxxPage()`，把模板引用到的绑定一并返回），样式进同目录 `<目录>.less`；根目录两页的 `.ts`/`.less` 与 `.vue` 并排命名（总览页 `overview.ts`、登录页 `login.ts`）。页面**不设 `index.ts` 导出**——路由由 `.vue` 生成、页面不被别处 import。
+- 页面私有状态（含 `usePagedList` 建出的 ref）必须留在 `useXxxPage()` 内部：写在模块顶层会脱离组件实例，`onMounted` 失效、状态还会跨路由进出被复用。模块顶层只放静态常量与纯函数。
 - 列表渲染必须写 `:key`；模板中出现多套条件分支时抽子组件，不堆叠 `v-if`。
 - 需要即时反映的流式数据（token 追加）通过独立 `ref` 承载，避免整列表重建。
 

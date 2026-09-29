@@ -1,0 +1,142 @@
+.login-page {
+  display: flex;
+  min-height: 100vh;
+
+  // 左栏走重墨底：与右侧表单形成强对比，登录页不再是居中的一张白卡
+  &__aside {
+    flex: 0 0 46%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 56px 52px;
+    background-color: var(--bg-ink);
+    color: var(--text-inverse);
+  }
+
+  &__mark {
+    margin: 0 0 20px;
+    color: var(--primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__headline {
+    margin: 0 0 14px;
+    font-size: 34px;
+    line-height: 1.25;
+    color: var(--text-inverse);
+  }
+
+  &__desc {
+    margin: 0;
+    max-width: 30em;
+    color: var(--text-inverse-muted);
+    font-size: 13px;
+    line-height: 1.8;
+  }
+
+  &__aside-foot {
+    margin: 0;
+    color: var(--text-inverse-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 32px;
+  }
+
+  &__form {
+    width: 340px;
+  }
+
+  &__form-title {
+    margin: 0 0 26px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: var(--tracking-display);
+  }
+
+  &__field {
+    margin-bottom: 18px;
+  }
+
+  &__label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__input {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color var(--transition);
+
+    &:focus {
+      border-color: var(--primary-strong);
+    }
+  }
+
+  &__error {
+    margin: 0 0 14px;
+    padding: 8px 12px;
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    background-color: var(--danger-soft);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+
+  &__submit {
+    width: 100%;
+    height: 40px;
+    margin-top: 6px;
+    border: 1px solid var(--primary-strong);
+    border-radius: var(--radius);
+    background-color: var(--primary-strong);
+    color: var(--text-inverse);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    transition:
+      filter var(--transition),
+      opacity var(--transition);
+
+    &:hover:not(:disabled) {
+      filter: brightness(0.92);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+}
+
+// 窄屏只留表单：左栏的说明性内容在空间不足时是纯负担
+@media (max-width: 860px) {
+  .login-page__aside {
+    display: none;
+  }
+}

@@ -1,0 +1,86 @@
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  &__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  &__stamp {
+    margin: 0;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__error {
+    margin: 0;
+    padding: 10px 14px;
+    background-color: var(--danger-soft);
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+
+  &__name {
+    display: block;
+    max-width: 420px;
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 扩展名走等宽疏排小标：与文件名形成层级差，同时不必为每种类型配图标
+  &__badge {
+    padding: 2px 7px;
+    background-color: var(--bg-active);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__mono {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__link {
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    font-size: 13px;
+
+    &--danger {
+      color: var(--danger);
+
+      &:hover {
+        color: var(--danger-strong);
+        text-decoration: underline;
+      }
+    }
+  }
+
+  &__confirm {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+}

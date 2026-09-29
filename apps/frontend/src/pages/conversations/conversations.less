@@ -1,0 +1,158 @@
+.conversations {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  &__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  &__stamp {
+    margin: 0;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__error {
+    margin: 0;
+    padding: 10px 14px;
+    background-color: var(--danger-soft);
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+
+  // 记录性字段一律走等宽族，与路径、时间类信息保持一致
+  &__mono {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__title {
+    display: block;
+    max-width: 420px;
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  &__link {
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    color: var(--primary-strong);
+    font-size: 13px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    &--danger {
+      color: var(--danger);
+
+      &:hover {
+        color: var(--danger-strong);
+      }
+    }
+  }
+
+  &__hint {
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 13px;
+  }
+
+  &__detail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__meta {
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__messages {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 52vh;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+  }
+
+  // 消息块靠左侧竖线与角色标签区分层次，不用气泡：后台读的是内容而不是对话观感
+  &__message {
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+  }
+
+  &__role {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--tracking-label);
+
+    &--user {
+      color: var(--primary-strong);
+    }
+
+    &--assistant {
+      color: var(--text-faint);
+    }
+
+    &--system {
+      color: var(--accent-strong);
+    }
+  }
+
+  &__content {
+    margin: 4px 0 0;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  &__tags {
+    margin: 4px 0 0;
+    color: var(--text-faint);
+    font-size: 12px;
+  }
+
+  &__confirm {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+}

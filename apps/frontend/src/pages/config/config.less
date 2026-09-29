@@ -1,0 +1,86 @@
+.config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__lede {
+    max-width: 720px;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  &__error {
+    margin: 0;
+    padding: 10px 14px;
+    background-color: var(--danger-soft);
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+
+  &__hint {
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 13px;
+  }
+
+  // 默认 stretch 让同行卡片等高：align-items: start 会各卡自带高度，行底参差成锯齿；
+  // 末行铺不满时用 auto-fill 保留空轨道（auto-fit 会拉伸末行卡片，反而列宽不一致）
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+  }
+
+  &__group {
+    padding: 16px 18px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  &__title {
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__rows {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    gap: 8px 12px;
+    margin: 0;
+  }
+
+  &__label {
+    color: var(--text-faint);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  // 值一律走等宽族：路径、地址、参数名都是需要逐字核对的内容
+  &__value {
+    margin: 0;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+
+    &--ok {
+      color: var(--text-muted);
+    }
+
+    &--missing {
+      color: var(--warning-strong);
+    }
+  }
+}

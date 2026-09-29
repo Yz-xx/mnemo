@@ -30,19 +30,24 @@ apps/frontend/
 │   │   └── guards.ts            # 登录态 + 管理员角色双校验
 │   ├── stores/auth.ts           # 登录态 store（token 落 localStorage，user 在内存）
 │   ├── layouts/AdminLayout.vue  # 顶栏 + 可收起侧边栏 + 内容区
-│   ├── pages/
+│   ├── pages/                   # 每页一目录；超 200 行的页面拆成 index.vue + 同名 .ts + 同名 .less
 │   │   ├── index.vue            # 总览（真实统计 + 运行状态条 + 消息趋势图）
+│   │   ├── overview.ts/.less    #   └ 总览页抽出的逻辑与样式（与 index.vue 并排，取 BEM 前缀命名）
 │   │   ├── users/index.vue      # 用户管理（搜索 / 分页 / 改角色与状态 / 新建 / 删除）
 │   │   ├── knowledge/index.vue  # 知识库管理（管理视角文档列表 / 新增全局文档 / 删除）
 │   │   ├── conversations/index.vue # 会话管理（全账号会话 / 详情查看 / 删除）
 │   │   ├── files/index.vue      # 文件管理（全账号上传文件 / 删除）
 │   │   ├── logs/index.vue       # 接口日志（路径关键词 / 方法 / 状态档位 + 分页 + 详情）
 │   │   ├── audit/index.vue      # 操作审计（管理员写操作留档 + 请求体摘要详情）
-│   │   ├── tools/index.vue      # LLM 工具清单（只读）
+│   │   ├── tools/index.vue      # LLM 工具清单（只读，未超 200 行故保持单文件）
 │   │   ├── config/index.vue     # 系统配置只读视图（密钥类只显示是否已配置）
 │   │   ├── login.vue            # 登录页（meta.layout='blank'，不经 AdminLayout）
+│   │   ├── login.ts/.less       #   └ 登录页抽出的逻辑与样式
 │   │   └── [...all].vue         # 未匹配路径的兜底页
+│   ├── composables/
+│   │   └── usePagedList.ts      # 列表页共用的分页取数（页码 / 加载态 / 错误文案 + 并发竞态防护）
 │   ├── components/              # 8 个目录化自建组件，见第五章
+│   ├── utils/time.ts            # formatTime：后端 UTC ISO 串按本地时区展示
 │   └── styles/
 │       ├── base.less            # 全局重置与基础排版
 │       └── tokens.less          # CSS 变量令牌（固定亮色）
@@ -50,6 +55,8 @@ apps/frontend/
 ├── vite.config.ts               # 自动路由插件 / 别名 / /api 代理
 └── tsconfig.json
 ```
+
+说明：`users/`、`knowledge/`、`conversations/`、`files/`、`logs/`、`audit/`、`config/` 七个目录同样各自带了 `<目录名>.ts` 与 `<目录名>.less`（上表按目录折叠）。页面**不设 `index.ts` 导出**——路由由 `.vue` 生成、页面也不被别处 import，多一层入口只会多一个要同步维护的名字。`tools/index.vue` 与 `[...all].vue` 未超 200 行，保持单文件。
 
 ---
 
@@ -60,6 +67,7 @@ apps/frontend/
 - **固定亮色 + 自建组件**：后台以信息密度和可读性为先，不做主题切换，故不引主题体系；UI 需求集中在表格、分页、弹窗三处，自建比引入整套组件库更省，也避免样式被第三方覆盖规则牵着走。
 - **依赖边界**：`vite` / `@types/node` / `@vitejs/plugin-vue` 由根 `package.json` 提供，本包**不重复声明**；`unplugin-vue-router` 只服务构建（`vite.config.ts` 与文件式路由生成），归 `devDependencies`。只登记真正用到的 `@repo/*` 包与 tsconfig 路径映射——多留一条映射，等于给一次误 import 留了「也能通过」的后路。
 - **服务端能力优先**：列表的过滤、搜索与分页一律走服务端参数，前端不本地过滤。否则「当前页显示 3 条、总数却写 47」这类对不上的状态迟早出现。
+- **分页取数收进 `composables/usePagedList.ts`**：六个列表页的「页码、每页条数、加载态、错误文案、翻页竞态」逐字同形，这些收进 composable；**筛选条件不进**——由各页经 `fetcher` 闭包注入，免得为六个页面的不同查询参数再造一层配置。竞态用请求序号挡住（只认最后一次发出的请求），原先各页都没有。
 
 ---
 
@@ -147,7 +155,7 @@ apps/frontend/
 - 色值一律走 CSS 变量，令牌集中在 `src/styles/tokens.less`，组件内不写死颜色。
 - 令牌里 `--danger` / `--success` 各有一个 `-strong` 变体，用于「深色语义文字压浅色底」的场景（状态徽标、错误提示条）：原色叠在各自的 `-soft` 底上对比度只有 3.0~4.0:1，达不到正文所需的 4.5:1。
 - 记录性字段（路径、请求 ID、时间、字节数）统一走等宽令牌，列对齐后更容易逐行比对；分隔线用 `--border`（本包没有桌面端的 `--gold-line`）。
-- 组件样式以 `<style lang="less" scoped>` 维护在组件文件内，仅被两个及以上组件复用的样式才提取到 `.less`。
+- 组件与页面的私有样式都落在同目录 `.less`，由 `.vue` 以 `<style src="./Xxx.less" lang="less" scoped>` 引入（`App.vue` 例外，保持内联 scoped）；只有被两个及以上组件复用的样式才提到 `styles/`。页面同此——超过 200 行的页面已把样式抽到同目录同名 `.less`，模板留在 `.vue`，逻辑抽到同目录同名 `.ts`。
 - 类名用 BEM（`admin-layout__nav-item--active`），嵌套保持浅层。
 
 ---
@@ -173,5 +181,5 @@ P1 交付「总览 + 用户管理」，P2 交付其余七个模块（知识库�
 尚未立项的调整已在评审中拍板为**维持现状**，理由见 [`docs/adr/0002`](../../docs/adr/0002-contract-type-sharing-boundary.md)：
 
 - `api/types.ts` 不从 `@repo/reusable` 复用——两端同名字段并不同构，合并会让桌面端看到管理端专属字段；
-- 页面内联 scoped 样式不再抽公共 `.less`——它们各页专属，抽出来只会是一堆单调用点的类；
+- 页面内联 scoped 样式不再抽公共 `.less`——它们各页专属，抽出来只会是一堆单调用点的类；分页/筛选态仍是各页局部状态，不因 `usePagedList` 引入 store；
 - 状态管理继续用 pinia——`auth` 跨路由存活（顶栏、守卫、401 回跳都要用）是 store 的正例，其余页面的分页与筛选属组件局部状态。

@@ -1,0 +1,148 @@
+.logs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  &__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  &__stamp {
+    margin: 0;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__select {
+    height: 32px;
+    padding: 0 8px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition);
+
+    &:focus {
+      border-color: var(--primary);
+    }
+  }
+
+  &__error {
+    margin: 0;
+    padding: 10px 14px;
+    background-color: var(--danger-soft);
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+
+  // 记录性字段一律走等宽族：路径、耗时、状态码纵向对齐，扫读时不必逐字辨认
+  &__mono {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: var(--tracking-mono);
+  }
+
+  &__method {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
+  }
+
+  &__path {
+    display: block;
+    max-width: 520px;
+    overflow: hidden;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 状态码按语义分色：成功中性、客户端错误示警、服务端错误用危险色
+  &__status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+
+    &--ok {
+      color: var(--text-muted);
+    }
+
+    &--client {
+      color: var(--warning-strong);
+    }
+
+    &--server {
+      color: var(--danger-strong);
+    }
+  }
+
+  &__link {
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    color: var(--primary-strong);
+    font-size: 13px;
+    transition: color var(--transition);
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  &__detail {
+    display: grid;
+    grid-template-columns: 84px 1fr;
+    gap: 8px 14px;
+    margin: 0;
+  }
+
+  &__detail-label {
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: var(--tracking-label);
+    line-height: 1.7;
+  }
+
+  &__detail-value {
+    margin: 0;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+}
