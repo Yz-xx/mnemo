@@ -48,16 +48,16 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 - **中断语义**：`AbortController` 保存在闭包局部变量中再另存引用——用户点“停止”会把外层引用置空，局部引用仍能判断“这次流是否被主动中断”，从而不把中断当成错误提示；
 - **空回复回滚**：流结束后若助手消息仍无内容（例如模型直接失败），就把这条占位消息移除，避免留下空气泡；
 - **连接状态**：`canSend` 要求后端在线且当前不在流式中，因此 `connection === 'offline'` 时输入区自动禁用。
-- **登录态联动**：`api` 是 `computed`，令牌变化即重建客户端，保证每个请求都携带当前令牌；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
+- **登录态联动**：请求经 `api/session.ts` 暴露的**唯一 `AgentApi` 实例**发出，地址与令牌在请求发起时才取值，因此登录/登出、切换后端地址都无需重建客户端；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
 
 `api/client.ts` 负责 HTTP 与 SSE 解析：状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`（如 401 触发重新登录、204 表示无响应体），响应状态码经 `toHttpStatusCode` 收敛后存入 `ApiError.status`，网关 / 代理注入的契约外码统一按 500 处理；`ChatStreamEvent`（SSE 事件类型）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@repo/reusable`，`toErrorMessage` 取自 `@repo/shared`，它是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；`buildHeaders()` 在已登录时统一附加 `Authorization: Bearer <token>`；非 2xx 时抛出携带状态码的 `ApiError`（`isUnauthorized` 据此识别登录失效），错误文案优先取服务端 `message` 字段；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
 
 ## 五、登录态与启动门禁
 
-`useAuth.ts` 把登录态做成**模块级单例**（`token` / `user` / `submitting` / `errorMessage` 定义在模块作用域）——登录页、`useChat`、设置抽屉读到的都是同一份状态，避免各组件各持副本导致不同步：
+登录态做成**模块级单例**——`token` 与后端地址由 `api/session.ts` 持有（同一份 ref 供登录页、`useChat`、设置抽屉读取，并作为取值器注入唯一的 `AgentApi` 实例），`user` / `submitting` / `errorMessage` 由 `useAuth.ts` 在模块作用域维护，避免各组件各持副本导致不同步：
 
 - `restore()`：启动时从 `settings.json` 取回令牌，调用 `GET /api/auth/me` 校验；失败则静默清理，视为未登录；
-- `submit(mode, ...)`：登录/注册成功后写入 `token` 与 `user`，并把令牌持久化到本地设置；
+- `submit(mode, ...)`：登录/注册前先用服务端公钥加密口令（`encryptPassword`，明文不上网；取舍见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)），成功后写入 `token` 与 `user`，并把令牌持久化到本地设置；
 - `logout()`：先请求 `POST /api/auth/logout` 销毁服务端会话，**请求失败也继续本地清理**；`clear()` 则同时清空内存状态与本地令牌。
 
 `App.vue` 承担门禁：`booting` 期间渲染空壳（等待 `restore()`），无令牌渲染 `LoginView`，有令牌才渲染主界面；令牌变化时同步 `init()` / `reset()` 切换数据源。`LoginView` 内置后端地址输入框与连通性探测，登录前即可发现地址填错。

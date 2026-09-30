@@ -1,6 +1,7 @@
 import { createLogger } from '@repo/logger';
 import { createApp } from './app.js';
 import { AuditLogStore } from './audit/store.js';
+import { createPasswordCipher } from './auth/passwordCipher.js';
 import { SessionStore } from './auth/sessionStore.js';
 import { UserStore } from './auth/userStore.js';
 import {
@@ -39,6 +40,8 @@ async function bootstrap(): Promise<void> {
   const auditLogs = new AuditLogStore(pool);
   const users = new UserStore(pool);
   const sessions = new SessionStore(pool);
+  // 口令传输密钥对：进程内生成、随重启轮换，不落盘（见 auth/passwordCipher.ts）
+  const passwordCipher = createPasswordCipher();
   // 启动清理：清掉过期会话，并把历史遗留的同账号重复会话收敛为单端登录
   const prunedSessions = await sessions.prune();
   const conversations = new ConversationStore(pool);
@@ -64,6 +67,7 @@ async function bootstrap(): Promise<void> {
     knowledge,
     users,
     sessions,
+    passwordCipher,
   });
 
   app.listen(config.port, () => {

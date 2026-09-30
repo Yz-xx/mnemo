@@ -210,9 +210,8 @@ async function askWithFiles(
 
 describe('文件工具', () => {
   it('list_files 列出本轮附件的 ID 与文件名', async () => {
-    const files = new FakeFiles({
-      'f-1': await docxRecord('f-1', '季度报告.docx', '营收增长 12%'),
-    });
+    const record = await docxRecord('f-1', '季度报告.docx', '营收增长 12%');
+    const files = new FakeFiles({ 'f-1': record });
 
     const reply = await askWithFiles(files, { name: 'list_files', args: {} }, ['f-1']);
 
@@ -227,9 +226,8 @@ describe('文件工具', () => {
   });
 
   it('read_file 返回附件解析后的正文', async () => {
-    const files = new FakeFiles({
-      'f-1': await docxRecord('f-1', '季度报告.docx', '营收增长 12%'),
-    });
+    const record = await docxRecord('f-1', '季度报告.docx', '营收增长 12%');
+    const files = new FakeFiles({ 'f-1': record });
 
     const reply = await askWithFiles(files, { name: 'read_file', args: { fileId: 'f-1' } }, [
       'f-1',
@@ -239,9 +237,8 @@ describe('文件工具', () => {
   });
 
   it('read_file 拒绝读取不属于本轮的附件，且不触碰存储', async () => {
-    const files = new FakeFiles({
-      'f-9': await docxRecord('f-9', '别人的文件.docx', '不该被读到'),
-    });
+    const record = await docxRecord('f-9', '别人的文件.docx', '不该被读到');
+    const files = new FakeFiles({ 'f-9': record });
 
     const reply = await askWithFiles(files, { name: 'read_file', args: { fileId: 'f-9' } }, [
       'f-1',

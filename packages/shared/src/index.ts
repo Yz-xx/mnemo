@@ -7,3 +7,5 @@
 // 需要加密能力时显式从 '@repo/shared/crypto' 引入，其余场景就不会被牵连。
 export * from './strings.js';
 export * from './common.js';
+export * from './bytes.js';
+export * from './time.js';

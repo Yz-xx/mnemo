@@ -50,7 +50,32 @@ async function emptyPage(): Promise<{ items: never[]; total: number }> {
 const fakeCascade = { removeAllByUser: async (): Promise<void> => {} };
 const fakeFiles = { listAll: emptyPage, removeAny: async () => true };
 const fakeConversations = { listAll: emptyPage, removeById: async () => true };
-const fakeKnowledge = { listAll: async (): Promise<never[]> => [], remove: async () => true };
+const fakeKnowledge = {
+  listAll: async (): Promise<never[]> => [],
+  remove: async () => true,
+  // 内容与编辑替身返回非空结果：挂载正确时回 200，路径拼错时是 404，回归才有区分度
+  getContent: async () => ({
+    document: {
+      id: 'doc-1',
+      title: '手册',
+      scope: 'global',
+      ownerUserId: null,
+      chunks: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    content: '正文',
+    source: 'raw',
+    updatedAt: null,
+  }),
+  replace: async () => ({
+    id: 'doc-1',
+    title: '手册',
+    scope: 'global',
+    ownerUserId: null,
+    chunks: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }),
+};
 
 /**
  * 真实服务里 res.locals.admin 与 res.locals.log 分别由 requireAdmin 与 createRequestLog 写入；
@@ -110,6 +135,11 @@ app.use(
     sessions: fakeCascade as unknown as AppDependencies['sessions'],
     conversations: fakeCascade as unknown as AppDependencies['conversations'],
     files: fakeCascade as unknown as AppDependencies['files'],
+    // 本文件不校验口令，替身只需能被 parseCredentials 调用
+    passwordCipher: {
+      publicKey: () => ({ kty: 'RSA', n: 'n', e: 'AQAB' }),
+      decrypt: () => 'test-password',
+    },
   }),
 );
 
@@ -195,5 +225,27 @@ describe('管理端批量接口', () => {
     const response = await postJson(`${PREFIX}/users/batch-delete`, { ids: [1, 2] });
 
     expect(response.status).toBe(HTTP_STATUS.NO_CONTENT);
+  });
+});
+
+describe('管理端文档内容与编辑', () => {
+  it('内容与编辑接口落到模块路由并回 200（替身返回非空才有区分度）', async () => {
+    const documentId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const contentResponse = await fetch(
+      `${baseUrl}${PREFIX}/knowledge/documents/${documentId}/content`,
+    );
+    expect(contentResponse.status).toBe(HTTP_STATUS.OK);
+    await expect(contentResponse.json()).resolves.toMatchObject({
+      content: '正文',
+      source: 'raw',
+    });
+
+    const putResponse = await fetch(`${baseUrl}${PREFIX}/knowledge/documents/${documentId}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: '新标题', content: '新正文' }),
+    });
+    expect(putResponse.status).toBe(HTTP_STATUS.OK);
+    await expect(putResponse.json()).resolves.toMatchObject({ title: '手册' });
   });
 });

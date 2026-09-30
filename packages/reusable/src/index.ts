@@ -6,3 +6,4 @@ export * from './http.js';
 export * from './chat.js';
 export * from './messages.js';
 export * from './http-client.js';
+export * from './password.js';

@@ -66,7 +66,8 @@ async function buildXlsx(title: string, content: string): Promise<Buffer> {
     sheet.addRow(splitRow(line));
   }
   // exceljs 自带的 Buffer 声明是自造的假类型，运行时返回的其实是 ArrayBuffer，故显式转换
-  return Buffer.from((await workbook.xlsx.writeBuffer()) as ArrayBuffer);
+  const buffer = (await workbook.xlsx.writeBuffer()) as ArrayBuffer;
+  return Buffer.from(buffer);
 }
 
 /** 把一行文本拆成单元格：优先制表符，其次竖线——模型产出的表格通常用这两种分隔 */

@@ -1,7 +1,14 @@
 // 业务可复用代码的打包配置（Vite 库模式）：产出 CJS / ESM 双格式产物及 TypeScript 类型声明
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
+// 跨包依赖（@repo/shared）外置、保留裸包名：使用方本就直连 shared，
+// 内联会把同一份通用工具在产物里存两遍，且与「跨包引用写包名」的约定相悖
+const external = Object.keys(pkg.dependencies ?? {}).map((name) => new RegExp(`^${name}(/|$)`));
 
 export default defineConfig({
   plugins: [
@@ -22,5 +29,6 @@ export default defineConfig({
       formats: ['es', 'cjs'],
       fileName: (format) => `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
+    rollupOptions: { external },
   },
 });

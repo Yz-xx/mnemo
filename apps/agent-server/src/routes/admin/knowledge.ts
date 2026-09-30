@@ -6,7 +6,13 @@ import { HTTP_STATUS } from '@repo/reusable';
 import { currentAdmin } from '../../auth/middleware.js';
 import { ERROR_MESSAGE } from '../../configuration/messages.js';
 import { requestLogger } from '../../middleware/requestLog.js';
-import { addDocument, describeAddFailure, parseDocumentInput } from '../../services/knowledge.js';
+import {
+  addDocument,
+  describeAddFailure,
+  describeUpdateFailure,
+  parseDocumentInput,
+  updateDocument,
+} from '../../services/knowledge.js';
 import { parsePaging } from '../pagination.js';
 import { parseStringIds } from './batchIds.js';
 
@@ -60,6 +66,60 @@ export function createAdminKnowledgeRouter({
     });
   });
 
+  /** 文档内容：管理员可查看任意文档；旧文档无原文时按分片顺序拼接返回（source 标记） */
+  router.get('/documents/:id/content', async (req: Request, res: Response) => {
+    // Express 5 的 params 值类型为 string | string[]，路径参数实际只有单值，这里收窄
+    const documentId = typeof req.params.id === 'string' ? req.params.id : '';
+    const admin = currentAdmin(res);
+    const content = await knowledge.getContent(documentId, {
+      userId: admin.userId ?? 0,
+      isAdmin: true,
+    });
+    if (!content) {
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.DOCUMENT_NOT_FOUND });
+      return;
+    }
+
+    const ownerIds = content.document.ownerUserId === null ? [] : [content.document.ownerUserId];
+    const names = await users.findNamesByIds(ownerIds);
+    res.json({
+      document: toAdminDocument(content.document, names),
+      content: content.content,
+      source: content.source,
+      updatedAt: content.updatedAt,
+    });
+  });
+
+  /** 编辑文档：整体替换内容并重切分重向量化，id 与归属保持不变 */
+  router.put('/documents/:id', async (req: Request, res: Response) => {
+    const documentId = typeof req.params.id === 'string' ? req.params.id : '';
+    const parsed = parseDocumentInput(req.body);
+    if (!parsed.ok) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
+      return;
+    }
+
+    const admin = currentAdmin(res);
+    try {
+      const document = await updateDocument(
+        knowledge,
+        requestLogger(res),
+        documentId,
+        parsed.value,
+        { userId: admin.userId ?? 0, isAdmin: true },
+      );
+      if (!document) {
+        res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.DOCUMENT_NOT_FOUND });
+        return;
+      }
+      const ownerIds = document.ownerUserId === null ? [] : [document.ownerUserId];
+      const names = await users.findNamesByIds(ownerIds);
+      res.json(toAdminDocument(document, names));
+    } catch (error) {
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: describeUpdateFailure(error) });
+    }
+  });
+
   /** 新增全局文档：与客户端私有入口共用入参校验与入库编排 */
   router.post('/documents', async (req: Request, res: Response) => {
     const parsed = parseDocumentInput(req.body);
@@ -111,7 +171,7 @@ export function createAdminKnowledgeRouter({
       isAdmin: true,
     });
     if (!removed) {
-      res.status(HTTP_STATUS.NOT_FOUND).json({ message: '文档不存在' });
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.DOCUMENT_NOT_FOUND });
       return;
     }
     requestLogger(res).info('管理端删除文档', {

@@ -8,26 +8,30 @@
 
 ## 一、导出能力
 
-包根 `src/index.ts` 只导出**不含第三方依赖**的能力，业务方从 `@repo/shared` 引入即可按需取用；依赖 `crypto-js` 的 DES 加解密单独放在 `@repo/shared/crypto`（原因见「二、按需引入」）。按模块分为三组：
+包根 `src/index.ts` 只导出**不含第三方依赖**的能力，业务方从 `@repo/shared` 引入即可按需取用；依赖 `crypto-js` 的 DES 加解密单独放在 `@repo/shared/crypto`（原因见「二、按需引入」）。按模块分为五组：
 
-| 模块               | 导出                     | 说明                                                          |
-| ------------------ | ------------------------ | ------------------------------------------------------------- |
-| `strings`          | `isString(value)`        | 类型守卫：判断给定值是否为字符串                              |
-|                    | `capitalize(str)`        | 首字母转大写，其余字符保持不变                                |
-|                    | `truncate(str, maxLen)`  | 截断到指定长度并以省略号结尾（`maxLen` 含省略号，至少为 1）   |
-| `common`           | `clamp(value, min, max)` | 将数值限制在 `[min, max]` 区间内                              |
-|                    | `sleep(ms)`              | 延迟指定毫秒数，用于异步流程控制与简单节流                    |
-|                    | `toErrorMessage(error)`  | 提取错误消息：非 Error 抛出值转为字符串，两端共用同一降级口径 |
-| `crypto`（子路径） | `desEncrypt(plain)`      | DES 加密，返回 Base64 编码的密文                              |
-|                    | `desDecrypt(cipher)`     | DES 解密；密文非法或密钥不匹配时返回空字符串                  |
+| 模块               | 导出                     | 说明                                                                 |
+| ------------------ | ------------------------ | -------------------------------------------------------------------- |
+| `strings`          | `isString(value)`        | 类型守卫：判断给定值是否为字符串                                     |
+|                    | `capitalize(str)`        | 首字母转大写，其余字符保持不变                                       |
+|                    | `truncate(str, maxLen)`  | 截断到指定长度并以省略号结尾（`maxLen` 含省略号，至少为 1）          |
+| `common`           | `clamp(value, min, max)` | 将数值限制在 `[min, max]` 区间内                                     |
+|                    | `sleep(ms)`              | 延迟指定毫秒数，用于异步流程控制与简单节流                           |
+|                    | `toErrorMessage(error)`  | 提取错误消息：非 Error 抛出值转为字符串，两端共用同一降级口径        |
+| `bytes`            | `toBase64(bytes)`        | 字节序列转 Base64：先按字节还原二进制字符串再 `btoa`，供跨端编码密文 |
+|                    | `formatBytes(bytes)`     | 字节容量转可读文本（B / KB / MB / GB 四档，非字节档保留一位小数）    |
+| `time`             | `formatTime(iso)`        | UTC ISO 串按本地时区展示；解析失败回落为「—」                        |
+|                    | `formatDate(date)`       | `Date` 转本地日期 `YYYY-MM-DD`（不走 `toISOString`，避免跨时区偏移） |
+| `crypto`（子路径） | `desEncrypt(plain)`      | DES 加密，返回 Base64 编码的密文                                     |
+|                    | `desDecrypt(cipher)`     | DES 解密；密文非法或密钥不匹配时返回空字符串                         |
 
 ### DES 加密约定
 
 `desEncrypt` / `desDecrypt` 采用 **ECB 模式 + PKCS7 填充**：同一明文每次加密结果一致，因此可直接用密文比对来校验（如密码校验），无需先解密。密钥为 8 字节 DES 分组密钥，密钥文本不足时以 0 补齐。
 
-> DES 为可逆对称加密，仅用于按需求的存储加密；真正的生产系统应改用 bcrypt/argon2 这类加盐哈希。
+> DES 为可逆对称加密，**不再用于新增口令的存储**：口令已改为 RSA-OAEP 加密传输 + `scrypt` 加盐哈希入库（见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)），DES 仅保留用于识别存量密文。
 
-当前使用方：后端 `UserStore` 用 `desEncrypt`（从 `@repo/shared/crypto` 引入）加密密码后入库，并直接比对密文完成登录校验；后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题；`toErrorMessage` 由后端服务层与桌面端（经 `api/client.ts` 转发）统一调用。HTTP 状态码契约（`HTTP_STATUS`）、SSE 对话事件类型（`ChatStreamEvent`）与登录失效固定文案（`SESSION_EXPIRED_MESSAGE`）已随业务约定迁至 [@repo/reusable](../reusable/README.md)，不再由本包提供。
+当前使用方：后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题，`llm/tools/files.ts` 用 `formatBytes` 生成附件体积描述，`conversation/store/stats.ts` 用 `formatDate` 归档统计日期，`errors.ts` 与桌面端（经 `api/client.ts` 转发）统一调用 `toErrorMessage`；`auth/passwordHash.ts` 用 `desEncrypt`（从 `@repo/shared/crypto` 引入）识别存量 DES 密文并标记为 legacy，登录校验通过后当场改写为 scrypt 哈希。管理网站与桌面端的时间 / 体积展示统一取 `formatTime` / `formatBytes`。HTTP 状态码契约（`HTTP_STATUS`）、SSE 对话事件类型（`ChatStreamEvent`）、口令加密（`encryptPassword`）与登录失效固定文案（`SESSION_EXPIRED_MESSAGE`）已随业务约定迁至 [@repo/reusable](../reusable/README.md)，不再由本包提供。
 
 ## 二、按需引入
 
@@ -48,4 +52,4 @@ import { desEncrypt } from '@repo/shared/crypto';
 
 - `pnpm --filter @repo/shared run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）按 `index` 与 `crypto` 两个入口产出 `dist/index.{d.ts,mjs,cjs}` 与 `dist/crypto.{d.ts,mjs,cjs}` 等文件，声明文件由 `vite-plugin-dts` 依 `tsconfig.json` 的 include / exclude 生成（测试目录不参与产物）；
 - 产物保留空格与注释、开启 sourcemap，便于使用方调试；第三方运行时依赖（如 `crypto-js`）外置并保留裸包名，由使用方安装。
-- `pnpm --filter @repo/shared run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖 DES 加解密与错误消息提取）。
+- `pnpm --filter @repo/shared run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖 DES 加解密、错误消息提取、Base64 编码与容量分档、时间格式化与非法值回落）。

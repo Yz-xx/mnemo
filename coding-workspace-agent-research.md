@@ -25,17 +25,17 @@
 
 ## 1. 现状盘点
 
-| 能力           | 现状                                                                                                       | 证据                                                                                                   |
-| -------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 工具定义与注册 | 三个工具，`tool() + zod schema`，集中在 `createTools()` 返回数组                                           | [tools.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/llm/tools.ts#L37-L91)     |
-| 工具轨迹上报   | LangChain 消息流 → `{ type: 'tool', name, status }` 事件                                                   | [agent.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/llm/agent.ts#L57-L90)     |
-| SSE 线协议     | 封闭联合类型：`token` \| `tool` \| `conversation` \| `done` \| `error`，**单向**                           | [chat.ts](file:///d:/Files/common/porgram/my-monorepo/packages/reusable/src/chat.ts#L8-L24)            |
-| 服务端分层     | `routes → services → store/llm/db` 单向，依赖显式注入 `AppDependencies`                                    | backend-design §1                                                                                      |
-| 桌面端三层     | 主进程只做设置/主题/窗口/IPC；渲染进程无任何文件能力                                                       | [ipc.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-client/src/main/ipc.ts#L6-L38)         |
-| preload 暴露面 | `initialSettings` / `getAppInfo` / `getSettings` / `saveSettings` / `windowControl`，**无目录选择、无 fs** | [types.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-client/src/preload/types.ts#L34-L42) |
-| 设置持久化     | `AppSettings{backendUrl, theme, authToken}` → `userData/settings.json`                                     | [types.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-client/src/preload/types.ts#L9-L23)  |
-| 安全基线       | `contextIsolation: true`、`nodeIntegration: false`，不放开渲染进程 Node 能力                               | desktop-design §2                                                                                      |
-| 决策记录       | `docs/adr/` 下**只有** 0001（HTTP 状态码契约），无工作区/沙箱/审批相关 ADR                                 | `docs/adr/0001-http-status-contract.md`                                                                |
+| 能力           | 现状                                                                                                       | 证据                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 工具定义与注册 | 三个工具，`tool() + zod schema`，集中在 `createTools()` 返回数组                                           | [tools.ts](apps/agent-server/src/llm/tools.ts#L37-L91)     |
+| 工具轨迹上报   | LangChain 消息流 → `{ type: 'tool', name, status }` 事件                                                   | [agent.ts](apps/agent-server/src/llm/agent.ts#L57-L90)     |
+| SSE 线协议     | 封闭联合类型：`token` \| `tool` \| `conversation` \| `done` \| `error`，**单向**                           | [chat.ts](packages/reusable/src/chat.ts#L8-L24)            |
+| 服务端分层     | `routes → services → store/llm/db` 单向，依赖显式注入 `AppDependencies`                                    | backend-design §1                                          |
+| 桌面端三层     | 主进程只做设置/主题/窗口/IPC；渲染进程无任何文件能力                                                       | [ipc.ts](apps/agent-client/src/main/ipc.ts#L6-L38)         |
+| preload 暴露面 | `initialSettings` / `getAppInfo` / `getSettings` / `saveSettings` / `windowControl`，**无目录选择、无 fs** | [types.ts](apps/agent-client/src/preload/types.ts#L34-L42) |
+| 设置持久化     | `AppSettings{backendUrl, theme, authToken}` → `userData/settings.json`                                     | [types.ts](apps/agent-client/src/preload/types.ts#L9-L23)  |
+| 安全基线       | `contextIsolation: true`、`nodeIntegration: false`，不放开渲染进程 Node 能力                               | desktop-design §2                                          |
+| 决策记录       | `docs/adr/` 下**只有** 0001（HTTP 状态码契约），无工作区/沙箱/审批相关 ADR                                 | `docs/adr/0001-http-status-contract.md`                    |
 
 ---
 
@@ -107,7 +107,7 @@
 | 上下文         | 工作区在服务器上，`rg` 直接可用              | 需要在主进程实现搜索或走 IPC          |
 | 多客户端       | 天然支持                                     | 需处理「同一会话多窗口」的归属        |
 
-**为什么这是最贵的决定**：当前 `ChatStreamEvent` 是封闭联合类型、SSE 只有服务端 → 客户端一个方向（[chat.ts](file:///d:/Files/common/porgram/my-monorepo/packages/reusable/src/chat.ts#L8-L24)）。方案二要让「LangChain 的工具执行」等一个来自客户端的回执，等于把一次对话从「单向广播」变成「带往返的会话」，所有超时、取消、断连、重放语义都要重新定义。
+**为什么这是最贵的决定**：当前 `ChatStreamEvent` 是封闭联合类型、SSE 只有服务端 → 客户端一个方向（[chat.ts](packages/reusable/src/chat.ts#L8-L24)）。方案二要让「LangChain 的工具执行」等一个来自客户端的回执，等于把一次对话从「单向广播」变成「带往返的会话」，所有超时、取消、断连、重放语义都要重新定义。
 
 ---
 
@@ -187,7 +187,7 @@ export type ChatStreamEvent =
 
 ### 5.2 工具设计约定（对齐 backend-design §7）
 
-- 入参用 `zod`，非法入参**抛中文错误**（现有工具风格见 [tools.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/llm/tools.ts#L73-L88)）。
+- 入参用 `zod`，非法入参**抛中文错误**（现有工具风格见 [tools.ts](apps/agent-server/src/llm/tools.ts#L73-L88)）。
 - 每个工具的返回必须**自解释且可恢复**：文件被截断要说明、补丁未匹配要给出附近上下文。
 - 结果带「来源」标注（现有规范要求），例如 `【文件 src/a.ts 第 12-40 行】`。
 - 记录请求级日志（`userId` / `conversationId` / 工具名 / 耗时），复用现有 `Logger` 注入方式。

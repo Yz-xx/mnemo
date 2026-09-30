@@ -1,6 +1,6 @@
 import type { ChatAttachment, ChatMessage, GeneratedFileInfo } from '../../types';
 import type { Ref } from 'vue';
-import { nextTick, ref, watch } from 'vue';
+import { nextTick, ref, useTemplateRef, watch } from 'vue';
 
 /** ChatWindow 的入参：消息与流式状态由父级持有，本组件只渲染与上报 */
 export interface ChatWindowProps {
@@ -31,7 +31,6 @@ const FOLLOW_THRESHOLD = 80;
 
 interface ChatWindowControls {
   draft: Ref<string>;
-  listRef: Ref<HTMLElement | null>;
   onScroll: () => void;
   submit: () => void;
   onKeydown: (event: KeyboardEvent) => void;
@@ -43,7 +42,9 @@ export function useChatWindow(
   emit: (event: 'send', text: string) => void,
 ): ChatWindowControls {
   const draft = ref('');
-  const listRef = ref<HTMLElement | null>(null);
+  // 滚动容器的模板 ref 归本组合式函数独占：组件只在模板写 ref="listRef"，
+  // 脚本里不持有它，否则字符串 ref 会被 noUnusedLocals 判为「声明未读取」
+  const listRef = useTemplateRef<HTMLElement>('listRef');
   const following = ref(true);
 
   function onScroll(): void {
@@ -80,5 +81,5 @@ export function useChatWindow(
     }
   }
 
-  return { draft, listRef, onScroll, submit, onKeydown };
+  return { draft, onScroll, submit, onKeydown };
 }

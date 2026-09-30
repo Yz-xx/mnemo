@@ -1,4 +1,5 @@
 import type { AuditLogStore } from '../audit/store.js';
+import type { PasswordCipher } from '../auth/passwordCipher.js';
 import type { SessionStore } from '../auth/sessionStore.js';
 import type { UserStore } from '../auth/userStore.js';
 import type { ConversationStore } from '../conversation/store/index.js';
@@ -26,4 +27,6 @@ export interface AppDependencies {
   knowledge: KnowledgeStore;
   users: UserStore;
   sessions: SessionStore;
+  /** 口令传输加解密：公钥下发给客户端加密口令，私钥留在服务端解密 */
+  passwordCipher: PasswordCipher;
 }

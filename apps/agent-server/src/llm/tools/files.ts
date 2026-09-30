@@ -4,7 +4,7 @@ import type { Logger } from '@repo/logger';
 import path from 'node:path';
 import { tool } from 'langchain';
 import { z } from 'zod';
-import { toErrorMessage } from '@repo/shared';
+import { formatBytes, toErrorMessage } from '@repo/shared';
 import { buildDocument, EXPORT_FORMATS } from '../../files/generate.js';
 import { extractText } from '../../files/parser.js';
 import { DISABLED_VISION } from '../vision.js';
@@ -31,13 +31,6 @@ function normalizeExportName(raw: string): string {
     .replace(/\.[a-z0-9]{1,8}$/i, '')
     .trim();
   return base.slice(0, EXPORT_NAME_LIMIT) || '导出文件';
-}
-
-/** 文件大小转成可读文本，让模型对文件体量有概念 */
-function formatSize(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
-    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 /** 超长正文截断后附上说明，模型据此知道后面还有内容，而不是以为文件就到此为止 */
@@ -90,7 +83,7 @@ export function createFileTools(files: FileSource, vision: VisionReader = DISABL
       const stored = await files.list(readUserId(config), ids);
       if (stored.length === 0) return '本轮对话没有附带文件。';
       return stored
-        .map((file) => `${file.id}｜${file.name}｜${file.ext}｜${formatSize(file.size)}`)
+        .map((file) => `${file.id}｜${file.name}｜${file.ext}｜${formatBytes(file.size)}`)
         .join('\n');
     },
     {
@@ -153,7 +146,7 @@ export function createFileTools(files: FileSource, vision: VisionReader = DISABL
           name: stored.name,
           size: stored.size,
         });
-        return `已生成文件《${stored.name}》（${formatSize(stored.size)}），用户可直接下载。`;
+        return `已生成文件《${stored.name}》（${formatBytes(stored.size)}），用户可直接下载。`;
       } catch (error) {
         // 生成失败要让模型知道原因并如实转达，抛错只会把整轮对话打断
         return toErrorMessage(error);

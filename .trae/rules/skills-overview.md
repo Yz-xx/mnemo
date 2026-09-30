@@ -20,7 +20,7 @@ my-monorepo/
 ├── apps/
 │   ├── agent-server/  Express 5 + LangChain 智能体服务（MySQL 持久化）
 │   ├── agent-client/  Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
-│   └── frontend/      示例 Web 前端（脚手架预留）
+│   └── admin-web/     后台管理网站（Vue 3 + Vite + TypeScript，自建 UI 组件）
 ├── packages/
 │   ├── shared/      @repo/shared 通用工具（strings / common；DES 加密走子路径 @repo/shared/crypto）
 │   ├── reusable/    @repo/reusable 业务可复用代码（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）

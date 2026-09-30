@@ -1,0 +1,98 @@
+.knowledge {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__create {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    background-color: var(--primary-strong);
+    border: 1px solid var(--primary-strong);
+    border-radius: var(--radius);
+    color: var(--text-inverse);
+    font-size: 13px;
+    letter-spacing: var(--tracking-label);
+    transition: filter var(--transition);
+
+    &:hover:not(:disabled) {
+      filter: brightness(0.92);
+    }
+  }
+
+  &__error {
+    margin: 0;
+    padding: 10px 14px;
+    background-color: var(--danger-soft);
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+
+  // 范围徽标：深色语义字配浅底，两个组合对比度均在 4.5:1 以上
+  &__badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+
+    &--global {
+      background-color: var(--primary-soft);
+      color: var(--primary-strong);
+    }
+
+    &--private {
+      background-color: var(--bg-active);
+      color: var(--text-muted);
+    }
+  }
+
+  &__owner--none {
+    color: var(--text-faint);
+  }
+
+  // 操作列容器：与 users 页面同构，右对齐并排、间距固定
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  &__link {
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    color: var(--primary-strong);
+    font-size: 13px;
+    transition: color var(--transition);
+
+    &:hover:not(:disabled) {
+      text-decoration: underline;
+    }
+
+    &--danger {
+      color: var(--danger);
+
+      &:hover:not(:disabled) {
+        color: var(--danger-strong);
+      }
+    }
+  }
+
+  &__confirm {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+}

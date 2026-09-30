@@ -1,5 +1,6 @@
 import type { ConversationStats } from './mapper.js';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
+import { formatDate } from '@repo/shared';
 
 interface SummaryRow extends RowDataPacket {
   total: number;
@@ -17,13 +18,6 @@ function startOfToday(): Date {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
   return date;
-}
-
-/** 本地日期字符串：用本地字段拼装而不走 toISOString，后者会按时区偏移到前一天 */
-function formatDate(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 /** 近 N 天（含起点当天）的日期序列：库里没有消息的日期补 0，折线图才不会断档 */

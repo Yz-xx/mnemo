@@ -1,4 +1,9 @@
-import type { KnowledgeDocument, KnowledgeStore, KnowledgeUpload } from '../rag/index.js';
+import type {
+  KnowledgeActor,
+  KnowledgeDocument,
+  KnowledgeStore,
+  KnowledgeUpload,
+} from '../rag/index.js';
 import type { Logger } from '@repo/logger';
 import { toErrorMessage } from '@repo/shared';
 
@@ -31,6 +36,11 @@ export function describeAddFailure(error: unknown): string {
   return `文档入库失败：${toErrorMessage(error)}`;
 }
 
+/** 编辑失败的对外文案：失败场景与入库同源（向量化服务未启动、基准不符），前缀随操作区分 */
+export function describeUpdateFailure(error: unknown): string {
+  return `文档编辑失败：${toErrorMessage(error)}`;
+}
+
 /**
  * 文档入库编排：切分与向量化都在 KnowledgeStore 内完成，这里只负责计时与日志。
  * 归属范围由调用方（路由）按入口决定：客户端只能写私有，全局走管理入口。
@@ -60,6 +70,43 @@ export async function addDocument(
       scope: input.scope,
       userId: input.userId,
       durationMs: Date.now() - startedAt,
+      error,
+    });
+    throw error;
+  }
+}
+
+/**
+ * 文档编辑编排：重切分与重向量化在 KnowledgeStore 内完成，这里只负责计时与日志。
+ * 返回 null 表示文档不存在或无权限，由路由翻成 404；
+ * 抛错时保留原始错误落日志再抛回，状态码与对外文案由路由决定（失败场景与入库同源）
+ */
+export async function updateDocument(
+  knowledge: KnowledgeStore,
+  logger: Logger,
+  id: string,
+  input: { title: string; content: string },
+  actor: KnowledgeActor,
+): Promise<KnowledgeDocument | null> {
+  const startedAt = Date.now();
+  try {
+    const document = await knowledge.replace(id, input, actor);
+    if (document) {
+      logger.info('文档编辑完成', {
+        documentId: document.id,
+        title: document.title,
+        chunkCount: document.chunks,
+        durationMs: Date.now() - startedAt,
+        userId: actor.userId,
+      });
+    }
+    return document;
+  } catch (error) {
+    logger.error('文档编辑失败', {
+      documentId: id,
+      title: input.title,
+      durationMs: Date.now() - startedAt,
+      userId: actor.userId,
       error,
     });
     throw error;

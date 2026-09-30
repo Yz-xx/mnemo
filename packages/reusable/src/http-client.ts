@@ -6,10 +6,11 @@ import { HTTP_STATUS, toHttpStatusCode } from './http.js';
  * 注入式 HTTP 客户端工厂：藏住请求头拼装、错误归一化、SSE 流解析三段共性逻辑，
  * 调用方只需注入 baseURL 与 token 获取器即可拿到一个可复用的客户端实例。
  *
- * 设计为注入式（getToken 每次请求时调用）而非构造期固化 token：
- * 桌面端 useAuth 的 token 是模块级单例，admin 网站用 localStorage，
- * 两者都希望"token 变化无需重建实例"——把取值时机推迟到请求发起时，
+ * baseURL 与 getToken 都设计为注入式（请求发起时才调用）而非构造期固化：
+ * 桌面端 useAuth 的 token 是模块级单例、地址可由用户在设置里切换，admin 网站用 localStorage，
+ * 三者都希望"地址或 token 变化无需重建实例"——把取值时机推迟到请求发起时，
  * 客户端实例可长期持有，调用方不必再维护 computed 重建。
+ * baseURL 仍接受裸字符串：地址固定的调用方（如 admin 网站的 server.proxy 同源方案）照旧传值即可。
  *
  * 仅依赖运行时内置 fetch / FormData / Response / ReadableStream（Node 18+ 与浏览器均内置），
  * 不引入第三方包，故放本包根而非子路径，保留 sideEffects: false 以利 tree-shaking。
@@ -44,13 +45,21 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/** 请求目标地址：固定字符串或每次请求时实时取值的函数（支持运行期切换地址而无需重建实例） */
+export type BaseUrlLike = string | (() => string);
+
 /** 工厂注入项 */
 export interface ApiClientOptions {
-  baseURL: string;
+  baseURL: BaseUrlLike;
   /** 每次请求时实时取 token；返回空串或 null 表示未登录，不发 Authorization */
   getToken?: () => string | null;
   /** 401 时调用一次，调用方据此清登录态与重置业务状态；不在工厂内跳路由，路由策略由调用方决定 */
   onUnauthorized?: () => void;
+}
+
+/** 统一取出请求目标地址：字符串直用，取值器每次请求时求值 */
+function resolveBaseURL(baseURL: BaseUrlLike): string {
+  return typeof baseURL === 'function' ? baseURL() : baseURL;
 }
 
 /** 客户端实例：三段能力的最小接口 */
@@ -93,7 +102,8 @@ async function extractError(res: Response): Promise<string> {
 
 /** 包装错误：转 ApiError + 401 触发回调，避免在三个调用点重复 */
 async function throwApiError(res: Response, onUnauthorized?: () => void): Promise<never> {
-  const err = new ApiError(toHttpStatusCode(res.status), await extractError(res));
+  const message = await extractError(res);
+  const err = new ApiError(toHttpStatusCode(res.status), message);
   if (err.status === HTTP_STATUS.UNAUTHORIZED) onUnauthorized?.();
   throw err;
 }
@@ -103,7 +113,7 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
   const { baseURL, getToken = () => null, onUnauthorized } = opts;
 
   async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
-    const res = await fetch(`${baseURL}${path}`, {
+    const res = await fetch(`${resolveBaseURL(baseURL)}${path}`, {
       method: init.method,
       body: init.body,
       headers: buildHeaders(getToken, init.body, init.headers),
@@ -118,7 +128,7 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     path: string,
     init: RequestOptions = {},
   ): AsyncGenerator<ChatStreamEvent> {
-    const res = await fetch(`${baseURL}${path}`, {
+    const res = await fetch(`${resolveBaseURL(baseURL)}${path}`, {
       method: init.method,
       body: init.body,
       headers: buildHeaders(getToken, init.body, init.headers),
@@ -149,7 +159,7 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
   }
 
   async function downloadBlob(path: string, init: RequestOptions = {}): Promise<Blob> {
-    const res = await fetch(`${baseURL}${path}`, {
+    const res = await fetch(`${resolveBaseURL(baseURL)}${path}`, {
       method: init.method,
       body: init.body,
       headers: buildHeaders(getToken, init.body, init.headers),

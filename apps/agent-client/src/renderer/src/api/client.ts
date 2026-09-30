@@ -5,8 +5,8 @@ import type {
   ConversationSummary,
   KnowledgeDocument,
 } from '../types';
-import type { ApiClient, ChatStreamEvent } from '@repo/reusable';
-import { ApiError, createApiClient, isUnauthorized } from '@repo/reusable';
+import type { ApiClient, BaseUrlLike, ChatStreamEvent } from '@repo/reusable';
+import { ApiError, createApiClient, encryptPassword, isUnauthorized } from '@repo/reusable';
 
 // 渲染进程只有本模块依赖 @repo/*（见 desktop-design 第 2 章）：其余模块要用共享能力
 // 也经此处转发，避免第二个模块直接引包，让产物里多带无关代码
@@ -45,19 +45,20 @@ export interface UploadedFileInfo {
 
 /**
  * 后端智能体服务的 HTTP 客户端：薄外壳，构造时基于 createApiClient 创建实例，
- * 业务方法转发到通用客户端。保留类外壳是为了让现有 4 处调用方零改动；
- * token 仍按构造期固化（调用方用 computed 重建以响应登录态变化）。
+ * 业务方法转发到通用客户端。
+ *
+ * 地址与令牌接受裸值或取值器：取值器形态下每次请求才求值，
+ * 因此「保存设置切换地址」「登录/登出」都无需重建实例——
+ * 全局会话在 api/session.ts 里长期持有一个取值器版实例；
+ * 仅「保存前先探测草稿地址」这类临时目标才 new 出新实例（裸值即可）。
  */
 export class AgentApi {
   private readonly api: ApiClient;
 
-  constructor(
-    private readonly baseUrl: string,
-    private readonly token = '',
-  ) {
+  constructor(baseUrl: BaseUrlLike, token: string | (() => string) = '') {
     this.api = createApiClient({
       baseURL: baseUrl,
-      getToken: () => this.token,
+      getToken: () => (typeof token === 'function' ? token() : token),
     });
   }
 
@@ -65,17 +66,20 @@ export class AgentApi {
     return this.api.request<HealthInfo>('/api/health');
   }
 
-  register(username: string, password: string): Promise<AuthSession> {
+  async register(username: string, password: string): Promise<AuthSession> {
+    // 口令先经服务端公钥加密再提交（见 ADR 0004），明文不上网
+    const encryptedPassword = await encryptPassword(this.api, password);
     return this.api.request<AuthSession>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password: encryptedPassword }),
     });
   }
 
-  login(username: string, password: string): Promise<AuthSession> {
+  async login(username: string, password: string): Promise<AuthSession> {
+    const encryptedPassword = await encryptPassword(this.api, password);
     return this.api.request<AuthSession>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password: encryptedPassword }),
     });
   }
 

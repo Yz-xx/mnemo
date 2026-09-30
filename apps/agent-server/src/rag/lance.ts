@@ -9,7 +9,8 @@ export const DOCUMENT_ID = /^[0-9a-fA-F-]{36}$/;
 
 /**
  * 文档表结构：显式声明列类型，避免按首行数据推断类型出错
- * （owner_user_id 需要可空，数值列统一用 Float64 以免读出 BigInt）
+ * （owner_user_id 需要可空，数值列统一用 Float64 以免读出 BigInt）。
+ * content 与 updated_at 为后补列：已存在的表由 storage 层迁移补齐，旧行值为 null
  */
 export function documentsSchema(): Schema {
   return new Schema([
@@ -21,8 +22,13 @@ export function documentsSchema(): Schema {
     new Field('embedding_model', new Utf8(), false),
     new Field('dim', new Float64(), false),
     new Field('created_at', new Utf8(), false),
+    new Field('content', new Utf8(), true),
+    new Field('updated_at', new Utf8(), true),
   ]);
 }
+
+/** 文档表的后补列：旧表缺列时按此清单迁移，与 documentsSchema 的尾部声明保持一致 */
+export const DOCUMENTS_APPENDED_COLUMNS = ['content', 'updated_at'] as const;
 
 /** 片段表结构：向量维度在建表时固定，维度不符时写入会直接失败 */
 export function chunksSchema(dim: number): Schema {

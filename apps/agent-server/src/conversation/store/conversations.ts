@@ -95,7 +95,8 @@ export class ConversationStore {
     meta: MessageMeta = {},
   ): Promise<Conversation> {
     const { tools, attachments, sources } = meta;
-    const conversation = (id ? await this.get(userId, id) : null) ?? (await this.create(userId));
+    let conversation = id ? await this.get(userId, id) : null;
+    if (!conversation) conversation = await this.create(userId);
     const message: StoredMessage = {
       id: randomUUID(),
       role,

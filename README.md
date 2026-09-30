@@ -5,7 +5,7 @@
 - 桌面端：Electron 44 + Vue 3 + TypeScript + Less（electron-vite 构建）
 - 后端：Express 5 + LangChain 1.x（`@langchain/ollama` / `@langchain/openai`）+ zod + mysql2
 - 存储：MySQL 保存用户、登录会话与对话记录；知识库为本地 LanceDB 向量库
-- 账号：注册 / 登录 / 登出，密码经 DES 加密后入库，接口以 Bearer 令牌鉴权
+- 账号：注册 / 登录 / 登出，密码经 RSA-OAEP 加密传输、`scrypt` 加盐哈希入库，接口以 Bearer 令牌鉴权
 - 文档：支持上传 docx / xlsx / pdf / 图片附件，可理解图片（本地多模态模型），并按需导出 docx / xlsx / pdf
 - 模型：默认本地 Ollama（`qwen2.5:7b` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
@@ -32,7 +32,7 @@ my-monorepo/
 │   │   │   │   └── errorHandler.ts   # 兜底错误处理
 │   │   │   ├── auth/
 │   │   │   │   ├── credentials.ts    # 用户名/密码格式校验
-│   │   │   │   ├── userStore.ts      # 用户表读写（密码 DES 加密入库）
+│   │   │   │   ├── userStore.ts      # 用户表读写（密码 scrypt 哈希入库）
 │   │   │   │   ├── sessionStore.ts   # 登录会话表（签发 / 校验 / 单端登录清理）
 │   │   │   │   └── middleware.ts     # Bearer 令牌鉴权中间件
 │   │   │   ├── db/
@@ -68,7 +68,7 @@ my-monorepo/
 │   │       │   └── ipc.ts            # IPC 处理器注册
 │   │       ├── preload/              # 预加载层：contextBridge 白名单 API
 │   │       └── renderer/             # 渲染进程：Vue 3 界面与状态
-│   └── frontend/             # 后台管理网站（Vue 3 + 自动路由 + pinia + echarts，自建 UI 组件）
+│   └── admin-web/            # 后台管理网站（Vue 3 + 自动路由 + pinia + echarts，自建 UI 组件）
 │       ├── src/
 │       │   ├── main.ts               # 入口：装 pinia / router，恢复登录态并注入 401 处理
 │       │   ├── App.vue               # 布局分发器：login 独立渲染，其余套 AdminLayout
@@ -82,7 +82,7 @@ my-monorepo/
 │       │   └── styles/               # base.less + tokens.less（固定亮色令牌）
 │       └── typed-router.d.ts         # 自动路由生成的路由类型（入库并登记 tsconfig include）
 ├── packages/
-│   ├── shared/               # 跨端通用工具库（与业务无关：字符串 / 通用函数，DES 走 /crypto 子路径）
+│   ├── shared/               # 跨端通用工具库（与业务无关：字符串 / 通用函数 / 字节与时间格式化，DES 走 /crypto 子路径）
 │   ├── reusable/             # 业务可复用库（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
 │   ├── logger/               # Node 端日志库（级别过滤 / 脱敏 / 按天轮转文件）
 │   └── components/           # 公共 Vue 组件库（Vite 库模式）
@@ -126,7 +126,7 @@ my-monorepo/
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**后台管理网站（`apps/frontend`）**是同一后端的第二个客户端，与对话链路完全分离：管理员登录换取 Bearer 令牌后只调 `/api/auth/*` 与 `/api/admin/*`，不参与会话与工具调用；管理接口另支持运维超级令牌（`x-admin-token`）作为应急入口。详见 [apps/frontend/README.md](./apps/frontend/README.md)。
+**后台管理网站（`apps/admin-web`）**是同一后端的第二个客户端，与对话链路完全分离：管理员登录换取 Bearer 令牌后只调 `/api/auth/*` 与 `/api/admin/*`，不参与会话与工具调用；管理接口另支持运维超级令牌（`x-admin-token`）作为应急入口。详见 [apps/admin-web/README.md](./apps/admin-web/README.md)。
 
 ### 一次对话的完整数据流
 
@@ -150,8 +150,8 @@ my-monorepo/
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | [apps/agent-server/README.md](./apps/agent-server/README.md) | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建       |
 | [apps/agent-client/README.md](./apps/agent-client/README.md) | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证    |
-| [apps/frontend/README.md](./apps/frontend/README.md)         | 后台管理网站的目录结构、技术选型取舍、鉴权与登录态、接口清单、页面与组件、样式令牌、开发构建与后续模块 |
-| [packages/shared/README.md](./packages/shared/README.md)     | 通用工具库的导出索引（字符串 / 通用函数 / DES 加解密子路径）、引用方式与构建                           |
+| [apps/admin-web/README.md](./apps/admin-web/README.md)       | 后台管理网站的目录结构、技术选型取舍、鉴权与登录态、接口清单、页面与组件、样式令牌、开发构建与后续模块 |
+| [packages/shared/README.md](./packages/shared/README.md)     | 通用工具库的导出索引（字符串 / 通用函数 / 字节与时间格式化 / DES 加解密子路径）、引用方式与构建        |
 | [packages/reusable/README.md](./packages/reusable/README.md) | 业务可复用库的导出索引（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）、引用方式与构建                |
 | [packages/logger/README.md](./packages/logger/README.md)     | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                   |
 
@@ -192,16 +192,16 @@ pnpm dev agent-server agent-client   # 也可直接指定，支持目录名（ag
 ```bash
 pnpm --filter @repo/agent-server run dev     # tsx watch，默认 3000 端口
 pnpm --filter @repo/agent-client run dev     # electron-vite dev
-pnpm --filter @repo/frontend run dev         # vite dev，默认 5173，/api 代理到 3000
+pnpm --filter @repo/admin-web run dev         # vite dev，默认 5173，/api 代理到 3000
 ```
 
-前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 MySQL 8 与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)；后台管理网站还需一个 `role` 为 `admin` 的账号与运行中的后端，见 [apps/frontend/README.md](./apps/frontend/README.md)。
+前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 MySQL 8 与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)；后台管理网站还需一个 `role` 为 `admin` 的账号与运行中的后端，见 [apps/admin-web/README.md](./apps/admin-web/README.md)。
 
 质量校验：
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（shared 的 DES 加解密与错误消息提取、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索；后台管理网站暂无单测）
+pnpm test           # 各子包单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化 / DES 加解密、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索；后台管理网站暂无单测）
 pnpm build          # 全仓构建
 ```
 
@@ -209,7 +209,7 @@ pnpm build          # 全仓构建
 
 ## 六、跨端约束与设计取舍
 
-- **密码为 DES 加密而非哈希**：`@repo/shared/crypto`（DES 单独走子路径入口，见 [packages/shared/README.md](./packages/shared/README.md)）提供 DES 加解密能力，后端按需求用它做存储加密（ECB 定值加密便于直接比对密文）；DES 为可逆对称加密，真正的生产系统应改用 bcrypt/argon2 这类加盐哈希。
+- **口令加密传输 + 加盐哈希存储**：客户端用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后提交，明文不上网；服务端以 `scrypt` 加盐哈希入库（格式 `scrypt$盐hex$散列hex`），存量 DES 密文在登录校验通过后当场改写为哈希。`@repo/shared/crypto` 的 DES 能力（单独走子路径入口，见 [packages/shared/README.md](./packages/shared/README.md)）现仅用于识别存量密文，取舍见 [docs/adr/0004-password-transport-and-storage.md](./docs/adr/0004-password-transport-and-storage.md)。
 - **令牌以明文流转**：登录令牌明文保存在桌面端 `settings.json` 中，并随请求以 Bearer 明文传输（后端只做校验与有效期管理），仅适用于本机/内网场景。
 - **HTTP 状态码契约收敛为 7 项**：前后端共用 `@repo/reusable` 的 `HTTP_STATUS`（200/201/204/400/401/404/500），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、知识库入库失败按 500 处理，取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md)。
 

@@ -7,7 +7,7 @@ const props = defineProps<ChatWindowProps>();
 
 const emit = defineEmits<ChatWindowEmits>();
 
-const { draft, listRef, onScroll, submit, onKeydown } = useChatWindow(props, emit);
+const { draft, onScroll, submit, onKeydown } = useChatWindow(props, emit);
 </script>
 
 <template>

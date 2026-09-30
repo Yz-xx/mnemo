@@ -1,0 +1,85 @@
+.knowledge-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  &__meta {
+    display: flex;
+    gap: 16px;
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 12px;
+  }
+
+  &__hint {
+    margin: 0;
+    padding: 8px 12px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--primary-strong);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  // 原文只读区：保留换行与空格，超长在弹窗内滚动
+  &__body {
+    max-height: 46vh;
+    margin: 0;
+    padding: 12px 14px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &__label {
+    color: var(--text-muted);
+    font-size: 12px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__input {
+    padding: 8px 10px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition);
+
+    &:focus {
+      border-color: var(--primary-strong);
+    }
+
+    // 正文可能很长，允许纵向拉伸但不允许横向撑破弹窗
+    &--area {
+      resize: vertical;
+      line-height: 1.7;
+    }
+  }
+
+  &__error {
+    margin: 0;
+    padding: 8px 12px;
+    background-color: var(--danger-soft);
+    border-left: 2px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger-strong);
+    font-size: 13px;
+  }
+}

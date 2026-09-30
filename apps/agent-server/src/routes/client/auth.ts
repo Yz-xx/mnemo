@@ -27,20 +27,27 @@ async function issueSession(
   user: UserRecord,
   sessions: SessionStore,
 ): Promise<{ token: string; user: SessionUser }> {
-  return { token: await sessions.create(user.id), user: toSessionUser(user) };
+  const token = await sessions.create(user.id);
+  return { token, user: toSessionUser(user) };
 }
 
 /** 账号接口：注册、登录公开，登出与登录态查询需要携带令牌 */
 export function createAuthRouter({
   users,
   sessions,
-}: Pick<AppDependencies, 'users' | 'sessions'>): Router {
+  passwordCipher,
+}: Pick<AppDependencies, 'users' | 'sessions' | 'passwordCipher'>): Router {
   const router = Router();
   const requireAuth = createRequireAuth(sessions);
 
+  /** 口令传输公钥：客户端在登录/注册前取回，用它加密密码字段后再提交 */
+  router.get('/public-key', (_req: Request, res: Response) => {
+    res.json({ publicKey: passwordCipher.publicKey() });
+  });
+
   router.post('/register', async (req: Request, res: Response) => {
     const log = requestLogger(res);
-    const parsed = parseCredentials(req.body);
+    const parsed = parseCredentials(req.body, passwordCipher);
     if (!parsed.ok) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
       return;
@@ -59,7 +66,7 @@ export function createAuthRouter({
 
   router.post('/login', async (req: Request, res: Response) => {
     const log = requestLogger(res);
-    const parsed = parseCredentials(req.body);
+    const parsed = parseCredentials(req.body, passwordCipher);
     if (!parsed.ok) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
       return;

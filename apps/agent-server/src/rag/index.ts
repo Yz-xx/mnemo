@@ -1,7 +1,8 @@
 export { KnowledgeStore } from './store.js';
-export type { KnowledgeStoreOptions } from './store.js';
+export type { KnowledgeStoreOptions } from './storage.js';
 export type {
   KnowledgeActor,
+  KnowledgeContent,
   KnowledgeDocument,
   KnowledgeScope,
   KnowledgeUpload,

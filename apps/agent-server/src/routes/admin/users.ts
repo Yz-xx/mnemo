@@ -62,7 +62,11 @@ export function createAdminUsersRouter({
   sessions,
   conversations,
   files,
-}: Pick<AppDependencies, 'users' | 'sessions' | 'conversations' | 'files'>): Router {
+  passwordCipher,
+}: Pick<
+  AppDependencies,
+  'users' | 'sessions' | 'conversations' | 'files' | 'passwordCipher'
+>): Router {
   const router = Router();
 
   /** 用户列表：按用户名包含匹配 + 分页 */
@@ -75,7 +79,7 @@ export function createAdminUsersRouter({
 
   /** 新建用户：角色可选，缺省为普通用户 */
   router.post('/', async (req: Request, res: Response) => {
-    const parsed = parseCredentials(req.body);
+    const parsed = parseCredentials(req.body, passwordCipher);
     if (!parsed.ok) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
       return;

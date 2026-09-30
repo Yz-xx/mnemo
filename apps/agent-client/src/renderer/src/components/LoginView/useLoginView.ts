@@ -3,6 +3,7 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { DEFAULT_BACKEND_URL, readSettings, saveSettings } from '../../api/bridge';
 import { AgentApi } from '../../api/client';
+import { setBackendUrl } from '../../api/session';
 import { useAuth } from '../../composables/useAuth';
 
 const MODE_TEXT: Record<AuthMode, { title: string; action: string; hint: string }> = {
@@ -57,12 +58,13 @@ export function useLoginView(): LoginViewControls {
     }
   }
 
-  /** 地址变更时持久化并重新探测；主界面读取的是同一份设置 */
+  /** 地址变更时持久化并重新探测；全局会话与登录请求读取的都是同一份设置 */
   async function saveEndpoint(): Promise<void> {
     const url = endpoint.value.trim() || DEFAULT_BACKEND_URL;
     endpoint.value = url;
     if (url === savedEndpoint.value) return;
     savedEndpoint.value = url;
+    setBackendUrl(url);
     await saveSettings({ backendUrl: url });
     await checkEndpoint();
   }

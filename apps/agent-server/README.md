@@ -19,23 +19,24 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 
 ## 二、HTTP 接口与鉴权
 
-| 方法     | 路径                              | 鉴权   | 说明                                                                                             |
-| -------- | --------------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
-| `GET`    | `/api/health`                     | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态                                                   |
-| `POST`   | `/api/auth/register`              | 公开   | 注册并直接签发令牌，成功返回 `201`（`{ token, user }`）                                          |
-| `POST`   | `/api/auth/login`                 | 公开   | 登录并签发令牌，凭证错误返回 `401`                                                               |
-| `POST`   | `/api/auth/logout`                | 需登录 | 删除当前令牌对应的会话，返回 `204`                                                               |
-| `GET`    | `/api/auth/me`                    | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`                                                   |
-| `POST`   | `/api/chat`                       | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`                                             |
-| `GET`    | `/api/conversations`              | 需登录 | 当前账号的会话摘要列表（按更新时间倒序）                                                         |
-| `GET`    | `/api/conversations/:id`          | 需登录 | 会话详情（含全部消息），非本人会话返回 `404`                                                     |
-| `DELETE` | `/api/conversations/:id`          | 需登录 | 删除会话（消息随外键级联删除）                                                                   |
-| `POST`   | `/api/files`                      | 需登录 | 上传附件（multipart，字段名 `file`），按 magic bytes 判定类型并落盘，成功返回 `201` 与文件元数据 |
-| `GET`    | `/api/files/:id/download`         | 需登录 | 按 ID 下载附件或智能体生成的导出文件，非本人文件返回 `404`                                       |
-| `GET`    | `/api/knowledge/documents`        | 需登录 | 可见文档列表（全局共享 + 本人私有）                                                              |
-| `POST`   | `/api/knowledge/documents`        | 需登录 | 新增私有文档（同步完成切分与向量化）                                                             |
-| `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌                                                  |
-| `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删                                           |
+| 方法     | 路径                              | 鉴权   | 说明                                                                                                      |
+| -------- | --------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/health`                     | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态                                                            |
+| `GET`    | `/api/auth/public-key`            | 公开   | 取口令加密公钥（RSA-OAEP，JWK）；登录/注册/新建用户的 `password` 字段都须用它加密后提交，送明文一律 `400` |
+| `POST`   | `/api/auth/register`              | 公开   | 注册并直接签发令牌，成功返回 `201`（`{ token, user }`）                                                   |
+| `POST`   | `/api/auth/login`                 | 公开   | 登录并签发令牌，凭证错误返回 `401`                                                                        |
+| `POST`   | `/api/auth/logout`                | 需登录 | 删除当前令牌对应的会话，返回 `204`                                                                        |
+| `GET`    | `/api/auth/me`                    | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`                                                            |
+| `POST`   | `/api/chat`                       | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`                                                      |
+| `GET`    | `/api/conversations`              | 需登录 | 当前账号的会话摘要列表（按更新时间倒序）                                                                  |
+| `GET`    | `/api/conversations/:id`          | 需登录 | 会话详情（含全部消息），非本人会话返回 `404`                                                              |
+| `DELETE` | `/api/conversations/:id`          | 需登录 | 删除会话（消息随外键级联删除）                                                                            |
+| `POST`   | `/api/files`                      | 需登录 | 上传附件（multipart，字段名 `file`），按 magic bytes 判定类型并落盘，成功返回 `201` 与文件元数据          |
+| `GET`    | `/api/files/:id/download`         | 需登录 | 按 ID 下载附件或智能体生成的导出文件，非本人文件返回 `404`                                                |
+| `GET`    | `/api/knowledge/documents`        | 需登录 | 可见文档列表（全局共享 + 本人私有）                                                                       |
+| `POST`   | `/api/knowledge/documents`        | 需登录 | 新增私有文档（同步完成切分与向量化）                                                                      |
+| `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌                                                           |
+| `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删                                                    |
 
 以上状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
 
@@ -83,7 +84,9 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 
 ## 三、账号与鉴权实现
 
-**密码存储**：`UserStore` 直接复用 `@repo/shared` 的 `desEncrypt` 对密码加密后入库，不保存明文。采用 **ECB + PKCS7**（同一明文结果恒定），因此登录校验只需比对密文，无需解密；`authenticate` 对“用户不存在”与“密码错误”返回同一结果，由路由统一回以“用户名或密码错误”，不暴露账号是否已注册。注册走 `INSERT IGNORE`，命中 `username` 唯一索引时 `affectedRows = 0`，据此返回 `400`（用户名冲突归入“参数非法”：HTTP 约定只保留 400/401/404/500 四档错误码）。
+**口令传输**：三处提交口（注册、登录、管理端新建用户）的 `password` 字段一律是**密文**——客户端先取 `GET /api/auth/public-key` 下发的 RSA 公钥，用 `RSA-OAEP` + SHA-256 加密后再提交；`auth/credentials.ts` 用私钥解密，**解不开即按参数非法返回 `400`，绝不回落成按明文比对**。密钥对在进程内生成、随重启轮换，不落盘也不进配置，客户端每次提交前重新取公钥，因此轮换无需失效处理。取舍见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)。
+
+**密码存储**：`UserStore` 以 **`scrypt` + 16 字节随机盐**入库（格式 `scrypt$盐hex$散列hex`），不可逆；`authenticate` 对“用户不存在”与“密码错误”返回同一结果，由路由统一回以“用户名或密码错误”，不暴露账号是否已注册。注册走 `INSERT IGNORE`，命中 `username` 唯一索引时 `affectedRows = 0`，据此返回 `400`（用户名冲突归入“参数非法”：HTTP 约定只保留 400/401/404/500 四档错误码）。
 
 **令牌与会话**：登录/注册成功后由 `SessionStore.create()` 签发 UUID 令牌并写入 `user_sessions`，有效期 7 天。会话策略为**单端登录**——每个账号同时只保留一条有效会话，新登录顶掉旧会话：
 
@@ -102,7 +105,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 | 表              | 关键字段                                                                                                                  | 说明                                                                                |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `users`         | `id` 主键、`username` 唯一、`password`（DES 密文）                                                                        | 账号表                                                                              |
+| `users`         | `id` 主键、`username` 唯一、`password`（`scrypt$盐$散列`；历史行为定值 DES 密文）                                         | 账号表                                                                              |
 | `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                                                                | 登录会话表，单端登录下每个账号至多一行                                              |
 | `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引）                                          | 对话表，列表查询走该复合索引                                                        |
 | `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）                                                  | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息                                  |
@@ -260,7 +263,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ## 十一、前置条件与启动
 
-依赖 Node.js ≥ 20、pnpm ≥ 9、本地 **MySQL 8**（默认 `127.0.0.1:3306`，账号 `root` / `123456`，取自 `.env.development`，可用环境变量覆盖，见第十章），以及本地 Ollama：
+依赖 Node.js ≥ 20、pnpm ≥ 9、本地 **MySQL 8**（默认 `127.0.0.1:3306`，账号 `root`，密码由 `.env.development` 提供、可用环境变量覆盖，见第十章），以及本地 Ollama：
 
 ```bash
 mysql -h 127.0.0.1 -P 3306 -u root -p   # 验证 MySQL 可连接（库表会在后端启动时自动创建）

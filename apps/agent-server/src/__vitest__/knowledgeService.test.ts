@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { describeAddFailure, parseDocumentInput } from '../services/knowledge.js';
+import {
+  describeAddFailure,
+  describeUpdateFailure,
+  parseDocumentInput,
+} from '../services/knowledge.js';
 
 describe('文档入库入参整理', () => {
   it('内容缺失或全为空白时判为非法，并给出可读提示', () => {
@@ -33,5 +37,11 @@ describe('文档入库入参整理', () => {
 describe('入库失败文案', () => {
   it('带上固定前缀与原始原因，便于判断是不是向量化服务没起来', () => {
     expect(describeAddFailure(new Error('fetch failed'))).toBe('文档入库失败：fetch failed');
+  });
+});
+
+describe('编辑失败文案', () => {
+  it('前缀随操作区分，原始原因同样保留', () => {
+    expect(describeUpdateFailure(new Error('fetch failed'))).toBe('文档编辑失败：fetch failed');
   });
 });

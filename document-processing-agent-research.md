@@ -9,15 +9,15 @@
 
 ## 2. 现状差距（回源码取证）
 
-| 需要的能力   | 现在的样子                                                                                           | 证据                                                                                                                                                                                                              |
-| ------------ | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 接收文件上传 | 只有 JSON 解析，**没有 multipart**，且请求体上限 2 MB                                                | [app.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/app.ts#L18) `express.json({ limit: '2mb' })`                                                                                           |
-| 文件解析     | 无。后端依赖里没有任何文件解析 / 上传库                                                              | [package.json](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/package.json#L13-L27)                                                                                                                |
-| 知识库入库   | 只收**文本字段**，切分后向量化，不存原始文件                                                         | [knowledge.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/routes/knowledge.ts#L18-L24)、[store.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/rag/store.ts#L62-L90) |
-| 消息模型     | 消息只有 `id/role/content/created_at`，**无附件字段**                                                | [types.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/conversation/types.ts#L3-L8)                                                                                                         |
-| 客户端上传   | 请求头**硬编码** `Content-Type: application/json`，响应只走 `res.json()`，无法发 FormData / 收二进制 | [client.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-client/src/renderer/src/api/client.ts#L64-L80)                                                                                                 |
-| 选文件       | 桥接层只有 5 个成员，**没有文件对话框**；UI 是标题 + 内容两个文本框                                  | [types.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-client/src/preload/types.ts#L35-L42)、[ipc.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-client/src/main/ipc.ts#L8-L37)            |
-| 图片理解     | 当前对话模型 `qwen2.5:7b` **不支持视觉输入**                                                         | [.env.development](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/.env.development#L29) + Ollama 官方模型页（见 §8）                                                                               |
+| 需要的能力   | 现在的样子                                                                                           | 证据                                                                                                                      |
+| ------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 接收文件上传 | 只有 JSON 解析，**没有 multipart**，且请求体上限 2 MB                                                | [app.ts](apps/agent-server/src/app.ts#L18) `express.json({ limit: '2mb' })`                                               |
+| 文件解析     | 无。后端依赖里没有任何文件解析 / 上传库                                                              | [package.json](apps/agent-server/package.json#L13-L27)                                                                    |
+| 知识库入库   | 只收**文本字段**，切分后向量化，不存原始文件                                                         | [knowledge.ts](apps/agent-server/src/routes/knowledge.ts#L18-L24)、[store.ts](apps/agent-server/src/rag/store.ts#L62-L90) |
+| 消息模型     | 消息只有 `id/role/content/created_at`，**无附件字段**                                                | [types.ts](apps/agent-server/src/conversation/types.ts#L3-L8)                                                             |
+| 客户端上传   | 请求头**硬编码** `Content-Type: application/json`，响应只走 `res.json()`，无法发 FormData / 收二进制 | [client.ts](apps/agent-client/src/renderer/src/api/client.ts#L64-L80)                                                     |
+| 选文件       | 桥接层只有 5 个成员，**没有文件对话框**；UI 是标题 + 内容两个文本框                                  | [types.ts](apps/agent-client/src/preload/types.ts#L35-L42)、[ipc.ts](apps/agent-client/src/main/ipc.ts#L8-L37)            |
+| 图片理解     | 当前对话模型 `qwen2.5:7b` **不支持视觉输入**                                                         | [.env.development](apps/agent-server/.env.development#L29) + Ollama 官方模型页（见 §8）                                   |
 
 结论：这不是"复用现有上传链路"的事，而是**一条要从零搭的链路**。唯一可直接复用的是鉴权、错误契约、SSE 单向推送这三件既有基建。
 
@@ -89,7 +89,7 @@ export function createUploadMiddleware(upload: AppConfig['upload']) {
 ### 6.2 消息与附件关联
 
 - `messages` 表加附件关联（新表 `message_files` 或 JSON 列），`StoredMessage` / `ChatMessage` 同步补字段。
-- **`ChatStreamEvent` 不需要改**：一期附件在发消息前就已上传完，`POST /api/chat` 的入参多一个 `fileIds: string[]` 即可（[chat.ts](file:///d:/Files/common/porgram/my-monorepo/packages/reusable/src/chat.ts#L20-L24) 保持不变）。这是"一期不上主进程"带来的直接红利。
+- **`ChatStreamEvent` 不需要改**：一期附件在发消息前就已上传完，`POST /api/chat` 的入参多一个 `fileIds: string[]` 即可（[chat.ts](packages/reusable/src/chat.ts#L20-L24) 保持不变）。这是"一期不上主进程"带来的直接红利。
 
 ### 6.3 工具面（对齐 backend-design §7）
 

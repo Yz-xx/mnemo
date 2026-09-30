@@ -21,5 +21,8 @@
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@repo/shared": "workspace:*"
   }
 }
