@@ -24,7 +24,7 @@ export default defineConfig({
     sourcemap: true,
     lib: {
       // 本包目前无第三方依赖，单入口即可；将来若要引入带第三方依赖的业务能力，
-      // 照 @repo/shared/crypto 的做法另开子路径入口，别让它进包根
+      // 按 packages/shared/README.md「二、按需引入」的做法另开子路径入口，别让它进包根
       entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       formats: ['es', 'cjs'],
       fileName: (format) => `index.${format === 'es' ? 'mjs' : 'cjs'}`,

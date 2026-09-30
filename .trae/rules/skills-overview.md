@@ -22,7 +22,7 @@ my-monorepo/
 │   ├── agent-client/  Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
 │   └── admin-web/     后台管理网站（Vue 3 + Vite + TypeScript，自建 UI 组件）
 ├── packages/
-│   ├── shared/      @repo/shared 通用工具（strings / common；DES 加密走子路径 @repo/shared/crypto）
+│   ├── shared/      @repo/shared 通用工具（strings / common / bytes / time）
 │   ├── reusable/    @repo/reusable 业务可复用代码（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
 │   ├── logger/      @repo/logger Node 端结构化日志库（控制台 + 按天轮转文件）
 │   └── components/  @repo/components 公共 Vue 组件库（Vite 库模式）
@@ -64,7 +64,7 @@ my-monorepo/
 - 新增依赖使用 `pnpm add <包> --filter <包名>`；根依赖只放工具链（eslint / prettier / typescript / vite / vitest 等）。
 - 需要 postinstall 的依赖必须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记，否则安装产物不完整。
 - 跨包引用写 workspace 包名（如 `@repo/shared`），不用相对路径穿透到其他包。
-- `@repo/shared` 只放**与业务无关的通用工具**（`strings` / `common`），`@repo/reusable` 放**与业务约定绑定的可复用代码**（HTTP 状态码契约 / 对话协议类型 / 固定文案）；两者都声明 `sideEffects: false`，且**包根只放不含第三方依赖的能力**，带第三方依赖的能力必须另开子路径入口（DES 依赖 `crypto-js`，位于 `@repo/shared/crypto`）。原因是第三方包常常没有自己的 `sideEffects` 声明，打包器无法证明导入它无副作用，只能为保留副作用而整包引入——实测把 `crypto.ts` 留在包根会让 Electron 渲染产物多出约 215 kB，且 `electron-vite` 不读本包的 `sideEffects`（`vite build` 则能正确剔除）。
+- `@repo/shared` 只放**与业务无关的通用工具**（`strings` / `common` / `bytes` / `time`），`@repo/reusable` 放**与业务约定绑定的可复用代码**（HTTP 状态码契约 / 对话协议类型 / 固定文案）；两者都声明 `sideEffects: false`，且**包根只放不含第三方依赖的能力**，带第三方依赖的能力必须另开子路径入口。原因是第三方包常常没有自己的 `sideEffects` 声明，打包器无法证明导入它无副作用，只能为保留副作用而整包引入，且 `electron-vite` 不读本包的 `sideEffects`（`vite build` 则能正确剔除）。本包曾因 DES（依赖 `crypto-js`）立过 `@repo/shared/crypto` 子路径入口，该能力已随存量口令迁移完成移除，见 `docs/adr/0004`。
 
 ## 编辑工具约束
 

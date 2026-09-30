@@ -13,11 +13,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
-    },
-    "./crypto": {
-      "types": "./dist/crypto.d.ts",
-      "import": "./dist/crypto.mjs",
-      "require": "./dist/crypto.cjs"
     }
   },
   "files": [
@@ -26,11 +21,5 @@
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "test": "vitest run --passWithNoTests"
-  },
-  "dependencies": {
-    "crypto-js": "^4.2.0"
-  },
-  "devDependencies": {
-    "@types/crypto-js": "^4.2.2"
   }
 }

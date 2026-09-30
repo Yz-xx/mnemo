@@ -7,7 +7,7 @@ const CREATE_TABLES = [
   `CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户 ID',
     username VARCHAR(64) NOT NULL COMMENT '登录名',
-    password VARCHAR(128) NOT NULL COMMENT '口令哈希（scrypt；历史数据为定值 DES 密文）',
+    password VARCHAR(128) NOT NULL COMMENT '口令哈希（scrypt$盐hex$散列hex）',
     role ENUM('admin', 'user') NOT NULL DEFAULT 'user' COMMENT '角色：admin 可登录管理后台',
     status ENUM('active', 'banned') NOT NULL DEFAULT 'active' COMMENT '账号状态：banned 禁止登录',
     created_at DATETIME(3) NOT NULL COMMENT '注册时间',

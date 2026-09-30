@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { desEncrypt } from '@repo/shared/crypto';
 import { hashPassword, verifyPassword } from '../auth/passwordHash.js';
 
 describe('口令哈希', () => {
@@ -21,18 +20,16 @@ describe('口令哈希', () => {
   it('正确口令通过校验，错误口令不通过', () => {
     const stored = hashPassword('secret123');
 
-    expect(verifyPassword('secret123', stored)).toEqual({ ok: true, legacy: false });
-    expect(verifyPassword('secret124', stored)).toEqual({ ok: false, legacy: false });
+    expect(verifyPassword('secret123', stored)).toBe(true);
+    expect(verifyPassword('secret124', stored)).toBe(false);
   });
 
-  it('历史 DES 密文仍可校验通过，并标记为待升级', () => {
-    const legacy = desEncrypt('secret123');
-
-    expect(verifyPassword('secret123', legacy)).toEqual({ ok: true, legacy: true });
-    expect(verifyPassword('secret124', legacy).ok).toBe(false);
+  it('非 scrypt 格式的存量密文一律不通过（DES 兼容已移除）', () => {
+    // 历史上此处是 DES 密文并会被放行；兼容分支删除后，任何非 scrypt$ 前缀的串都不再通过
+    expect(verifyPassword('secret123', 'U2FsdGVkX18abcdef')).toBe(false);
   });
 
   it('哈希串被截断时不抛异常', () => {
-    expect(verifyPassword('secret123', 'scrypt$abcd').ok).toBe(false);
+    expect(verifyPassword('secret123', 'scrypt$abcd')).toBe(false);
   });
 });

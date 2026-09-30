@@ -27,3 +27,11 @@
 - **公钥不得缓存**：服务端密钥对随重启轮换，`encryptPassword` 每次调用都重新取。
 - **迁移是惰性的**：只有再次登录过的账号才会换成哈希，长期不登录的账号仍是 DES 密文；`verifyPassword` 的前缀判断成为两代兼容的唯一接缝，等存量账号迁完才能删除 DES 依赖。
 - 两端契约由 `apps/agent-server/src/__vitest__/authRoute.test.ts` 钉住：用真实 fetch + WebCrypto 走完整链路，并断言明文一律被拒。
+
+## 后续变更
+
+存量账号迁移完成后，**DES 兼容分支已删除**：`verifyPassword` 只认 `scrypt$<盐hex>$<散列hex>`，非该格式一律判为不通过；`UserStore.authenticate` 里那次惰性升级的 UPDATE 一并移除，`PasswordCheck.legacy` 返回值也随之取消。连带清理了 `@repo/shared/crypto` 子路径入口、`packages/shared/src/crypto.ts` 与 `crypto-js` 依赖——删掉唯一的生产调用方后，它已是无调用方的死代码。
+
+删除方式取「现在就删」，而非先加运维核查或保留启动告警，前提是库中已无 DES 密文账号，判定方式为 `SELECT COUNT(*) FROM users WHERE password NOT LIKE 'scrypt$%'` 须为 0。此后新增账号一律走 `hashPassword`，不再产生需要兼容的数据。
+
+上文 Consequences 中「迁移是惰性的」一段记录的是当时的取舍，该接缝现已终结；两代兼容的表述按本节理解。

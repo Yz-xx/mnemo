@@ -110,7 +110,7 @@ export class UserStore {
     };
   }
 
-  /** 登录校验：比对口令哈希；命中历史 DES 密文时就地升级为哈希 */
+  /** 登录校验：比对口令哈希 */
   async authenticate(username: string, password: string): Promise<UserRecord | null> {
     const [rows] = await this.pool.execute<UserRow[]>(
       `SELECT ${USER_COLUMNS}, password FROM users WHERE username = ? LIMIT 1`,
@@ -118,15 +118,7 @@ export class UserStore {
     );
     const row = rows[0];
     if (!row) return null;
-    const check = verifyPassword(password, row.password);
-    if (!check.ok) return null;
-    // 旧数据是定值 DES 密文：此刻手里正好有明文，顺手换成哈希，账号无需重置密码
-    if (check.legacy) {
-      await this.pool.execute('UPDATE users SET password = ? WHERE id = ?', [
-        hashPassword(password),
-        row.id,
-      ]);
-    }
+    if (!verifyPassword(password, row.password)) return null;
     return toRecord(row);
   }
 

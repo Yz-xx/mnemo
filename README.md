@@ -82,7 +82,7 @@ my-monorepo/
 │       │   └── styles/               # base.less + tokens.less（固定亮色令牌）
 │       └── typed-router.d.ts         # 自动路由生成的路由类型（入库并登记 tsconfig include）
 ├── packages/
-│   ├── shared/               # 跨端通用工具库（与业务无关：字符串 / 通用函数 / 字节与时间格式化，DES 走 /crypto 子路径）
+│   ├── shared/               # 跨端通用工具库（与业务无关：字符串 / 通用函数 / 字节与时间格式化）
 │   ├── reusable/             # 业务可复用库（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
 │   ├── logger/               # Node 端日志库（级别过滤 / 脱敏 / 按天轮转文件）
 │   └── components/           # 公共 Vue 组件库（Vite 库模式）
@@ -151,7 +151,7 @@ my-monorepo/
 | [apps/agent-server/README.md](./apps/agent-server/README.md) | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建       |
 | [apps/agent-client/README.md](./apps/agent-client/README.md) | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证    |
 | [apps/admin-web/README.md](./apps/admin-web/README.md)       | 后台管理网站的目录结构、技术选型取舍、鉴权与登录态、接口清单、页面与组件、样式令牌、开发构建与后续模块 |
-| [packages/shared/README.md](./packages/shared/README.md)     | 通用工具库的导出索引（字符串 / 通用函数 / 字节与时间格式化 / DES 加解密子路径）、引用方式与构建        |
+| [packages/shared/README.md](./packages/shared/README.md)     | 通用工具库的导出索引（字符串 / 通用函数 / 字节与时间格式化）、引用方式与构建                           |
 | [packages/reusable/README.md](./packages/reusable/README.md) | 业务可复用库的导出索引（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）、引用方式与构建                |
 | [packages/logger/README.md](./packages/logger/README.md)     | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                   |
 
@@ -201,7 +201,7 @@ pnpm --filter @repo/admin-web run dev         # vite dev，默认 5173，/api �
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化 / DES 加解密、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索、后台管理网站的分页取数 / 登录态 / 令牌收口 / 路由守卫）
+pnpm test           # 各子包单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索、后台管理网站的分页取数 / 登录态 / 令牌收口 / 路由守卫）
 pnpm build          # 全仓构建
 ```
 
@@ -209,7 +209,7 @@ pnpm build          # 全仓构建
 
 ## 六、跨端约束与设计取舍
 
-- **口令加密传输 + 加盐哈希存储**：客户端用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后提交，明文不上网；服务端以 `scrypt` 加盐哈希入库（格式 `scrypt$盐hex$散列hex`），存量 DES 密文在登录校验通过后当场改写为哈希。`@repo/shared/crypto` 的 DES 能力（单独走子路径入口，见 [packages/shared/README.md](./packages/shared/README.md)）现仅用于识别存量密文，取舍见 [docs/adr/0004-password-transport-and-storage.md](./docs/adr/0004-password-transport-and-storage.md)。
+- **口令加密传输 + 加盐哈希存储**：客户端用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后提交，明文不上网；服务端以 `scrypt` 加盐哈希入库（格式 `scrypt$盐hex$散列hex`）。存量账号的 DES 密文兼容已随迁移完成删除，取舍见 [docs/adr/0004-password-transport-and-storage.md](./docs/adr/0004-password-transport-and-storage.md)。
 - **令牌以明文流转**：登录令牌明文保存在桌面端 `settings.json` 中，并随请求以 Bearer 明文传输（后端只做校验与有效期管理），仅适用于本机/内网场景。
 - **HTTP 状态码契约收敛为 7 项**：前后端共用 `@repo/reusable` 的 `HTTP_STATUS`（200/201/204/400/401/404/500），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、知识库入库失败按 500 处理，取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md)。
 

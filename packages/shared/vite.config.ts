@@ -6,7 +6,7 @@ import dts from 'vite-plugin-dts';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
-// 第三方运行时依赖（如 crypto-js）由使用方安装，外置时保留裸包名，不写成机器相关的绝对路径
+// 第三方运行时依赖由使用方安装，外置时保留裸包名，不写成机器相关的绝对路径
 const external = Object.keys(pkg.dependencies ?? {}).map((name) => new RegExp(`^${name}(/|$)`));
 
 export default defineConfig({
@@ -22,14 +22,10 @@ export default defineConfig({
     minify: false,
     sourcemap: true,
     lib: {
-      // 双入口：crypto 单独一个入口（原因见 src/index.ts 的说明），
-      // 包根因此不含对 crypto-js 的静态引用，引包根就不会带上它
-      entry: {
-        index: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
-        crypto: fileURLToPath(new URL('./src/crypto.ts', import.meta.url)),
-      },
+      // 单入口：本包只放不含第三方依赖的通用工具，无需子路径入口
+      entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       formats: ['es', 'cjs'],
-      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'cjs'}`,
+      fileName: (format) => `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: { external },
   },
