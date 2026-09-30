@@ -1,12 +1,17 @@
-import type { AdminActor } from '../auth/middleware.js';
-import type { UserPatch, UserRecord, UserStore } from '../auth/userStore.js';
+import type { AdminActor } from '../auth/actor.js';
+import type { UserPatch, UserRecord, UserStore } from '../auth/userStore/index.js';
 import type { AdminUserDeps } from '../services/adminUsers.js';
 import { describe, expect, it } from 'vitest';
 import { removeUser, removeUsers, updateUser, updateUsersStatus } from '../services/adminUsers.js';
 
 const SELF = 1;
 const OTHER = 2;
-const ACTOR: AdminActor = { userId: SELF, superToken: false };
+/** 既有用例都建立在「管得到所有账号」的前提上，故默认身份取超管 */
+const ACTOR: AdminActor = { userId: SELF, superToken: false, role: 'super_admin' };
+/** 普通管理员：权限分级用例专用，管不到后台账号 */
+const ADMIN_ACTOR: AdminActor = { userId: SELF, superToken: false, role: 'admin' };
+/** 运维超级令牌入口：不对应具体账号，权限等价超管 */
+const TOKEN_ACTOR: AdminActor = { userId: null, superToken: true, role: null };
 
 function userRecord(overrides: Partial<UserRecord> = {}): UserRecord {
   return {
@@ -311,5 +316,74 @@ describe('批量删除用户', () => {
 
     await expect(removeUsers(deps, [OTHER, 99], ACTOR)).resolves.toEqual({ status: 'not-found' });
     expect(calls).toEqual([]);
+  });
+});
+
+describe('权限分级：普通管理员管不到后台账号', () => {
+  /** 后台账号：普通管理员的列表里不出现它，单条请求也该按「不存在」处理 */
+  const backendTarget = userRecord({ role: 'admin' });
+
+  it('变更后台账号按资源不存在返回，不暴露它确实存在', async () => {
+    const { deps } = fakeDeps({ target: backendTarget });
+
+    await expect(updateUser(deps, OTHER, { status: 'banned' }, ADMIN_ACTOR)).resolves.toEqual({
+      status: 'not-found',
+    });
+  });
+
+  it('删除后台账号同样按资源不存在返回', async () => {
+    const { deps, calls } = fakeDeps({ target: backendTarget });
+
+    await expect(removeUser(deps, OTHER, ADMIN_ACTOR)).resolves.toEqual({ status: 'not-found' });
+    expect(calls).toEqual([]);
+  });
+
+  it('批量停用里混进后台账号时整批按资源不存在返回', async () => {
+    const { deps } = fakeDeps({
+      targets: { [OTHER]: backendTarget, 3: userRecord({ id: 3 }) },
+      activeAdmins: 2,
+    });
+
+    await expect(updateUsersStatus(deps, [OTHER, 3], 'banned', ADMIN_ACTOR)).resolves.toEqual({
+      status: 'not-found',
+    });
+  });
+
+  it('批量删除里混进后台账号时整批按资源不存在返回', async () => {
+    const { deps, calls } = fakeDeps({
+      targets: { [OTHER]: backendTarget, 3: userRecord({ id: 3 }) },
+    });
+
+    await expect(removeUsers(deps, [OTHER, 3], ADMIN_ACTOR)).resolves.toEqual({
+      status: 'not-found',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('普通管理员仍能正常管理客户端账号', async () => {
+    const { deps } = fakeDeps({ target: userRecord() });
+
+    await expect(updateUser(deps, OTHER, { status: 'banned' }, ADMIN_ACTOR)).resolves.toEqual({
+      status: 'ok',
+      value: userRecord({ status: 'banned' }),
+    });
+  });
+
+  it('超管能停用后台账号：否则后台账号一旦建错就没人能改', async () => {
+    const { deps } = fakeDeps({ target: backendTarget, activeAdmins: 2 });
+
+    await expect(updateUser(deps, OTHER, { status: 'banned' }, ACTOR)).resolves.toEqual({
+      status: 'ok',
+      value: userRecord({ role: 'admin', status: 'banned' }),
+    });
+  });
+
+  it('运维超级令牌等价超管，同样能操作后台账号', async () => {
+    const { deps } = fakeDeps({ target: backendTarget, activeAdmins: 2 });
+
+    await expect(updateUser(deps, OTHER, { status: 'banned' }, TOKEN_ACTOR)).resolves.toEqual({
+      status: 'ok',
+      value: userRecord({ role: 'admin', status: 'banned' }),
+    });
   });
 });

@@ -15,6 +15,8 @@ const {
   STATUS_LABEL,
   columns,
   keyword,
+  isSuperAdmin,
+  roleOptions,
   page,
   rows,
   total,
@@ -81,16 +83,20 @@ const {
       :loading="loading"
       empty-text="没有匹配的用户"
     >
+      <!-- 普通管理员管不到后台账号（列表里也不会有），行内只读展示即可 -->
       <template #role="{ row }">
         <select
+          v-if="isSuperAdmin"
           class="users__select"
           :value="row.role"
           :disabled="isSelf(row) || mutating"
           @change="changeRole(row, $event)"
         >
-          <option value="user">{{ ROLE_LABEL.user }}</option>
-          <option value="admin">{{ ROLE_LABEL.admin }}</option>
+          <option v-for="option in roleOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
+        <span v-else>{{ ROLE_LABEL[row.role] }}</span>
       </template>
       <template #status="{ row }">
         <span class="users__badge" :class="`users__badge--${row.status}`">
@@ -132,6 +138,7 @@ const {
       v-if="dialog === 'create'"
       :loading="submitting"
       :error="formError"
+      :options="roleOptions"
       @close="closeDialog"
       @submit="handleCreate"
     />

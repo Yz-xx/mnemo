@@ -1,11 +1,14 @@
-import type { UserRole, UserStatus } from '../../auth/userStore.js';
+import type { AdminActor } from '../../auth/actor.js';
+import type { UserRole, UserStatus } from '../../auth/userStore/index.js';
 import type { AppDependencies } from '../../configuration/dependencies.js';
 import type { MutationOutcome } from '../../services/adminUsers.js';
 import type { Request, Response } from 'express';
 import { Router } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
+import { isSuperAdmin } from '../../auth/actor.js';
 import { parseCredentials } from '../../auth/credentials.js';
 import { currentAdmin } from '../../auth/middleware.js';
+import { ADMIN_ROLES } from '../../auth/userStore/index.js';
 import { ERROR_MESSAGE } from '../../configuration/messages.js';
 import { requestLogger } from '../../middleware/requestLog.js';
 import {
@@ -23,8 +26,18 @@ function toUserId(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function parseRole(value: unknown): UserRole | null {
-  return value === 'admin' || value === 'user' ? value : null;
+/** 调用者可授予的角色：超管能建后台账号，普通管理员只能建客户端账号（见 docs/adr/0006） */
+function assignableRoles(actor: AdminActor): UserRole[] {
+  return isSuperAdmin(actor) ? [...ADMIN_ROLES, 'user'] : ['user'];
+}
+
+/**
+ * 解析角色并顺带卡住可授予范围：普通管理员传 'admin' 与传一个不存在的角色同样返回 null，
+ * 回同样的「取值非法」，不额外暴露权限边界。
+ */
+function parseRole(value: unknown, allowed: readonly UserRole[]): UserRole | null {
+  const roles: readonly string[] = allowed;
+  return typeof value === 'string' && roles.includes(value) ? (value as UserRole) : null;
 }
 
 function parseStatus(value: unknown): UserStatus | null {
@@ -69,15 +82,17 @@ export function createAdminUsersRouter({
 >): Router {
   const router = Router();
 
-  /** 用户列表：按用户名包含匹配 + 分页 */
+  /** 用户列表：按用户名包含匹配 + 分页；普通管理员的列表里不出现后台账号 */
   router.get('/', async (req: Request, res: Response) => {
     const { page, pageSize } = parsePaging(req.query);
     const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
-    const { items, total } = await users.list({ keyword, page, pageSize });
+    // 可见性也是权限：后台账号不进普通管理员的列表，否则会诱导操作并泄露后台账号数量
+    const scope = isSuperAdmin(currentAdmin(res)) ? 'all' : 'client';
+    const { items, total } = await users.list({ keyword, page, pageSize }, scope);
     res.json({ items, total, page, pageSize });
   });
 
-  /** 新建用户：角色可选，缺省为普通用户 */
+  /** 新建用户：角色可选，缺省为普通用户；后台账号只有超管能建 */
   router.post('/', async (req: Request, res: Response) => {
     const parsed = parseCredentials(req.body, passwordCipher);
     if (!parsed.ok) {
@@ -85,7 +100,8 @@ export function createAdminUsersRouter({
       return;
     }
     const { role: rawRole } = (req.body ?? {}) as { role?: unknown };
-    const role = rawRole === undefined ? 'user' : parseRole(rawRole);
+    const allowed = assignableRoles(currentAdmin(res));
+    const role = rawRole === undefined ? 'user' : parseRole(rawRole, allowed);
     if (role === null) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({ message: '角色取值非法' });
       return;
@@ -170,7 +186,9 @@ export function createAdminUsersRouter({
       role?: unknown;
       status?: unknown;
     };
-    const role = rawRole === undefined ? undefined : parseRole(rawRole);
+    // 变更同样受可授予范围限制：普通管理员改不出后台账号
+    const allowed = assignableRoles(currentAdmin(res));
+    const role = rawRole === undefined ? undefined : parseRole(rawRole, allowed);
     const status = rawStatus === undefined ? undefined : parseStatus(rawStatus);
     if (role === null || status === null) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({ message: '角色或状态取值非法' });

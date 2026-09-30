@@ -1,11 +1,23 @@
 <script setup lang="ts">
 // 新建用户表单：用户名 / 密码 / 角色。校验规则以后端为准（与桌面端注册同一套），
 // 这里只拦非空，避免明显无效的请求往返；提交失败由父级经 error 回填，弹窗保留已填内容。
-import type { UserRole } from '@/api/types';
+// 可授予的角色由父级按调用者身份给（admin 只有「普通用户」一项，见 docs/adr/0006），
+// 因此只有一项时不渲染选择器，免得出现一个只能选一项的下拉。
+import type { RoleOption, UserRole } from '@/api/types';
 import { ref } from 'vue';
 import ModalDialog from '../ModalDialog';
 
-withDefaults(defineProps<{ loading?: boolean; error?: string }>(), { loading: false, error: '' });
+withDefaults(
+  defineProps<{
+    options: RoleOption[];
+    loading?: boolean;
+    error?: string;
+  }>(),
+  {
+    loading: false,
+    error: '',
+  },
+);
 
 const emit = defineEmits<{
   close: [];
@@ -50,11 +62,12 @@ function handleConfirm(): void {
         <span class="user-form__label">密码</span>
         <input v-model="password" class="user-form__input" type="password" placeholder="6-32 位" />
       </label>
-      <label class="user-form__field">
+      <label v-if="options.length > 1" class="user-form__field">
         <span class="user-form__label">角色</span>
         <select v-model="role" class="user-form__input">
-          <option value="user">普通用户</option>
-          <option value="admin">管理员</option>
+          <option v-for="option in options" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
       </label>
       <p v-if="localError || error" class="user-form__error">{{ localError || error }}</p>

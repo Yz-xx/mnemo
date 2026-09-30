@@ -82,7 +82,7 @@ const fakeKnowledge = {
  * 本文件只回归路径匹配，用超级令牌身份与空日志补上，否则业务层取不到会抛错。
  */
 function fakeAdmin(_req: Request, res: Response, next: NextFunction): void {
-  res.locals.admin = { userId: null, superToken: true };
+  res.locals.admin = { userId: null, superToken: true, role: null };
   res.locals.log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
   next();
 }

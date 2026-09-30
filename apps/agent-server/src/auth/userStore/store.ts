@@ -1,86 +1,18 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
-import { hashPassword, verifyPassword } from './passwordHash.js';
-
-/** 角色：admin 可登录管理后台，user 仅能使用客户端 */
-export type UserRole = 'admin' | 'user';
-
-/** 账号状态：banned 表示禁止登录，历史数据仍保留以便审计 */
-export type UserStatus = 'active' | 'banned';
-
-/** 对外返回的用户信息：不包含密码字段 */
-export interface UserRecord {
-  id: number;
-  username: string;
-  role: UserRole;
-  status: UserStatus;
-  createdAt: string;
-}
-
-/** 管理端列表查询条件：keyword 按用户名包含匹配，分页参数已在路由层收敛 */
-export interface UserQuery {
-  keyword: string;
-  page: number;
-  pageSize: number;
-}
-
-/** 用户分页结果：total 为满足条件的总数，供前端计算总页数 */
-export interface UserPage {
-  items: UserRecord[];
-  total: number;
-}
-
-/** 账号汇总：一条聚合查询取回四个计数，避免总览为每项各发一次请求 */
-export interface UserStats {
-  total: number;
-  active: number;
-  banned: number;
-  admins: number;
-}
-
-/** 管理员可变更的字段：未传的字段保持原值 */
-export interface UserPatch {
-  role?: UserRole;
-  status?: UserStatus;
-}
-
-interface UserRow extends RowDataPacket {
-  id: number;
-  username: string;
-  password: string;
-  role: UserRole;
-  status: UserStatus;
-  created_at: Date;
-}
-
-interface CountRow extends RowDataPacket {
-  total: number;
-}
-
-/** 只取昵称列的行：知识库列表按 ID 批量还原账号名，不需要完整用户字段 */
-interface NameRow extends RowDataPacket {
-  id: number;
-  username: string;
-}
-
-interface StatsRow extends RowDataPacket {
-  total: number;
-  active: number;
-  banned: number;
-  admins: number;
-}
-
-/** 列表与单条查询共用的列集合：不带 password，避免密文被带到上层 */
-const USER_COLUMNS = 'id, username, role, status, created_at';
-
-function toRecord(row: UserRow): UserRecord {
-  return {
-    id: Number(row.id),
-    username: row.username,
-    role: row.role,
-    status: row.status,
-    createdAt: row.created_at.toISOString(),
-  };
-}
+import type { CountRow, NameRow, StatsRow, UserRow } from './rows.js';
+import type {
+  SuperAdminBootstrap,
+  UserListScope,
+  UserPage,
+  UserPatch,
+  UserQuery,
+  UserRecord,
+  UserRole,
+  UserStats,
+} from './types.js';
+import type { Pool, ResultSetHeader } from 'mysql2/promise';
+import { hashPassword, verifyPassword } from '../passwordHash.js';
+import { toRecord, USER_COLUMNS } from './rows.js';
+import { ADMIN_ROLES } from './types.js';
 
 /** 用户表读写：密码统一以 scrypt 哈希入库，明文既不落库也不进日志 */
 export class UserStore {
@@ -88,26 +20,45 @@ export class UserStore {
 
   /**
    * 注册新用户；用户名已被占用时返回 null。
-   * 库中尚无任何账号时把首个用户设为管理员：管理后台需要一枚初始管理员，
-   * 否则只能靠运维超级令牌（x-admin-token）手工改库才能开启，这里让自举自动完成。
-   * 管理端新建用户会显式传入 role，不受该规则影响。
+   * 缺省角色固定为 user——客户端注册不产出后台账号，后台账号只能由超管在用户管理里创建。
+   * 原先「空库首个注册者自动成为管理员」的自举已删除：它让任何先到者都能拿到后台权限。
    */
-  async register(username: string, password: string, role?: UserRole): Promise<UserRecord | null> {
-    const [existing] = await this.pool.query<UserRow[]>('SELECT id FROM users LIMIT 1');
-    const assigned: UserRole = role ?? (existing.length > 0 ? 'user' : 'admin');
+  async register(
+    username: string,
+    password: string,
+    role: UserRole = 'user',
+  ): Promise<UserRecord | null> {
     // INSERT IGNORE 命中用户名唯一索引时不会报错，affectedRows 为 0
     const [result] = await this.pool.execute<ResultSetHeader>(
       'INSERT IGNORE INTO users (username, password, role, status, created_at) VALUES (?, ?, ?, ?, ?)',
-      [username, hashPassword(password), assigned, 'active', new Date()],
+      [username, hashPassword(password), role, 'active', new Date()],
     );
     if (result.affectedRows === 0) return null;
     return {
       id: result.insertId,
       username,
-      role: assigned,
+      role,
       status: 'active',
       createdAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * 超管自举：库中没有任何后台侧账号时创建一枚超管，已有则原样跳过（不覆盖、不新增）。
+   * 每个新库都需要一枚初始超管，否则只能靠运维超级令牌手工改库才能开启后台。
+   */
+  async ensureSuperAdmin(username: string, password: string): Promise<SuperAdminBootstrap> {
+    const [rows] = await this.pool.execute<CountRow[]>(
+      `SELECT COUNT(*) AS total FROM users WHERE role IN (${ADMIN_ROLES.map(() => '?').join(', ')})`,
+      [...ADMIN_ROLES],
+    );
+    if (Number(rows[0]?.total ?? 0) > 0) return 'skipped';
+    // 用户名可能已被某个客户端账号占用，此时超管建不出来，调用方需要告警
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      'INSERT IGNORE INTO users (username, password, role, status, created_at) VALUES (?, ?, ?, ?, ?)',
+      [username, hashPassword(password), 'super_admin', 'active', new Date()],
+    );
+    return result.affectedRows > 0 ? 'created' : 'username-taken';
   }
 
   /** 登录校验：比对口令哈希 */
@@ -148,15 +99,17 @@ export class UserStore {
   }
 
   /** 管理端列表：按用户名包含匹配 + 分页；用 LOCATE 免去对 % / _ 通配符的转义 */
-  async list(query: UserQuery): Promise<UserPage> {
+  async list(query: UserQuery, scope: UserListScope = 'all'): Promise<UserPage> {
     const { keyword, page, pageSize } = query;
+    // 可见范围写进 SQL 而不是取回整页后再裁剪：否则普通管理员看到的每页条数与总数都对不上
+    const scopeClause = scope === 'client' ? "role = 'user' AND " : '';
     const [countRows] = await this.pool.execute<CountRow[]>(
-      'SELECT COUNT(*) AS total FROM users WHERE LOCATE(?, username) > 0',
+      `SELECT COUNT(*) AS total FROM users WHERE ${scopeClause}LOCATE(?, username) > 0`,
       [keyword],
     );
     const [rows] = await this.pool.execute<UserRow[]>(
       `SELECT ${USER_COLUMNS} FROM users
-        WHERE LOCATE(?, username) > 0
+        WHERE ${scopeClause}LOCATE(?, username) > 0
         ORDER BY id DESC
         LIMIT ? OFFSET ?`,
       [keyword, pageSize, (page - 1) * pageSize],
@@ -194,13 +147,13 @@ export class UserStore {
     return result.affectedRows > 0;
   }
 
-  /** 账号汇总：总数与活跃/停用/管理员三项计数 */
+  /** 账号汇总：总数与活跃/停用/后台账号三项计数；admins 含超管与管理员 */
   async stats(): Promise<UserStats> {
     const [rows] = await this.pool.execute<StatsRow[]>(
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
               SUM(CASE WHEN status = 'banned' THEN 1 ELSE 0 END) AS banned,
-              SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) AS admins
+              SUM(CASE WHEN role IN ('super_admin', 'admin') THEN 1 ELSE 0 END) AS admins
          FROM users`,
     );
     const row = rows[0];
@@ -213,12 +166,13 @@ export class UserStore {
   }
 
   /**
-   * 可登录的管理员数量：自锁规则据此判定「最后一名管理员」。
-   * 只数 active——被停用的管理员进不了后台，不该占用这个保底名额。
+   * 可登录的后台账号数量：自锁规则据此判定「最后一名后台账号」。
+   * 只数 active——被停用的账号进不了后台，不该占用这个保底名额。
    */
   async countActiveAdmins(): Promise<number> {
     const [rows] = await this.pool.execute<CountRow[]>(
-      "SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND status = 'active'",
+      `SELECT COUNT(*) AS total FROM users
+        WHERE role IN ('super_admin', 'admin') AND status = 'active'`,
     );
     return Number(rows[0]?.total ?? 0);
   }

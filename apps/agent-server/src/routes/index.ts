@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import { createRequireAdmin, createRequireAuth } from '../auth/middleware.js';
 import { createAdminAudit } from '../middleware/adminAudit.js';
 import { createAdminAuditRouter } from './admin/audit.js';
+import { createAdminAuthRouter } from './admin/auth.js';
 import { createAdminConversationsRouter } from './admin/conversations.js';
 import { createAdminFilesRouter } from './admin/files.js';
 import { createAdminKnowledgeRouter } from './admin/knowledge.js';
@@ -36,6 +37,8 @@ export function registerRoutes(app: Express, deps: AppDependencies): void {
   // 更具体的路径一律排在最后那条 /api/admin（总览）之前——app.use 是前缀匹配，
   // 排在前面时同一次请求会先跑一遍守卫、再落到具体模块，鉴权与审计都要重复一次。
   const adminGuard = [requireAdmin, createAdminAudit(deps.auditLogs)];
+  // 后台登录必须排在总览之前：/api/admin 挂的是 requireAdmin，登录请求会在守卫处被拦下
+  app.use('/api/admin/auth', createAdminAuthRouter(deps));
   app.use('/api/admin/audit', adminGuard, createAdminAuditRouter(deps));
   app.use('/api/admin/conversations', adminGuard, createAdminConversationsRouter(deps));
   app.use('/api/admin/files', adminGuard, createAdminFilesRouter(deps));

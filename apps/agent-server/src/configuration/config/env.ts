@@ -75,6 +75,11 @@ export interface AppConfig {
     /** 允许的扩展名白名单：与 magic bytes 判定结果比对，不看客户端给的扩展名 */
     allowedTypes: string[];
   };
+  /** 初始超管凭据：仅当库中没有任何后台侧账号时用它自举，留空即跳过并告警 */
+  initialAdmin: {
+    username: string;
+    password: string;
+  };
 }
 
 /** 逗号分隔列表：去空白、统一小写、去重，避免大小写或多余空格让白名单静默失效 */
@@ -152,6 +157,10 @@ export function loadConfig(): AppConfig {
       maxBytes: toNumber(process.env.UPLOAD_MAX_BYTES, 20 * 1024 * 1024),
       maxFiles: toNumber(process.env.UPLOAD_MAX_FILES, 1),
       allowedTypes: toList(process.env.UPLOAD_ALLOWED_TYPES, ['docx', 'xlsx', 'pdf', 'png', 'jpg']),
+    },
+    initialAdmin: {
+      username: process.env.INITIAL_ADMIN_USERNAME ?? '',
+      password: process.env.INITIAL_ADMIN_PASSWORD ?? '',
     },
   };
 }

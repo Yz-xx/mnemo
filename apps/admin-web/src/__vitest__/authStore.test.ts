@@ -40,6 +40,17 @@ describe('登录态 store', () => {
     expect(localStorage.getItem(TOKEN_KEY)).toBe('token-admin');
   });
 
+  it('超级管理员同样放行：后台侧角色不止 admin 一个', async () => {
+    const superAdmin: AuthUser = { id: 3, username: 'ops', role: 'super_admin', status: 'active' };
+    vi.mocked(apiLogin).mockResolvedValue(sessionOf(superAdmin, 'token-super'));
+    const auth = useAuthStore();
+
+    await auth.login('ops', 'pw');
+
+    expect(auth.token).toBe('token-super');
+    expect(auth.user).toEqual(superAdmin);
+  });
+
   it('普通账号即便密码正确也当场拒绝，且不落任何令牌', async () => {
     vi.mocked(apiLogin).mockResolvedValue(
       sessionOf({ id: 2, username: 'tom', role: 'user', status: 'active' }),

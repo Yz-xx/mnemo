@@ -16,13 +16,13 @@ apps/agent-server/src/
 ├── middleware/       cors.ts、requestLog.ts、adminAudit.ts、upload.ts、errorHandler.ts
 ├── routes/           client/ 客户端接口、admin/ 管理端接口；index.ts 注册前缀与鉴权，pagination.ts 为共用工具
 ├── services/         跨路由的编排逻辑
-├── auth/             userStore / sessionStore / middleware / credentials
+├── auth/             userStore/（用户表读写与角色定义）、actor、sessionStore、sessionUser、middleware、credentials
 ├── conversation/     会话与消息持久化；store/ 下按关注点分文件
 ├── llm/              agent、model、prompt、vision；tools/ 下按关注点分文件
 ├── rag/              知识库存储与检索，按关注点分文件
 ├── files/            附件解析、导出与存储
 ├── audit/ logging/   操作审计与接口日志存储
-├── db/               pool.ts、schema.ts
+├── db/               pool.ts、schema/（tables / columns / roles）
 └── __vitest__/       单元测试（不参与编译产物）
 ```
 
@@ -86,7 +86,7 @@ apps/agent-server/src/
 ## 6. 数据层
 
 - 消息元数据（`tools` / `attachments` / `sources`）与正文分开成列随消息一起落库，空值写 `null` 而非 `[]`，切换历史会话时按原样回读即可还原标签。
-- 使用 `mysql2/promise`；连接池由 `db/pool.ts` 创建，建库建表由 `db/schema.ts` 的 `ensureDatabase` / `ensureTables` 负责，存量表补列由 `ensureColumns` 负责，`ensureSchema` 作为启动编排入口。
+- 使用 `mysql2/promise`；连接池由 `db/pool.ts` 创建，建库建表由 `db/schema/` 的 `ensureDatabase` / `ensureTables` 负责，存量表补列由 `ensureColumns` 负责，存量角色迁移由 `migrateUserRoles` 负责，`ensureSchema` 作为启动编排入口。
 - 建表语句全部 `CREATE TABLE IF NOT EXISTS`，可重复执行；字符集 utf8mb4，时间列用 `DATETIME(3)`，必要处建联合索引与级联外键。
 - `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表，新增列必须在 `ensureColumns` 里做条件迁移（先查 `information_schema` 判断列是否存在，再决定是否 `ALTER`），整段必须幂等。
 - 查 `information_schema` 时**必须给列起别名**（`SELECT column_name AS name`）：结果对象的键跟着大写定义名走，按小写 `column_name` 取值恒为 `undefined`，会把「列已存在」误判成「不存在」进而重复 `ALTER` 报 `Duplicate column name`。
@@ -124,6 +124,7 @@ apps/agent-server/src/
 - 构建前清空 `dist`（`emptyOutDir`）；`src/__vitest__` 被 `tsconfig.json` 的 `exclude` 排除，不进入产物。
 - `.env.*` 只在运行时由 `node --env-file` 读取，构建时用 `envDir: false` 关闭 Vite 自身的 env 加载，避免生产配置被误读或写进产物。
 - 单测不连真实数据库与网络，外部依赖用替身隔离，运行 `pnpm --filter @repo/agent-server run test`。
+- `src/__vitest__` 被主 tsconfig 的 `exclude` 排除，`pnpm build` 的 `tsc --noEmit` 覆盖不到它，故另立一份 `src/__vitest__/tsconfig.json`（extends 主配置、重写 `include` / `exclude`）供显式检查：`pnpm exec tsc --noEmit -p src/__vitest__`。实体类型新增字段后，测试夹具必须同步补齐。
 
 ## 10. 日志
 

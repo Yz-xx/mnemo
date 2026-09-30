@@ -1,4 +1,4 @@
-import type { AdminUser, UserRole, UserStatus } from '@/api/types';
+import type { AdminUser, RoleOption, UserRole, UserStatus } from '@/api/types';
 import { computed, onMounted, ref } from 'vue';
 import {
   batchDeleteUsers,
@@ -14,7 +14,17 @@ import { useAuthStore } from '@/stores/auth';
 /** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
 const PAGE_SIZE = 20;
 
-const ROLE_LABEL: Record<UserRole, string> = { admin: '管理员', user: '普通用户' };
+const ROLE_LABEL: Record<UserRole, string> = {
+  super_admin: '超级管理员',
+  admin: '管理员',
+  user: '普通用户',
+};
+
+/** 角色选项全集：普通用户在前，作为新建账号的默认值 */
+const ALL_ROLES: UserRole[] = ['user', 'admin', 'super_admin'];
+/** 普通管理员只能授予客户端角色：与后端 routes/admin/users.ts 的 assignableRoles 同口径 */
+const CLIENT_ROLES: UserRole[] = ['user'];
+
 const STATUS_LABEL: Record<UserStatus, string> = { active: '正常', banned: '已停用' };
 
 const columns = [
@@ -35,6 +45,17 @@ export function useUsersPage() {
   const auth = useAuthStore();
 
   const keyword = ref('');
+
+  /** 当前账号是否超管：只有它能看见并操作后台账号（见 docs/adr/0006） */
+  const isSuperAdmin = computed(() => auth.user?.role === 'super_admin');
+
+  /** 行内角色下拉与新建弹窗的可选项：标签一并给出，避免两处各写一份 role→中文 映射 */
+  const roleOptions = computed<RoleOption[]>(() =>
+    (isSuperAdmin.value ? ALL_ROLES : CLIENT_ROLES).map((value) => ({
+      value,
+      label: ROLE_LABEL[value],
+    })),
+  );
 
   /** 已勾选行的键：翻页、搜索或重新取数后由 load 清空，不做跨页保留 */
   const selectedKeys = ref<Array<string | number>>([]);
@@ -184,6 +205,8 @@ export function useUsersPage() {
     STATUS_LABEL,
     columns,
     keyword,
+    isSuperAdmin,
+    roleOptions,
     page,
     rows,
     total,

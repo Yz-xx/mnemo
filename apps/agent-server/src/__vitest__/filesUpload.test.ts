@@ -36,7 +36,7 @@ class FakeFiles {
 /** 路由层的假响应：只记录状态码与响应体 */
 class FakeHttpResponse {
   readonly locals = { userId: 7 };
-  statusCode = HTTP_STATUS.OK;
+  statusCode: number = HTTP_STATUS.OK;
   body: unknown;
 
   status(code: number): this {

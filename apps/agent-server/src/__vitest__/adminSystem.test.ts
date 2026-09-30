@@ -48,6 +48,7 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       adminToken: 'admin-secret',
     },
     upload: { dir: 'D:/data/uploads', maxBytes: 1024, maxFiles: 1, allowedTypes: ['pdf'] },
+    initialAdmin: { username: 'root', password: 'admin-secret' },
     ...overrides,
   };
 }

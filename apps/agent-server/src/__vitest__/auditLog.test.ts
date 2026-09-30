@@ -1,5 +1,5 @@
 import type { AuditLogEntry, AuditLogStore } from '../audit/store.js';
-import type { AdminActor } from '../auth/middleware.js';
+import type { AdminActor } from '../auth/actor.js';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
@@ -12,7 +12,7 @@ import { createAdminAudit } from '../middleware/adminAudit.js';
  */
 class FakeResponse extends EventEmitter {
   readonly locals: Record<string, unknown> = {};
-  statusCode = HTTP_STATUS.OK;
+  statusCode: number = HTTP_STATUS.OK;
 }
 
 /** 假请求：只支持中间件读取的三个字段 */
@@ -110,7 +110,7 @@ describe('管理端操作审计', () => {
   });
 
   it('运维超级令牌入口不对应具体账号，操作人记为空', () => {
-    const entries = invoke({ actor: { userId: null, superToken: true } });
+    const entries = invoke({ actor: { userId: null, superToken: true, role: null } });
 
     expect(entries[0]?.actorId).toBeNull();
   });

@@ -48,6 +48,7 @@ const CONFIG: AppConfig = {
   embedding: { provider: 'ollama', apiKey: '', baseUrl: '', model: '' },
   knowledge: { chunkSize: 60, chunkOverlap: 0, topK: 4, minScore: 0.6, adminToken: '' },
   upload: { dir: 'tmp', maxBytes: 1024, maxFiles: 3, allowedTypes: ['png', 'jpg', 'jpeg'] },
+  initialAdmin: { username: 'root', password: 'admin-secret' },
 };
 
 /** 假视觉读取器：不连模型，直接回一段可断言的描述，用于验证图片内容真的进了对话 */

@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { login as apiLogin, logout as apiLogout, fetchCurrentUser } from '@/api/auth';
 import { clearToken, getToken, setToken } from '@/api/client';
+import { ADMIN_ROLES } from '@/api/types';
 
 /**
  * 登录态 store：token 与当前用户信息。
@@ -15,11 +16,11 @@ export const useAuthStore = defineStore('auth', () => {
   /** 进行中的 /me 请求：启动流程与路由守卫可能同时需要，复用同一份 Promise 避免重复拉取 */
   let pending: Promise<void> | null = null;
 
-  /** 登录：成功后落盘 token 并填充用户信息；非管理员当场拒绝，不留令牌 */
+  /** 登录：成功后落盘 token 并填充用户信息；非后台账号当场拒绝，不留令牌 */
   async function login(username: string, password: string): Promise<void> {
     const session = await apiLogin(username, password);
-    if (session.user.role !== 'admin' || session.user.status !== 'active') {
-      // 后台只服务管理员：普通账号即便密码正确也不写入令牌，否则会被守卫放行后再弹回登录页
+    if (!ADMIN_ROLES.includes(session.user.role) || session.user.status !== 'active') {
+      // 后台只服务后台侧账号：即便密码正确也不写入令牌，否则会被守卫放行后再弹回登录页
       throw new Error('该账号没有管理后台权限');
     }
     setToken(session.token);

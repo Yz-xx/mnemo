@@ -22,7 +22,7 @@ apps/admin-web/
 │   ├── App.vue                  # 布局分发器：login 独立渲染，其余套 AdminLayout
 │   ├── api/
 │   │   ├── client.ts            # adminApi 实例 + token 读写 + 令牌失效回调注入
-│   │   ├── auth.ts              # 登录 / 当前用户 / 登出
+│   │   ├── auth.ts              # 登录（走后台入口 /api/admin/auth/login）/ 当前用户 / 登出
 │   │   ├── index.ts             # 管理接口统一出口：按功能域 re-export，页面统一从 '@/api' 引入
 │   │   ├── overview.ts          # 总览统计 / 运行状态
 │   │   ├── users.ts             # 用户治理（含批量停用 / 删除）
@@ -35,7 +35,7 @@ apps/admin-web/
 │   │   └── types.ts             # 与后端约定的契约类型
 │   ├── router/
 │   │   ├── index.ts             # 路由实例（routes 来自自动路由虚拟模块）
-│   │   └── guards.ts            # 登录态 + 管理员角色双校验
+│   │   └── guards.ts            # 登录态 + 后台角色双校验
 │   ├── stores/auth.ts           # 登录态 store（token 落 localStorage，user 在内存）
 │   ├── layouts/AdminLayout.vue  # 顶栏 + 可收起侧边栏 + 内容区
 │   ├── pages/                   # 每页一目录；超 200 行的页面拆成 index.vue + 同名 .ts + 同名 .less
@@ -83,12 +83,13 @@ apps/admin-web/
 
 后端有两条进入后台的入口（详见 [apps/agent-server/README.md](../agent-server/README.md)）：
 
-| 入口                     | 前端如何参与                                                               |
-| ------------------------ | -------------------------------------------------------------------------- |
-| 管理员会话（常规）       | 登录页换取 Bearer 令牌，之后所有请求由 `adminApi` 自动带上 `Authorization` |
-| 运维超级令牌（应急通道） | 属运维手段，前端不提供入口，经请求头 `x-admin-token` 直接调用管理接口即可  |
+| 入口                     | 前端如何参与                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 管理员会话（常规）       | 登录页经 `POST /api/admin/auth/login` 换取 Bearer 令牌（该入口只接受后台侧角色），之后所有请求由 `adminApi` 自动带上 `Authorization` |
+| 运维超级令牌（应急通道） | 属运维手段，前端不提供入口，经请求头 `x-admin-token` 直接调用管理接口即可                                                            |
 
-- **登录即筛角色**：`/api/auth/login` 成功后，若 `role` 非 `admin` 或 `status` 非 `active`，store 当场抛错且**不写入令牌**。否则守卫会先放行再弹回登录页，用户看到的是「登录成功了又被踢出来」。
+- **登录即筛角色**：后台登录 `/api/admin/auth/login` 成功后，若 `role` 不在 `ADMIN_ROLES`（`super_admin` / `admin` 均可）中或 `status` 非 `active`，store 当场抛错且**不写入令牌**。否则守卫会先放行再弹回登录页，用户看到的是「登录成功了又被踢出来」。后台侧角色不止 `admin` 一个，判定一律以 `ADMIN_ROLES` 为准，取舍见 [ADR 0006](../../docs/adr/0006-account-isolation-and-admin-hierarchy.md)。
+- **权限分级**：超管可管理所有账号；普通管理员在用户管理里**看不到也动不了**后台账号（后端按资源不存在回 404、按角色取值非法回 400）。前端只做展示与按调用者角色收窄角色选项，不重复实现这套规则——规则只有后端一处，前端再判一次只会多一个漂移点。
 - **口令加密传输**：登录与新建用户提交的 `password` 不是明文，而是先用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后的 Base64 密文，加密动作收在 `@repo/reusable` 的 `encryptPassword`（见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)）。服务端解不开就是 `400`，明文送上去一样被拒。
 - **守卫双校验**：`router/guards.ts` 先看 token 是否存在，再在 `restoreUser()` 拉完 `/api/auth/me` 之后判角色。必须先拉用户信息再判——刷新页面时 store 里的 `user` 是空的，直接判角色会把刚刷新的人误踢回登录页。
 - **401 统一收口**：任意请求返回 401（令牌过期或被新登录顶掉）时，`api/client.ts` 清掉 localStorage 里的令牌，并通过 `setSessionExpiredHandler` 通知调用方清 store、跳登录页。回调由 `main.ts` 注入而非在 client 里直接 `import router`，是为了避免 `client → router → store → client` 的循环依赖；跳转策略留在调用方，client 只负责宣布「令牌已失效」。
@@ -98,29 +99,29 @@ apps/admin-web/
 
 ## 四、接口清单
 
-| 方法     | 路径                                                       | 说明                                                                       |
-| -------- | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `POST`   | `/api/auth/login`                                          | 登录，返回 `{ token, user }`                                               |
-| `GET`    | `/api/auth/me`                                             | 当前用户信息，用于刷新页面后恢复登录态                                     |
-| `POST`   | `/api/auth/logout`                                         | 登出，删除服务端会话                                                       |
-| `GET`    | `/api/admin/stats`                                         | 总览：用户规模、会话与消息量、近 7 天消息趋势、知识库文档数                |
-| `GET`    | `/api/admin/health`                                        | 运行状态：健康检查六项 + 运行时长 + MySQL 目标                             |
-| `GET`    | `/api/admin/users?keyword=&page=&pageSize=`                | 用户列表（用户名包含匹配 + 分页，`pageSize` 上限 100）                     |
-| `POST`   | `/api/admin/users`                                         | 新建用户，body `{ username, password, role }`，成功 201                    |
-| `PATCH`  | `/api/admin/users/:id`                                     | 变更角色或状态，body `{ role?, status? }`                                  |
-| `DELETE` | `/api/admin/users/:id`                                     | 删除用户，成功 204（连带清理其会话、对话与上传文件）                       |
-| `GET`    | `/api/admin/knowledge/documents?keyword=&page=&pageSize=`  | 文档列表（管理视角，含各用户私有文档与归属账号名）                         |
-| `POST`   | `/api/admin/knowledge/documents`                           | 新增全局共享文档，body `{ title, content }`，入库时同步完成切分与向量化    |
-| `DELETE` | `/api/admin/knowledge/documents/:id`                       | 删除任意文档（连同其向量片段），成功 204                                   |
-| `GET`    | `/api/admin/conversations?keyword=&page=&pageSize=`        | 会话列表（全账号，按标题包含匹配 + 分页）                                  |
-| `GET`    | `/api/admin/conversations/:id`                             | 会话详情（含全部消息，工具 / 附件 / 检索来源还原为标签）                   |
-| `DELETE` | `/api/admin/conversations/:id`                             | 删除任意会话（消息一并清除），成功 204                                     |
-| `GET`    | `/api/admin/files?keyword=&page=&pageSize=`                | 文件列表（全账号，按文件名包含匹配 + 分页）                                |
-| `DELETE` | `/api/admin/files/:id`                                     | 删除文件（元数据与落盘字节一并清理），成功 204                             |
-| `GET`    | `/api/admin/logs?keyword=&method=&status=&page=&pageSize=` | 接口日志（路径关键词 + 方法白名单 + 状态档位 `all` / `client` / `server`） |
-| `GET`    | `/api/admin/audit?keyword=&page=&pageSize=`                | 操作审计（按请求路径包含匹配 + 分页），只记管理端写操作                    |
-| `GET`    | `/api/admin/system/tools`                                  | LLM 工具清单（名称、用途、参数名），只读                                   |
-| `GET`    | `/api/admin/system/config`                                 | 运行配置只读视图，密钥类只回「是否已配置」                                 |
+| 方法     | 路径                                                       | 说明                                                                                                          |
+| -------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/api/admin/auth/login`                                    | 后台登录，返回 `{ token, user }`；只接受后台侧角色（`super_admin` / `admin`），客户端账号回 401               |
+| `GET`    | `/api/auth/me`                                             | 当前用户信息，用于刷新页面后恢复登录态                                                                        |
+| `POST`   | `/api/auth/logout`                                         | 登出，删除服务端会话                                                                                          |
+| `GET`    | `/api/admin/stats`                                         | 总览：用户规模、会话与消息量、近 7 天消息趋势、知识库文档数                                                   |
+| `GET`    | `/api/admin/health`                                        | 运行状态：健康检查六项 + 运行时长 + MySQL 目标                                                                |
+| `GET`    | `/api/admin/users?keyword=&page=&pageSize=`                | 用户列表（用户名包含匹配 + 分页，`pageSize` 上限 100）；普通 admin 只见客户端账号                             |
+| `POST`   | `/api/admin/users`                                         | 新建用户，body `{ username, password, role }`，成功 201；可授予角色受调用者角色限制（admin 只能建客户端账号） |
+| `PATCH`  | `/api/admin/users/:id`                                     | 变更角色或状态，body `{ role?, status? }`；admin 不可操作后台账号（404），也不可授予后台角色（400）           |
+| `DELETE` | `/api/admin/users/:id`                                     | 删除用户，成功 204（连带清理其会话、对话与上传文件）                                                          |
+| `GET`    | `/api/admin/knowledge/documents?keyword=&page=&pageSize=`  | 文档列表（管理视角，含各用户私有文档与归属账号名）                                                            |
+| `POST`   | `/api/admin/knowledge/documents`                           | 新增全局共享文档，body `{ title, content }`，入库时同步完成切分与向量化                                       |
+| `DELETE` | `/api/admin/knowledge/documents/:id`                       | 删除任意文档（连同其向量片段），成功 204                                                                      |
+| `GET`    | `/api/admin/conversations?keyword=&page=&pageSize=`        | 会话列表（全账号，按标题包含匹配 + 分页）                                                                     |
+| `GET`    | `/api/admin/conversations/:id`                             | 会话详情（含全部消息，工具 / 附件 / 检索来源还原为标签）                                                      |
+| `DELETE` | `/api/admin/conversations/:id`                             | 删除任意会话（消息一并清除），成功 204                                                                        |
+| `GET`    | `/api/admin/files?keyword=&page=&pageSize=`                | 文件列表（全账号，按文件名包含匹配 + 分页）                                                                   |
+| `DELETE` | `/api/admin/files/:id`                                     | 删除文件（元数据与落盘字节一并清理），成功 204                                                                |
+| `GET`    | `/api/admin/logs?keyword=&method=&status=&page=&pageSize=` | 接口日志（路径关键词 + 方法白名单 + 状态档位 `all` / `client` / `server`）                                    |
+| `GET`    | `/api/admin/audit?keyword=&page=&pageSize=`                | 操作审计（按请求路径包含匹配 + 分页），只记管理端写操作                                                       |
+| `GET`    | `/api/admin/system/tools`                                  | LLM 工具清单（名称、用途、参数名），只读                                                                      |
+| `GET`    | `/api/admin/system/config`                                 | 运行配置只读视图，密钥类只回「是否已配置」                                                                    |
 
 失败语义：权限不足按「资源不存在」返回 404；用户名冲突按「参数非法」返回 400；「不能停用或降级当前登录账号」「至少保留一个可登录的管理员账号」等自锁规则由后端返回 400 与对应文案，前端只做展示，不重复实现规则。
 
@@ -133,7 +134,7 @@ apps/admin-web/
 **页面**
 
 - **总览**：顶部四张指标卡（用户 / 会话 / 消息 / 知识库文档）+ 运行状态条（服务名、提供方与模型、知识库是否启用、运行时长、MySQL 目标）+ 近 7 天消息趋势折线图。
-- **用户管理**：关键词搜索 + 分页表格，行内直接改角色与状态、新建用户（`UserFormDialog`）、删除需二次确认。当前登录账号所在行的角色与状态控件禁用——自锁规则后端也会拦，禁用只是少一次注定失败的往返。
+- **用户管理**：关键词搜索 + 分页表格，行内直接改角色与状态、新建用户（`UserFormDialog`）、删除需二次确认。当前登录账号所在行的角色与状态控件禁用——自锁规则后端也会拦，禁用只是少一次注定失败的往返。普通管理员看不到后台账号（列表在服务端就过滤），角色列对非超管只读，新建弹窗对非超管不渲染角色选择器。
 - **知识库管理**：管理视角的文档列表（全局与各用户私有文档一并可见，私有文档带归属账号名），可新增全局共享文档（`KnowledgeFormDialog`）、删除任意文档（连同其向量片段）。
 - **会话管理**：全账号会话列表（标题、归属账号、消息数、更新时间），支持按标题搜索、经弹窗查看会话详情（含全部消息）与删除会话。
 - **文件管理**：全账号上传文件列表（文件名、类型、大小、归属账号、上传时间），支持按文件名搜索与删除（元数据与落盘字节一并清理）。
@@ -153,7 +154,7 @@ apps/admin-web/
 | `BatchBar`            | 批量操作条：展示已选条数，动作按钮由默认插槽提供，另带取消选择                                                                                               |
 | `SearchBar`           | 关键词输入 + 搜索按钮                                                                                                                                        |
 | `ModalDialog`         | 弹窗骨架（遮罩、标题栏、内容插槽、底部取消与确认），`loading` 期间锁关闭                                                                                     |
-| `UserFormDialog`      | 基于 `ModalDialog` 的新建用户表单（用户名 / 密码 / 角色）                                                                                                    |
+| `UserFormDialog`      | 基于 `ModalDialog` 的新建用户表单（用户名 / 密码 / 角色），可选角色由父级按调用者身份传入（非超管只能建客户端账号）                                          |
 | `KnowledgeFormDialog` | 基于 `ModalDialog` 的新增全局文档表单（标题 / 正文）                                                                                                         |
 | `MessageTrendChart`   | 基于 echarts 的消息趋势折线图，随容器尺寸自适应                                                                                                              |
 
@@ -178,7 +179,7 @@ pnpm --filter @repo/admin-web run preview  # 预览构建产物
 ```
 
 - 开发期 `/api` 由 `vite.config.ts` 的 proxy 转发到 `http://localhost:3000`（`agent-server` 的默认端口），因此本机先把后端跑起来；`baseURL` 留空走同源，生产期由反向代理统一接入，前端不感知后端真实地址。
-- 后端在 `apps/agent-server`，需要先建好管理员账号（或用运维超级令牌调 `POST /api/admin/users` 建一个）才能登录。
+- 后端在 `apps/agent-server`，需要先起来才能登录：空库首次启动时由 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 自举超管（未配置则启动告警），之后后台账号只能由超管在用户管理里创建（或用运维超级令牌调 `POST /api/admin/users` 建一个）。
 - 单测放 `src/__vitest__/`，只覆盖纯逻辑（分页取数、登录态 store、HTTP 客户端的令牌收口、路由守卫），组件层靠 `vue-tsc` 与实机走查兜底，取舍见 [ADR 0005](../../docs/adr/0005-admin-web-test-scope.md)。跑 `pnpm --filter @repo/admin-web run test`，或在根目录 `pnpm test` 一并执行——测试运行在 node 环境，`localStorage` 与 `fetch` 由 `src/__vitest__/storageStub.ts` 顶替，不依赖真实浏览器。
 - 质量校验走根脚本：`pnpm lint`（ESLint + Prettier）与 `pnpm test`；改了路由或类型后建议单独跑一次 `pnpm --filter @repo/admin-web run build`，它包含 `vue-tsc --noEmit` 全量类型检查。
 

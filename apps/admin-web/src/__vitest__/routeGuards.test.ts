@@ -15,6 +15,7 @@ vi.mock('@/api/auth', () => ({
 }));
 
 const ADMIN: AuthUser = { id: 1, username: 'root', role: 'admin', status: 'active' };
+const SUPER_ADMIN: AuthUser = { id: 3, username: 'ops', role: 'super_admin', status: 'active' };
 const NORMAL_USER: AuthUser = { id: 2, username: 'tom', role: 'user', status: 'active' };
 
 /** 守卫只读 to 的 path 与 fullPath，这里按用到的字段造最小导航目标 */
@@ -86,6 +87,18 @@ describe('路由守卫的登录态与角色双校验', () => {
 
     expect(await guard({ path: '/users', fullPath: '/users' })).toBe(true);
     expect(fetchCurrentUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('超级管理员同样放行：后台侧角色不止 admin 一个', async () => {
+    localStorage.setItem(TOKEN_KEY, 'token-super');
+    vi.mocked(fetchCurrentUser).mockResolvedValue(SUPER_ADMIN);
+
+    const auth = useAuthStore();
+    await auth.restoreUser();
+
+    const guard = captureGuard();
+
+    expect(await guard({ path: '/users', fullPath: '/users' })).toBe(true);
   });
 
   it('普通账号一律回登录页，后台没有面向普通账号的页面', async () => {

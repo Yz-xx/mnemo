@@ -23,8 +23,8 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 | -------- | --------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/health`                     | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态                                                            |
 | `GET`    | `/api/auth/public-key`            | 公开   | 取口令加密公钥（RSA-OAEP，JWK）；登录/注册/新建用户的 `password` 字段都须用它加密后提交，送明文一律 `400` |
-| `POST`   | `/api/auth/register`              | 公开   | 注册并直接签发令牌，成功返回 `201`（`{ token, user }`）                                                   |
-| `POST`   | `/api/auth/login`                 | 公开   | 登录并签发令牌，凭证错误返回 `401`                                                                        |
+| `POST`   | `/api/auth/register`              | 公开   | 客户端注册并直接签发令牌，成功返回 `201`；角色固定为 `user`                                               |
+| `POST`   | `/api/auth/login`                 | 公开   | 客户端登录并签发令牌，凭证错误返回 `401`；后台侧账号一律 `401`（提示改用管理后台）                        |
 | `POST`   | `/api/auth/logout`                | 需登录 | 删除当前令牌对应的会话，返回 `204`                                                                        |
 | `GET`    | `/api/auth/me`                    | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`                                                            |
 | `POST`   | `/api/chat`                       | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`                                                      |
@@ -50,35 +50,36 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 
 管理端走独立的 `requireAdmin`，入口在 `/api/admin` 下按模块再分一层：
 
-| 方法     | 路径                                          | 说明                                                    |
-| -------- | --------------------------------------------- | ------------------------------------------------------- |
-| `GET`    | `/api/admin/stats`                            | 总览统计（用户规模、会话与消息量、近 7 天趋势、文档数） |
-| `GET`    | `/api/admin/health`                           | 运行状态（健康检查六项 + 运行时长 + MySQL 目标）        |
-| `GET`    | `/api/admin/users`                            | 账号列表（用户名包含匹配 + 分页）                       |
-| `POST`   | `/api/admin/users`                            | 新建账号，成功 `201`                                    |
-| `PATCH`  | `/api/admin/users/:id`                        | 变更角色或状态                                          |
-| `DELETE` | `/api/admin/users/:id`                        | 删除账号（连带清理其会话、对话与上传文件），成功 `204`  |
-| `POST`   | `/api/admin/users/batch-status`               | 批量停用 / 启用，回 `{ updated }`                       |
-| `POST`   | `/api/admin/users/batch-delete`               | 批量删除账号，成功 `204`                                |
-| `GET`    | `/api/admin/knowledge/documents`              | 文档列表（管理视角，私有文档带归属账号名）              |
-| `POST`   | `/api/admin/knowledge/documents`              | 新增全局共享文档                                        |
-| `DELETE` | `/api/admin/knowledge/documents/:id`          | 删除任意文档，成功 `204`                                |
-| `POST`   | `/api/admin/knowledge/documents/batch-delete` | 批量删除文档，成功 `204`                                |
-| `GET`    | `/api/admin/conversations`                    | 会话列表（全账号）                                      |
-| `GET`    | `/api/admin/conversations/:id`                | 会话详情（含全部消息）                                  |
-| `DELETE` | `/api/admin/conversations/:id`                | 删除任意会话，成功 `204`                                |
-| `POST`   | `/api/admin/conversations/batch-delete`       | 批量删除会话，成功 `204`                                |
-| `GET`    | `/api/admin/files`                            | 上传文件列表（全账号）                                  |
-| `DELETE` | `/api/admin/files/:id`                        | 删除文件（元数据与落盘字节），成功 `204`                |
-| `POST`   | `/api/admin/files/batch-delete`               | 批量删除文件，成功 `204`                                |
-| `GET`    | `/api/admin/logs`                             | 接口日志（路径关键词 / 方法 / 状态档位 + 分页）         |
-| `GET`    | `/api/admin/audit`                            | 操作审计（路径关键词 + 分页）                           |
-| `GET`    | `/api/admin/system/tools`                     | LLM 工具清单（名称、用途、参数名）                      |
-| `GET`    | `/api/admin/system/config`                    | 运行配置只读视图（密钥类只回是否已配置）                |
+| 方法     | 路径                                          | 说明                                                                                        |
+| -------- | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `POST`   | `/api/admin/auth/login`                       | 后台登录（只接受 `super_admin` / `admin`；客户端账号回 `401` 并提示改用客户端）             |
+| `GET`    | `/api/admin/stats`                            | 总览统计（用户规模、会话与消息量、近 7 天趋势、文档数）                                     |
+| `GET`    | `/api/admin/health`                           | 运行状态（健康检查六项 + 运行时长 + MySQL 目标）                                            |
+| `GET`    | `/api/admin/users`                            | 账号列表（用户名包含匹配 + 分页）；按调用者角色过滤，普通 admin 看不到后台账号              |
+| `POST`   | `/api/admin/users`                            | 新建账号，成功 `201`；可授予的角色受调用者角色限制（admin 只能建客户端账号）                |
+| `PATCH`  | `/api/admin/users/:id`                        | 变更角色或状态；admin 不可变更后台账号（按资源不存在回 `404`），也不可授予后台角色（`400`） |
+| `DELETE` | `/api/admin/users/:id`                        | 删除账号（连带清理其会话、对话与上传文件），成功 `204`                                      |
+| `POST`   | `/api/admin/users/batch-status`               | 批量停用 / 启用，回 `{ updated }`                                                           |
+| `POST`   | `/api/admin/users/batch-delete`               | 批量删除账号，成功 `204`                                                                    |
+| `GET`    | `/api/admin/knowledge/documents`              | 文档列表（管理视角，私有文档带归属账号名）                                                  |
+| `POST`   | `/api/admin/knowledge/documents`              | 新增全局共享文档                                                                            |
+| `DELETE` | `/api/admin/knowledge/documents/:id`          | 删除任意文档，成功 `204`                                                                    |
+| `POST`   | `/api/admin/knowledge/documents/batch-delete` | 批量删除文档，成功 `204`                                                                    |
+| `GET`    | `/api/admin/conversations`                    | 会话列表（全账号）                                                                          |
+| `GET`    | `/api/admin/conversations/:id`                | 会话详情（含全部消息）                                                                      |
+| `DELETE` | `/api/admin/conversations/:id`                | 删除任意会话，成功 `204`                                                                    |
+| `POST`   | `/api/admin/conversations/batch-delete`       | 批量删除会话，成功 `204`                                                                    |
+| `GET`    | `/api/admin/files`                            | 上传文件列表（全账号）                                                                      |
+| `DELETE` | `/api/admin/files/:id`                        | 删除文件（元数据与落盘字节），成功 `204`                                                    |
+| `POST`   | `/api/admin/files/batch-delete`               | 批量删除文件，成功 `204`                                                                    |
+| `GET`    | `/api/admin/logs`                             | 接口日志（路径关键词 / 方法 / 状态档位 + 分页）                                             |
+| `GET`    | `/api/admin/audit`                            | 操作审计（路径关键词 + 分页）                                                               |
+| `GET`    | `/api/admin/system/tools`                     | LLM 工具清单（名称、用途、参数名）                                                          |
+| `GET`    | `/api/admin/system/config`                    | 运行配置只读视图（密钥类只回是否已配置）                                                    |
 
 **批量接口的语义**：一个请求处理一整批，不让前端循环调单条——自锁与「至少保留一名可登录管理员」是跨条目的判定，拆成 N 次单条请求就判不出来。用户类接口（停用 / 启用、删除）先整体预检再执行，任一项命中规则即**整批拒绝**并说明原因；文档 / 文件 / 会话的批量删除没有业务规则，按**幂等**处理（已不存在的条目视为已完成），因此不引入跨 Store 事务。`ids` 去重后不能为空，含非法项一律 `400`；用户类接口在目标已消失时回 `404`。取舍理由见 [ADR 0003](../../docs/adr/0003-batch-operation-semantics.md)。
 
-**两条入口**：运维超级令牌（请求头 `x-admin-token`，与知识库全局文档写入共用同一枚 `KNOWLEDGE_ADMIN_TOKEN`，留空即关闭）与管理员会话（Bearer 令牌对应用户 `role=admin` 且 `status=active`）。无令牌返回 `401`；已登录但权限不足按「资源不存在」返回 `404`，不向非管理员暴露管理接口的存在。
+**两条入口**：运维超级令牌（请求头 `x-admin-token`，与知识库全局文档写入共用同一枚 `KNOWLEDGE_ADMIN_TOKEN`，留空即关闭）与管理员会话（Bearer 令牌对应用户为**后台侧角色** `super_admin` 或 `admin` 且 `status=active`）。无令牌返回 `401`；已登录但权限不足按「资源不存在」返回 `404`，不向非管理员暴露管理接口的存在。两者的权限**只在用户管理模块**分级：超管可管理所有账号，普通 admin 只能操作客户端账号；其余模块的超管与 admin 权限相同，因此 `requireAdmin` 只判「是否后台侧」，差异下沉到 `routes/admin/users.ts` 内按调用者角色分支。`x-admin-token` 不绑定具体账号，权限**等价超管**——它是超管丢号或被误停时唯一的结构性后路，若只给 admin 权限，应急时照样管不了后台账号。
 
 **中间件顺序**：管理端每个模块各自挂同一组 `adminGuard`（先 `requireAdmin`、再 `createAdminAudit`，只对 POST/PUT/PATCH/DELETE 记一笔审计）。守卫在注册表 `routes/index.ts` 里声明，新增管理接口不必再记得补记一笔；操作人从 `res.locals.admin` 取，鉴权没过就走不到这里。**更具体的路径必须登记在 `/api/admin`（总览）之前**：`app.use` 是前缀匹配，若总览排在前面，同一次请求会先跑一遍守卫、再落到具体模块，鉴权与审计都会重复一遍（回归用例见 `__vitest__/adminRoutes.test.ts`）。
 
@@ -99,19 +100,23 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 > `prune()` 里的去重是一段自连接删除：保留每个账号 `created_at` 最新的一行（时间相同时用 `token` 兜底比较，保证结果确定）。这段逻辑是为收敛早期版本“每次登录都 INSERT 而不清理”留下的重复数据而加的。
 
+**账号与端隔离**：`role` 分三级 `super_admin` / `admin` / `user`，代码以常量 `ADMIN_ROLES = ['super_admin', 'admin']` 表达「后台侧」。一个账号只属于一端，**端由登录路径承载**：客户端 `POST /api/auth/login` 只接受 `role='user'`，后台侧账号即便口令正确也回 `401 { message: '该账号不能登录客户端，请使用管理后台' }`；后台 `POST /api/admin/auth/login` 只接受后台侧角色，客户端账号回 `401 { message: '该账号不能登录管理后台，请使用客户端' }`。口令错误或账号不存在仍是含糊的 `401 { message: '用户名或密码错误' }`——不暴露账号是否注册；口令已通过、只是端不匹配时才明确告知，因为此时对方已证明自己持有该账号。之所以按端拆入口而不是让调用方传字段自证身份，是为了从根上消除「同账号两端互顶」：`SessionStore.create()` 的单端语义保持不变，但同一个账号已不可能同时出现在两端。客户端注册 `POST /api/auth/register` 固定产出 `role='user'`，后台不设注册入口，后台账号只能由超管在用户管理里创建。公钥仍是两端共用的 `GET /api/auth/public-key`（后台前端也用这个地址取公钥）。
+
+**超管自举**：启动时读环境变量 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD`，**仅当库中不存在任何后台侧账号时**创建；已存在则跳过、不覆盖，未配置凭据时启动告警而非静默跳过。因此上线顺序必须是「先配环境变量、再上代码」——否则代码先上而 env 未配，空库启动会因无凭据跳过自举，系统仍进不去后台。数据迁移上，`users.role` 的 `ENUM` 由两值扩为三值在 MySQL 里是**重建表**（上线前需备份），存量 `admin` 账号会被迁移为 `super_admin`；迁移幂等，判据写在列定义里是否已含 `super_admin`，避免后续启动把新模型下刻意保留的普通 admin 误提权。
+
 ## 四、数据表设计
 
 `ensureSchema` 在启动时先以**不指定 database** 的连接 `CREATE DATABASE IF NOT EXISTS`，再连到该库执行建表（全部 `IF NOT EXISTS`，可重复执行）。七张表统一 `utf8mb4` / InnoDB：
 
-| 表              | 关键字段                                                                                                                  | 说明                                                                                |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `users`         | `id` 主键、`username` 唯一、`password`（`scrypt$盐hex$散列hex`）                                                          | 账号表                                                                              |
-| `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                                                                | 登录会话表，单端登录下每个账号至多一行                                              |
-| `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引）                                          | 对话表，列表查询走该复合索引                                                        |
-| `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）                                                  | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息                                  |
-| `files`         | `id` 主键、`user_id`、`name`（原始文件名，仅作展示）、`ext` / `mime`（由 magic bytes 判定）、`size`、`created_at`         | 上传文件元数据表；原始字节落在 `<UPLOAD_DIR>/<userId>/<fileId>.<ext>`，不进数据库   |
-| `api_logs`      | `id` 自增主键、`request_id`（8 位）、`method` / `path` / `status` / `duration_ms`、`user_id` 可空、摘要三列、`created_at` | 接口请求日志表，由请求日志中间件在响应结束时落库；`user_id` 为 NULL 表示未登录入口  |
-| `audit_logs`    | `id` 自增主键、`actor_id` 可空、`method` / `path` / `status`、`detail`（请求体摘要）、`created_at`                        | 管理端写操作审计表，由审计中间件在写操作结束时落库；超级令牌入口 `actor_id` 为 NULL |
+| 表              | 关键字段                                                                                                                      | 说明                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `users`         | `id` 主键、`username` 唯一、`password`（`scrypt$盐hex$散列hex`）、`role`（`ENUM('super_admin','admin','user')`，默认 `user`） | 账号表；`role` 表达账号归属哪一端：`user` 为客户端，`super_admin` / `admin` 为后台侧 |
+| `user_sessions` | `token` 主键、`user_id` 索引、`expires_at`                                                                                    | 登录会话表，单端登录下每个账号至多一行                                               |
+| `conversations` | `id` 主键、`user_id`、`title`、`updated_at`（`(user_id, updated_at DESC)` 索引）                                              | 对话表，列表查询走该复合索引                                                         |
+| `messages`      | `id` 主键、`seq` 自增唯一、`conversation_id` 外键（`ON DELETE CASCADE`）                                                      | 消息表，`seq` 保证读取顺序稳定，删会话即级联清消息                                   |
+| `files`         | `id` 主键、`user_id`、`name`（原始文件名，仅作展示）、`ext` / `mime`（由 magic bytes 判定）、`size`、`created_at`             | 上传文件元数据表；原始字节落在 `<UPLOAD_DIR>/<userId>/<fileId>.<ext>`，不进数据库    |
+| `api_logs`      | `id` 自增主键、`request_id`（8 位）、`method` / `path` / `status` / `duration_ms`、`user_id` 可空、摘要三列、`created_at`     | 接口请求日志表，由请求日志中间件在响应结束时落库；`user_id` 为 NULL 表示未登录入口   |
+| `audit_logs`    | `id` 自增主键、`actor_id` 可空、`method` / `path` / `status`、`detail`（请求体摘要）、`created_at`                            | 管理端写操作审计表，由审计中间件在写操作结束时落库；超级令牌入口 `actor_id` 为 NULL  |
 
 > 之所以用自增 `seq` 而非 `created_at` 排序：同一毫秒内写入的多条消息时间戳可能相同，`seq` 能提供严格稳定的顺序。
 
@@ -214,38 +219,40 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 已存在的系统环境变量优先级高于文件，所以数据库密码与 API Key 在部署机上注入即可，不必写进仓库。
 
-| 变量                                                           | 默认值                      | 说明                                                 |
-| -------------------------------------------------------------- | --------------------------- | ---------------------------------------------------- |
-| `PORT`                                                         | `3000`                      | 服务端口                                             |
-| `DATA_DIR`                                                     | `<cwd>/data`                | 数据目录（知识库与日志的基准目录）                   |
-| `LOG_LEVEL`                                                    | `info`                      | 日志级别：`debug` / `info` / `warn` / `error`        |
-| `LOG_DIR`                                                      | `<数据目录>/logs`           | 日志目录（相对路径会随启动目录漂移，建议填绝对路径） |
-| `LOG_RETENTION_DAYS`                                           | `14`                        | 日志文件保留天数                                     |
-| `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                                           |
-| `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                                           |
-| `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                                         |
-| `MYSQL_PASSWORD`                                               | 空                          | MySQL 密码（默认留空，部署时注入，见第十一章）       |
-| `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                             |
-| `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                               |
-| `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                             |
-| `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址                                          |
-| `OLLAMA_CHAT_MODEL`                                            | `qwen2.5:7b`                | 本地对话模型                                         |
-| `OLLAMA_EMBEDDING_MODEL`                                       | `nomic-embed-text`          | 本地向量模型                                         |
-| `DEEPSEEK_API_KEY`                                             | 空                          | 线上对话服务的密钥                                   |
-| `DEEPSEEK_BASE_URL`                                            | `https://api.deepseek.com`  | DeepSeek 兼容 OpenAI 协议                            |
-| `DEEPSEEK_CHAT_MODEL`                                          | `deepseek-chat`             | 线上对话模型                                         |
-| `EMBEDDING_PROVIDER`                                           | `ollama`                    | `ollama` 或 `openai`                                 |
-| `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | `text-embedding-3-small` 等 | 线上向量服务配置                                     |
-| `KNOWLEDGE_CHUNK_SIZE`                                         | `500`                       | 切片长度                                             |
-| `KNOWLEDGE_CHUNK_OVERLAP`                                      | `80`                        | 切片重叠                                             |
-| `KNOWLEDGE_TOP_K`                                              | `4`                         | 检索返回片段数                                       |
-| `KNOWLEDGE_MIN_SCORE`                                          | `0.6`                       | 检索相似度下限（低于该分数的片段丢弃）               |
-| `KNOWLEDGE_ADMIN_TOKEN`                                        | 空                          | 全局知识库管理令牌（留空即关闭全局写入）             |
-| `OLLAMA_VISION_MODEL`                                          | `qwen3-vl:8b`               | 图片理解用的本地多模态模型（**留空即关闭图片理解**） |
-| `UPLOAD_MAX_BYTES`                                             | `20971520`                  | 上传单文件字节上限                                   |
-| `UPLOAD_MAX_FILES`                                             | `1`                         | 单请求文件数上限                                     |
-| `UPLOAD_ALLOWED_TYPES`                                         | `docx,xlsx,pdf,png,jpg`     | 允许的扩展名白名单，与 magic bytes 判定结果比对      |
-| `UPLOAD_DIR`                                                   | `<数据目录>/uploads`        | 上传文件落盘根目录                                   |
+| 变量                                                           | 默认值                      | 说明                                                                   |
+| -------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------- |
+| `PORT`                                                         | `3000`                      | 服务端口                                                               |
+| `DATA_DIR`                                                     | `<cwd>/data`                | 数据目录（知识库与日志的基准目录）                                     |
+| `LOG_LEVEL`                                                    | `info`                      | 日志级别：`debug` / `info` / `warn` / `error`                          |
+| `LOG_DIR`                                                      | `<数据目录>/logs`           | 日志目录（相对路径会随启动目录漂移，建议填绝对路径）                   |
+| `LOG_RETENTION_DAYS`                                           | `14`                        | 日志文件保留天数                                                       |
+| `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                                                             |
+| `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                                                             |
+| `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                                                           |
+| `MYSQL_PASSWORD`                                               | 空                          | MySQL 密码（默认留空，部署时注入，见第十一章）                         |
+| `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                                               |
+| `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                                                 |
+| `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                                               |
+| `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址                                                            |
+| `OLLAMA_CHAT_MODEL`                                            | `qwen2.5:7b`                | 本地对话模型                                                           |
+| `OLLAMA_EMBEDDING_MODEL`                                       | `nomic-embed-text`          | 本地向量模型                                                           |
+| `DEEPSEEK_API_KEY`                                             | 空                          | 线上对话服务的密钥                                                     |
+| `DEEPSEEK_BASE_URL`                                            | `https://api.deepseek.com`  | DeepSeek 兼容 OpenAI 协议                                              |
+| `DEEPSEEK_CHAT_MODEL`                                          | `deepseek-chat`             | 线上对话模型                                                           |
+| `EMBEDDING_PROVIDER`                                           | `ollama`                    | `ollama` 或 `openai`                                                   |
+| `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | `text-embedding-3-small` 等 | 线上向量服务配置                                                       |
+| `KNOWLEDGE_CHUNK_SIZE`                                         | `500`                       | 切片长度                                                               |
+| `KNOWLEDGE_CHUNK_OVERLAP`                                      | `80`                        | 切片重叠                                                               |
+| `KNOWLEDGE_TOP_K`                                              | `4`                         | 检索返回片段数                                                         |
+| `KNOWLEDGE_MIN_SCORE`                                          | `0.6`                       | 检索相似度下限（低于该分数的片段丢弃）                                 |
+| `KNOWLEDGE_ADMIN_TOKEN`                                        | 空                          | 全局知识库管理令牌（留空即关闭全局写入），权限等价超管                 |
+| `INITIAL_ADMIN_USERNAME`                                       | 空                          | 初始超管用户名，仅当库中不存在任何后台侧账号时用于启动自举（见第三章） |
+| `INITIAL_ADMIN_PASSWORD`                                       | 空                          | 初始超管密码，同上两个变量须成对配置；未配置凭据时启动告警             |
+| `OLLAMA_VISION_MODEL`                                          | `qwen3-vl:8b`               | 图片理解用的本地多模态模型（**留空即关闭图片理解**）                   |
+| `UPLOAD_MAX_BYTES`                                             | `20971520`                  | 上传单文件字节上限                                                     |
+| `UPLOAD_MAX_FILES`                                             | `1`                         | 单请求文件数上限                                                       |
+| `UPLOAD_ALLOWED_TYPES`                                         | `docx,xlsx,pdf,png,jpg`     | 允许的扩展名白名单，与 magic bytes 判定结果比对                        |
+| `UPLOAD_DIR`                                                   | `<数据目录>/uploads`        | 上传文件落盘根目录                                                     |
 
 对话模型与向量模型**分开配置**：DeepSeek 不提供 embedding 接口，所以即便对话走线上，向量仍可继续使用本地 Ollama。
 
@@ -276,6 +283,8 @@ ollama serve
 
 > 对话模型必须选择**支持 Function Calling** 的版本。例如 `deepseek-r1:7b` 不支持 Ollama 的函数调用，会导致模型不调用工具、直接编造答案；`qwen2.5:7b` 可正常使用。
 
+首次部署还需先在 `.env.production`（或系统环境变量）里配好 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD`，顺序是**先配变量、再上代码**：代码先上而变量缺失时，空库启动会因无凭据跳过超管自举（仅告警），后台将无人可登。
+
 单独启动后端（默认 3000 端口，`tsx watch`）：
 
 ```bash
@@ -294,5 +303,6 @@ pnpm --filter @repo/agent-server run dev
 
 - **会话已改为 MySQL 持久化**：会话与消息按 `user_id` 隔离存储，天然支持多账号与并发访问；代价是 `append` 一次要写两张表（插入消息 + 更新会话时间），消息量极大时可考虑批量提交或异步刷写。
 - **登录为单端登录**：每个账号同时只有一条有效会话，新登录顶掉旧会话；这保证了 `user_sessions` 不会累积重复行，但也意味着同账号无法多端同时在线。
+- **账号与端绑定**：一个账号只属于一端（客户端或后台），登录入口按端拆成两条路径并在口令通过后校验角色，因此「同账号两端互顶」从根上消失；但**同一端**的多处登录仍会互顶（如超管在两台电脑登录后台），这是刻意保留的单端语义。取舍见 [ADR 0006](../../docs/adr/0006-account-isolation-and-admin-hierarchy.md)。
 - **system prompt 强约束检索**：以“必须检索后才回答”换取准确率，代价是知识库类问题必然会多一次工具往返。
 - **知识库检索为暴力近邻**：LanceDB 表内逐个算 cosine 相似度再排序，简单可靠，适合中小规模语料；数据量增长后需补建 ANN 索引。

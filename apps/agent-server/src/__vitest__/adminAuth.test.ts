@@ -1,6 +1,6 @@
-import type { AdminActor } from '../auth/middleware.js';
+import type { AdminActor } from '../auth/actor.js';
 import type { SessionStore } from '../auth/sessionStore.js';
-import type { UserRecord, UserStore } from '../auth/userStore.js';
+import type { UserRecord, UserStore } from '../auth/userStore/index.js';
 import type { AppConfig } from '../configuration/config/index.js';
 import type { Request, Response } from 'express';
 import { describe, expect, it } from 'vitest';
@@ -13,7 +13,7 @@ const ADMIN_TOKEN = 'ops-secret';
 /** 假响应：中间件只用到 status / json 与 locals */
 class FakeResponse {
   readonly locals: Record<string, unknown> = {};
-  statusCode = HTTP_STATUS.OK;
+  statusCode: number = HTTP_STATUS.OK;
   body: unknown;
 
   status(code: number): this {
@@ -123,7 +123,7 @@ describe('管理端鉴权', () => {
     expect(result.status).toBe(HTTP_STATUS.NOT_FOUND);
   });
 
-  it('管理员账号放行，并把账号身份写入 locals 供日志与自锁规则取用', async () => {
+  it('管理员账号放行，并把账号身份写入 locals 供日志与权限分级取用', async () => {
     const result = await invoke({
       headers: { authorization: 'Bearer t-1' },
       userId: 7,
@@ -131,14 +131,26 @@ describe('管理端鉴权', () => {
     });
 
     expect(result.nextCalled).toBe(true);
-    expect(result.admin).toEqual({ userId: 7, superToken: false });
+    expect(result.admin).toEqual({ userId: 7, superToken: false, role: 'admin' });
+  });
+
+  it('超级管理员账号同样放行，并把 super_admin 写进 locals', async () => {
+    const result = await invoke({
+      headers: { authorization: 'Bearer t-1' },
+      userId: 7,
+      user: userRecord({ id: 7, role: 'super_admin' }),
+    });
+
+    expect(result.nextCalled).toBe(true);
+    expect(result.admin).toEqual({ userId: 7, superToken: false, role: 'super_admin' });
   });
 
   it('携带正确的运维超级令牌时放行，且不绑定具体账号', async () => {
     const result = await invoke({ headers: { 'x-admin-token': ADMIN_TOKEN } });
 
     expect(result.nextCalled).toBe(true);
-    expect(result.admin).toEqual({ userId: null, superToken: true });
+    // role 为 null 表示不对应具体账号，权限等价超管（见 isSuperAdmin）
+    expect(result.admin).toEqual({ userId: null, superToken: true, role: null });
   });
 
   it('超级令牌不匹配时按未登录处理', async () => {

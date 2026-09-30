@@ -18,20 +18,35 @@ import { createAuthRouter } from '../routes/client/auth.js';
  */
 
 const USERNAME = 'bxzhuo';
+const ADMIN_USERNAME = 'ops';
 const PASSWORD = 'secret123';
 
+/** 注册时收到的角色：用于钉住「客户端注册固定产出 user」这条约束 */
+let registeredRole: string | null = null;
+
 const fakeUsers = {
-  register: async (username: string) => ({
-    id: 1,
-    username,
-    role: 'admin',
-    status: 'active',
-    createdAt: '2026-09-30T00:00:00.000Z',
-  }),
-  authenticate: async (username: string, password: string) =>
-    username === USERNAME && password === PASSWORD
-      ? { id: 1, username, role: 'admin', status: 'active', createdAt: '2026-09-30T00:00:00.000Z' }
-      : null,
+  register: async (username: string, _password: string, role = 'user') => {
+    registeredRole = role;
+    return {
+      id: 1,
+      username,
+      role,
+      status: 'active',
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+  },
+  // 两个账号共用同一口令，只有角色不同：用来验证端隔离只认角色、不看口令
+  authenticate: async (username: string, password: string) => {
+    if (password !== PASSWORD || (username !== USERNAME && username !== ADMIN_USERNAME))
+      return null;
+    return {
+      id: 1,
+      username,
+      role: username === ADMIN_USERNAME ? 'admin' : 'user',
+      status: 'active',
+      createdAt: '2026-09-30T00:00:00.000Z',
+    };
+  },
   findById: async () => null,
 };
 
@@ -62,12 +77,16 @@ let baseUrl = '';
 let api: ApiClient;
 
 /** 登录请求：password 传什么就发什么，用来对比密文与明文的待遇 */
-function login(password: string): Promise<globalThis.Response> {
+function loginAs(username: string, password: string): Promise<globalThis.Response> {
   return fetch(`${baseUrl}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: USERNAME, password }),
+    body: JSON.stringify({ username, password }),
   });
+}
+
+function login(password: string): Promise<globalThis.Response> {
+  return loginAs(USERNAME, password);
 }
 
 beforeAll(async () => {
@@ -107,5 +126,33 @@ describe('口令加密传输', () => {
     const tampered = `${(await encryptPassword(api, PASSWORD)).slice(0, -4)}AAAA`;
 
     expect((await login(tampered)).status).toBe(HTTP_STATUS.BAD_REQUEST);
+  });
+});
+
+describe('客户端入口的端隔离', () => {
+  it('后台账号不能登录客户端：口令没错，故明确提示改用后台', async () => {
+    const password = await encryptPassword(api, PASSWORD);
+    const response = await loginAs(ADMIN_USERNAME, password);
+
+    expect(response.status).toBe(HTTP_STATUS.UNAUTHORIZED);
+    await expect(response.json()).resolves.toEqual({
+      message: '该账号不能登录客户端，请使用管理后台',
+    });
+  });
+
+  it('注册固定产出 user 角色：客户端入口拿不到后台权限', async () => {
+    registeredRole = null;
+    const response = await fetch(`${baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        username: 'newcomer',
+        password: await encryptPassword(api, PASSWORD),
+      }),
+    });
+
+    expect(response.status).toBe(HTTP_STATUS.CREATED);
+    await expect(response.json()).resolves.toMatchObject({ user: { role: 'user' } });
+    expect(registeredRole).toBe('user');
   });
 });

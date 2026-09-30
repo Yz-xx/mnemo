@@ -1,37 +1,19 @@
-import type { SessionStore } from '../../auth/sessionStore.js';
-import type { UserRecord, UserRole, UserStatus } from '../../auth/userStore.js';
 import type { AppDependencies } from '../../configuration/dependencies.js';
 import type { Request, Response } from 'express';
 import { Router } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { parseCredentials } from '../../auth/credentials.js';
 import { createRequireAuth, currentToken, currentUserId } from '../../auth/middleware.js';
+import { issueSession, toSessionUser } from '../../auth/sessionUser.js';
+import { isAdminRole } from '../../auth/userStore/index.js';
 import { ERROR_MESSAGE } from '../../configuration/messages.js';
 import { requestLogger } from '../../middleware/requestLog.js';
 
-/** 登录响应里的用户信息：与前端 AuthUser 对齐，管理后台据此判定能否进入 */
-interface SessionUser {
-  id: number;
-  username: string;
-  role: UserRole;
-  status: UserStatus;
-}
-
-/** 登录态相关接口只吐这四个字段：密码等敏感内容不进响应体 */
-function toSessionUser(user: UserRecord): SessionUser {
-  return { id: user.id, username: user.username, role: user.role, status: user.status };
-}
-
-/** 签发令牌并组装响应体；密码等敏感字段不会出现在响应中 */
-async function issueSession(
-  user: UserRecord,
-  sessions: SessionStore,
-): Promise<{ token: string; user: SessionUser }> {
-  const token = await sessions.create(user.id);
-  return { token, user: toSessionUser(user) };
-}
-
-/** 账号接口：注册、登录公开，登出与登录态查询需要携带令牌 */
+/**
+ * 客户端账号接口：注册与登录公开，登出与登录态查询需要携带令牌。
+ * 端由路径承载——后台登录在 routes/admin/auth.ts，本入口只接受客户端账号（见 docs/adr/0006），
+ * 于是「同一账号在两端互相顶掉」从根上不再可能。
+ */
 export function createAuthRouter({
   users,
   sessions,
@@ -40,7 +22,7 @@ export function createAuthRouter({
   const router = Router();
   const requireAuth = createRequireAuth(sessions);
 
-  /** 口令传输公钥：客户端在登录/注册前取回，用它加密密码字段后再提交 */
+  /** 口令传输公钥：客户端在登录/注册前取回，用它加密密码字段后再提交（两端共用同一份） */
   router.get('/public-key', (_req: Request, res: Response) => {
     res.json({ publicKey: passwordCipher.publicKey() });
   });
@@ -52,7 +34,8 @@ export function createAuthRouter({
       res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
       return;
     }
-    const user = await users.register(parsed.value.username, parsed.value.password);
+    // 角色写死为客户端账号：后台账号只能由超管在用户管理里创建，注册不产出后台权限
+    const user = await users.register(parsed.value.username, parsed.value.password, 'user');
     if (!user) {
       log.warn('注册被拒绝：用户名已存在', { username: parsed.value.username });
       // 用户名冲突归入“参数非法”：backend-design 第 3 章只约定 400/401/404/500
@@ -76,13 +59,19 @@ export function createAuthRouter({
     if (!user) {
       // 登录失败要留痕，便于识别异常尝试；密码本身不写入日志
       log.warn('登录失败：用户名或密码错误', { username: parsed.value.username });
-      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: '用户名或密码错误' });
+      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: ERROR_MESSAGE.BAD_CREDENTIALS });
+      return;
+    }
+    // 口令已通过才提示端不匹配：此时对方已证明自己持有该账号，含糊会被误读成密码错误
+    if (isAdminRole(user.role)) {
+      log.warn('登录被拒绝：账号不属于客户端', { userId: user.id, username: user.username });
+      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: ERROR_MESSAGE.CLIENT_ONLY });
       return;
     }
     // 停用账号与密码错误分开提示：被停用的人需要知道该找管理员，而不是反复试密码
     if (user.status === 'banned') {
       log.warn('登录被拒绝：账号已停用', { userId: user.id, username: user.username });
-      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: '账号已被停用，请联系管理员' });
+      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: ERROR_MESSAGE.ACCOUNT_BANNED });
       return;
     }
     log.info('登录成功', { userId: user.id, username: user.username, role: user.role });
