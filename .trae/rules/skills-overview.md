@@ -1,5 +1,5 @@
 ---
-description: my-monorepo 仓库级总纲：目录结构与职责边界、统一脚本、依赖与版本、Git 提交规范，并索引后端、桌面端、代码风格三份子规范及收尾自检要求。在本仓库做任何任务时必须始终遵守。
+description: my-monorepo 仓库级总纲：目录结构与职责边界、统一脚本、依赖与版本、Git 提交规范，并索引后端、桌面端、代码风格、组件库四份子规范及收尾自检要求。在本仓库做任何任务时必须始终遵守。
 alwaysApply: true
 ---
 
@@ -25,7 +25,7 @@ my-monorepo/
 │   ├── shared/      @repo/shared 通用工具（strings / common / bytes / time）
 │   ├── reusable/    @repo/reusable 业务可复用代码（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
 │   ├── logger/      @repo/logger Node 端结构化日志库（控制台 + 按天轮转文件）
-│   └── components/  @repo/components 公共 Vue 组件库（Vite 库模式）
+│   └── components/  @repo/components 公共 Vue 组件库（Vite 库模式，样式经 @layer 封装）
 ├── docs/
 │   └── adr/         架构决策记录（ADR）：记录刻意偏离常识默认的取舍
 ├── scripts/         根脚本：dev / build / lint / test
@@ -85,15 +85,16 @@ my-monorepo/
 
 ## 子规范索引
 
-三份子规范配置了 `globs`，改动命中下列范围时自动生效；未命中时按本表主动读取后再动手，不凭记忆行动：
+四份子规范配置了 `globs`，改动命中下列范围时自动生效；未命中时按本表主动读取后再动手，不凭记忆行动：
 
-| 改动范围                                             | 规范文件                        |
-| ---------------------------------------------------- | ------------------------------- |
-| 后端接口、路由、鉴权、数据层、SSE、LLM 工具          | `.trae/rules/backend-design.md` |
-| Electron 主进程、预加载、IPC、渲染进程组件、样式体系 | `.trae/rules/desktop-design.md` |
-| TypeScript / Vue / Less 写法、命名、注释、单元测试   | `.trae/rules/code-style.md`     |
+| 改动范围                                             | 规范文件                           |
+| ---------------------------------------------------- | ---------------------------------- |
+| 后端接口、路由、鉴权、数据层、SSE、LLM 工具          | `.trae/rules/backend-design.md`    |
+| Electron 主进程、预加载、IPC、渲染进程组件、样式体系 | `.trae/rules/desktop-design.md`    |
+| TypeScript / Vue / Less 写法、命名、注释、单元测试   | `.trae/rules/code-style.md`        |
+| `@repo/components` 的收录边界、样式与令牌契约        | `.trae/rules/components-design.md` |
 
-规范调整时只改 `.trae/rules/` 下对应文件，保持单一来源；三份子规范冲突时以总纲与更具体的那份为准。
+规范调整时只改 `.trae/rules/` 下对应文件，保持单一来源；四份子规范冲突时以总纲与更具体的那份为准。
 
 # 注意事项
 
