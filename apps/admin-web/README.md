@@ -55,9 +55,10 @@ apps/admin-web/
 │   ├── composables/
 │   │   └── usePagedList.ts      # 列表页共用的分页取数（页码 / 加载态 / 错误文案 + 并发竞态防护）
 │   ├── components/              # 8 个目录化自建组件，见第五章
-│   └── styles/
-│       ├── base.less            # 全局重置与基础排版
-│       └── tokens.less          # CSS 变量令牌（固定亮色）
+│   ├── styles/
+│   │   ├── base.less            # 全局重置与基础排版
+│   │   └── tokens.less          # CSS 变量令牌（固定亮色）
+│   └── __vitest__/              # 单元测试（只测纯逻辑，见 ADR 0005）
 ├── typed-router.d.ts            # 自动路由生成的路由类型，入库并登记到 tsconfig include
 ├── vite.config.ts               # 自动路由插件 / 别名 / /api 代理
 └── tsconfig.json
@@ -178,7 +179,8 @@ pnpm --filter @repo/admin-web run preview  # 预览构建产物
 
 - 开发期 `/api` 由 `vite.config.ts` 的 proxy 转发到 `http://localhost:3000`（`agent-server` 的默认端口），因此本机先把后端跑起来；`baseURL` 留空走同源，生产期由反向代理统一接入，前端不感知后端真实地址。
 - 后端在 `apps/agent-server`，需要先建好管理员账号（或用运维超级令牌调 `POST /api/admin/users` 建一个）才能登录。
-- 质量校验走根脚本：`pnpm lint`（ESLint + Prettier）与 `pnpm test`（本包暂无单测，测试编写位置约定为 `src/__vitest__/`）；改了路由或类型后建议单独跑一次 `pnpm --filter @repo/admin-web run build`，它包含 `vue-tsc --noEmit` 全量类型检查。
+- 单测放 `src/__vitest__/`，只覆盖纯逻辑（分页取数、登录态 store、HTTP 客户端的令牌收口、路由守卫），组件层靠 `vue-tsc` 与实机走查兜底，取舍见 [ADR 0005](../../docs/adr/0005-admin-web-test-scope.md)。跑 `pnpm --filter @repo/admin-web run test`，或在根目录 `pnpm test` 一并执行——测试运行在 node 环境，`localStorage` 与 `fetch` 由 `src/__vitest__/storageStub.ts` 顶替，不依赖真实浏览器。
+- 质量校验走根脚本：`pnpm lint`（ESLint + Prettier）与 `pnpm test`；改了路由或类型后建议单独跑一次 `pnpm --filter @repo/admin-web run build`，它包含 `vue-tsc --noEmit` 全量类型检查。
 
 ---
 

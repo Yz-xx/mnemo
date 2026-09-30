@@ -1,0 +1,13 @@
+{
+  // 测试专用配置：主 tsconfig 把 src/__vitest__ 排除在构建类型检查之外，
+  // 但编辑器（Volar / TS 服务）对「不属于任何项目」的文件会退化成推断项目、
+  // 读不到主配置的 paths，@/* 别名解析失败即整片报红，故单列一份给它。
+  // paths 由主配置继承（相对定义它的 apps/admin-web/tsconfig.json 解析），
+  // include / exclude 必须在此重写（继承来的路径是相对主配置目录的）
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": []
+}

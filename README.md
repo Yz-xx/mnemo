@@ -201,7 +201,7 @@ pnpm --filter @repo/admin-web run dev         # vite dev，默认 5173，/api �
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化 / DES 加解密、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索；后台管理网站暂无单测）
+pnpm test           # 各子包单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化 / DES 加解密、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索、后台管理网站的分页取数 / 登录态 / 令牌收口 / 路由守卫）
 pnpm build          # 全仓构建
 ```
 
