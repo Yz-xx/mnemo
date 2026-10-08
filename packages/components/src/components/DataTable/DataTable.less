@@ -1,0 +1,61 @@
+// 组件样式必须完整包在 repo-components 层内：
+// 消费方任意未分层规则都能覆盖它，无需更高特异性或 !important
+@layer repo-components {
+  .ui-data-table {
+    overflow: hidden;
+    background-color: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-lg);
+
+    &__table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    &__head-cell {
+      padding: 10px 14px;
+      background-color: var(--ui-bg-panel);
+      border-bottom: 1px solid var(--ui-border);
+      color: var(--ui-text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: var(--ui-tracking-label);
+      white-space: nowrap;
+    }
+
+    &__row:last-child .ui-data-table__cell {
+      border-bottom: none;
+    }
+
+    &__row:hover {
+      background-color: var(--ui-bg-hover);
+    }
+
+    &__cell {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--ui-border);
+      color: var(--ui-text);
+      font-size: 13px;
+    }
+
+    // 选择列：固定窄宽并居中，与数据列共用单元格内边距
+    &__select-cell {
+      width: 44px;
+      padding-right: 0;
+      text-align: center;
+
+      input {
+        cursor: pointer;
+        accent-color: var(--ui-primary);
+      }
+    }
+
+    &__hint {
+      margin: 0;
+      padding: 32px;
+      color: var(--ui-text-faint);
+      font-size: 13px;
+      text-align: center;
+    }
+  }
+}

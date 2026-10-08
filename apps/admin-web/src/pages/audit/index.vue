@@ -1,9 +1,7 @@
 <script setup lang="ts">
+import { Search, X } from 'lucide-vue-next';
+import { DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
-import DataTable from '@/components/DataTable';
-import ModalDialog from '@/components/ModalDialog';
-import PageBar from '@/components/PageBar';
-import SearchBar from '@/components/SearchBar';
 import { useAuditPage } from './audit';
 
 const {
@@ -32,7 +30,9 @@ const {
     </header>
 
     <div class="audit__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索操作路径" @search="handleSearch" />
+      <SearchBar v-model:keyword="keyword" placeholder="搜索操作路径" @search="handleSearch">
+        <template #icon><Search :size="15" /></template>
+      </SearchBar>
     </div>
 
     <p v-if="errorMsg" class="audit__error">{{ errorMsg }}</p>
@@ -83,6 +83,7 @@ const {
       @close="detail = null"
       @confirm="detail = null"
     >
+      <template #close-icon><X :size="16" /></template>
       <dl class="audit__detail">
         <template v-for="field in detailFields" :key="field.label">
           <dt class="audit__detail-label">{{ field.label }}</dt>

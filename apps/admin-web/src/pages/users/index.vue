@@ -1,11 +1,7 @@
 <script setup lang="ts">
-import { Plus } from 'lucide-vue-next';
+import { Plus, Search, X } from 'lucide-vue-next';
+import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
-import BatchBar from '@/components/BatchBar';
-import DataTable from '@/components/DataTable';
-import ModalDialog from '@/components/ModalDialog';
-import PageBar from '@/components/PageBar';
-import SearchBar from '@/components/SearchBar';
 import UserFormDialog from '@/components/UserFormDialog';
 import { useUsersPage } from './users';
 
@@ -48,7 +44,9 @@ const {
 <template>
   <div class="users">
     <div class="users__toolbar">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索用户名" @search="handleSearch" />
+      <SearchBar v-model:keyword="keyword" placeholder="搜索用户名" @search="handleSearch">
+        <template #icon><Search :size="15" /></template>
+      </SearchBar>
       <button class="users__create" type="button" @click="openCreate">
         <Plus :size="15" />
         <span>新建用户</span>
@@ -58,6 +56,7 @@ const {
     <p v-if="errorMsg" class="users__error">{{ errorMsg }}</p>
 
     <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+      <template #clear-icon><X :size="13" /></template>
       <button class="users__link" type="button" :disabled="mutating" @click="batchStatus('banned')">
         批量停用
       </button>
@@ -152,6 +151,7 @@ const {
       @close="closeDialog"
       @confirm="confirmDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="users__confirm">
         确定删除用户「{{
           selected?.username
@@ -168,6 +168,7 @@ const {
       @close="closeDialog"
       @confirm="confirmBatchDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="users__confirm">
         确定删除选中的
         {{ selectedKeys.length }} 个账号？其登录会话、对话记录与上传文件会一并清理，操作不可撤销。

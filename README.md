@@ -80,14 +80,14 @@ my-monorepo/
 │       │   ├── layouts/AdminLayout.vue  # 顶栏 + 可收起侧边栏 + 内容区
 │       │   ├── pages/                # 文件式路由页：index（总览）/ users / knowledge / conversations
 │       │   │                         #   / files / logs / audit / tools / config / login / 占位页
-│       │   ├── components/           # 7 个目录化自建组件（DataTable / ModalDialog 等）
+│       │   ├── components/           # 3 个业务弹窗 + 消息趋势图（通用组件已迁至 @repo/components）
 │       │   └── styles/               # base.less + tokens.less（固定亮色令牌）
 │       └── typed-router.d.ts         # 自动路由生成的路由类型（入库并登记 tsconfig include）
 ├── packages/
 │   ├── shared/               # 跨端通用工具库（与业务无关：字符串 / 通用函数 / 字节与时间格式化）
 │   ├── reusable/             # 业务可复用库（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
 │   ├── logger/               # Node 端日志库（级别过滤 / 脱敏 / 按天轮转文件）
-│   └── components/           # 公共 Vue 组件库（Vite 库模式）
+│   └── components/           # 公共 Vue 组件库（Vite 库模式，样式经 @layer 封装）
 ├── docs/                     # 架构决策记录（ADR）
 ├── scripts/                  # dev / build / lint / test 编排脚本
 ├── pnpm-workspace.yaml
@@ -148,14 +148,15 @@ my-monorepo/
 
 各端的设计细节、配置项与构建方式分别维护在各自的 README 中，本文只保留跨端的概览与约定：
 
-| 文档                                                         | 内容范围                                                                                               |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| [apps/agent-server/README.md](./apps/agent-server/README.md) | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建       |
-| [apps/agent-client/README.md](./apps/agent-client/README.md) | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证    |
-| [apps/admin-web/README.md](./apps/admin-web/README.md)       | 后台管理网站的目录结构、技术选型取舍、鉴权与登录态、接口清单、页面与组件、样式令牌、开发构建与后续模块 |
-| [packages/shared/README.md](./packages/shared/README.md)     | 通用工具库的导出索引（字符串 / 通用函数 / 字节与时间格式化）、引用方式与构建                           |
-| [packages/reusable/README.md](./packages/reusable/README.md) | 业务可复用库的导出索引（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）、引用方式与构建                |
-| [packages/logger/README.md](./packages/logger/README.md)     | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                   |
+| 文档                                                             | 内容范围                                                                                               |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [apps/agent-server/README.md](./apps/agent-server/README.md)     | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建       |
+| [apps/agent-client/README.md](./apps/agent-client/README.md)     | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证    |
+| [apps/admin-web/README.md](./apps/admin-web/README.md)           | 后台管理网站的目录结构、技术选型取舍、鉴权与登录态、接口清单、页面与组件、样式令牌、开发构建与后续模块 |
+| [packages/shared/README.md](./packages/shared/README.md)         | 通用工具库的导出索引（字符串 / 通用函数 / 字节与时间格式化）、引用方式与构建                           |
+| [packages/reusable/README.md](./packages/reusable/README.md)     | 业务可复用库的导出索引（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）、引用方式与构建                |
+| [packages/logger/README.md](./packages/logger/README.md)         | Node 端日志库的导出能力（级别过滤 / 脱敏 / 格式化 / 文件轮转）、服务名前缀约定与构建                   |
+| [packages/components/README.md](./packages/components/README.md) | 公共组件库的组件清单、接入方式、`@layer` 样式与 `--ui-*` 令牌契约、构建与测试                          |
 
 ---
 

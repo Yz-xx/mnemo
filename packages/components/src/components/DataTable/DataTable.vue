@@ -1,5 +1,5 @@
 <script lang="ts">
-// 列描述放普通 <script> 块导出：props 类型里用到它，Volar 会为组件生成导出声明，
+// 列描述放普通 <script> 块导出：props 类型里用到它，消费方生成组件声明时
 // 若类型不可见会报 TS4025（用到了私有名字）
 export interface ColumnSpec {
   /** 字段名，同时作为自定义单元格的插槽名 */
@@ -74,11 +74,11 @@ function toggleRow(key: string | number): void {
 </script>
 
 <template>
-  <div class="data-table">
-    <table class="data-table__table">
+  <div class="ui-data-table">
+    <table class="ui-data-table__table">
       <thead>
         <tr>
-          <th v-if="selectable" class="data-table__head-cell data-table__select-cell">
+          <th v-if="selectable" class="ui-data-table__head-cell ui-data-table__select-cell">
             <input
               type="checkbox"
               :checked="allChecked"
@@ -91,7 +91,7 @@ function toggleRow(key: string | number): void {
           <th
             v-for="column in columns"
             :key="column.key"
-            class="data-table__head-cell"
+            class="ui-data-table__head-cell"
             :style="{ width: column.width, textAlign: column.align ?? 'left' }"
           >
             {{ column.label }}
@@ -99,8 +99,8 @@ function toggleRow(key: string | number): void {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in rows" :key="rowKey(row)" class="data-table__row">
-          <td v-if="selectable" class="data-table__cell data-table__select-cell">
+        <tr v-for="row in rows" :key="rowKey(row)" class="ui-data-table__row">
+          <td v-if="selectable" class="ui-data-table__cell ui-data-table__select-cell">
             <input
               type="checkbox"
               :checked="selectedSet.has(rowKey(row))"
@@ -111,7 +111,7 @@ function toggleRow(key: string | number): void {
           <td
             v-for="column in columns"
             :key="column.key"
-            class="data-table__cell"
+            class="ui-data-table__cell"
             :style="{ textAlign: column.align ?? 'left' }"
           >
             <slot :name="column.key" :row="row">{{ cellValue(row, column.key) }}</slot>
@@ -119,8 +119,8 @@ function toggleRow(key: string | number): void {
         </tr>
       </tbody>
     </table>
-    <p v-if="loading" class="data-table__hint">加载中…</p>
-    <p v-else-if="rows.length === 0" class="data-table__hint">{{ emptyText }}</p>
+    <p v-if="loading" class="ui-data-table__hint">加载中…</p>
+    <p v-else-if="rows.length === 0" class="ui-data-table__hint">{{ emptyText }}</p>
   </div>
 </template>
 

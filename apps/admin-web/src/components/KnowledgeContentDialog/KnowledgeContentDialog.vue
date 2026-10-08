@@ -3,9 +3,10 @@
 // 编辑态提交整体替换（服务端重切分重向量化）。editing 由父级控制：
 // 保存成功后父级回灌新内容并退出编辑态，失败时保持编辑态并经 error 显示原因。
 import type { AdminKnowledgeContent } from '@/api/types';
+import { X } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
+import { ModalDialog } from '@repo/components';
 import { formatTime } from '@repo/shared';
-import ModalDialog from '../ModalDialog';
 
 const props = withDefaults(
   defineProps<{
@@ -61,6 +62,7 @@ function handleConfirm(): void {
     @close="emit('close')"
     @confirm="handleConfirm"
   >
+    <template #close-icon><X :size="16" /></template>
     <div v-if="!editing" class="knowledge-content">
       <p class="knowledge-content__meta">
         <span>分片 {{ initial.document.chunks }} 段</span>

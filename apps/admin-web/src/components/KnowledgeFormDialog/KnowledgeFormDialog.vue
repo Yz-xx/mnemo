@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // 新增全局文档表单：标题 + 正文。入库会同步切分与向量化，成功后由父级回读列表；
 // 失败信息经 error 回填，弹窗保留已填内容——向量化服务未起来这类问题修好环境即可重试。
+import { X } from 'lucide-vue-next';
 import { ref } from 'vue';
-import ModalDialog from '../ModalDialog';
+import { ModalDialog } from '@repo/components';
 
 withDefaults(defineProps<{ loading?: boolean; error?: string }>(), { loading: false, error: '' });
 
@@ -34,6 +35,7 @@ function handleConfirm(): void {
     @close="emit('close')"
     @confirm="handleConfirm"
   >
+    <template #close-icon><X :size="16" /></template>
     <div class="knowledge-form">
       <label class="knowledge-form__field">
         <span class="knowledge-form__label">标题</span>

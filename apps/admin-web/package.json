@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/components": "workspace:*",
     "@repo/reusable": "workspace:*",
     "@repo/shared": "workspace:*",
     "echarts": "^5.6.0",

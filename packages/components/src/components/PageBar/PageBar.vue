@@ -39,10 +39,10 @@ function jump(): void {
 </script>
 
 <template>
-  <div class="page-bar">
-    <span class="page-bar__info">共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
+  <div class="ui-page-bar">
+    <span class="ui-page-bar__info">共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
     <button
-      class="page-bar__button"
+      class="ui-page-bar__button"
       type="button"
       :disabled="disabled || page <= 1"
       @click="go(page - 1)"
@@ -50,26 +50,26 @@ function jump(): void {
       上一页
     </button>
     <button
-      class="page-bar__button"
+      class="ui-page-bar__button"
       type="button"
       :disabled="disabled || page >= totalPages"
       @click="go(page + 1)"
     >
       下一页
     </button>
-    <span class="page-bar__jump">
-      <span class="page-bar__jump-label">跳至</span>
+    <span class="ui-page-bar__jump">
+      <span class="ui-page-bar__jump-label">跳至</span>
       <input
         v-model="jumpText"
-        class="page-bar__input"
+        class="ui-page-bar__input"
         type="text"
         inputmode="numeric"
         :disabled="disabled"
         :aria-label="`跳转到指定页，共 ${totalPages} 页`"
         @keyup.enter="jump"
       />
-      <span class="page-bar__jump-label">页</span>
-      <button class="page-bar__button" type="button" :disabled="disabled" @click="jump">
+      <span class="ui-page-bar__jump-label">页</span>
+      <button class="ui-page-bar__button" type="button" :disabled="disabled" @click="jump">
         跳转
       </button>
     </span>

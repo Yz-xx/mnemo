@@ -1,0 +1,52 @@
+// 组件库令牌默认值：统一声明在 repo-components 层内，
+// 消费方未分层的 :root 覆盖自动生效（级联层优先于特异性）。
+// 取值形式为「吸附消费方同名令牌 + 兜底值」：消费方改了 --text，
+// 组件库外观随之改变；要单独调组件库则覆盖 --ui-*。
+@layer repo-components {
+  :root {
+    --ui-font-body: var(--font-body, system-ui, -apple-system, 'Segoe UI', sans-serif);
+    --ui-font-mono: var(--font-mono, ui-monospace, Consolas, monospace);
+
+    // 字距：小标签疏排、数字略放宽，避免组件样式里出现手写字距值
+    --ui-tracking-label: var(--tracking-label, 0.12em);
+    --ui-tracking-mono: var(--tracking-mono, 0.02em);
+
+    --ui-bg: var(--bg, #ffffff);
+    --ui-bg-panel: var(--bg-panel, #f6f7f9);
+    --ui-bg-hover: var(--bg-hover, #eef0f3);
+    --ui-bg-active: var(--bg-active, #e6e9ee);
+
+    --ui-text: var(--text, #14181f);
+    --ui-text-muted: var(--text-muted, #545c68);
+    --ui-text-faint: var(--text-faint, #6e7681);
+    --ui-text-inverse: var(--text-inverse, #ffffff);
+
+    --ui-border: var(--border, #e4e7eb);
+    --ui-border-strong: var(--border-strong, #cfd4da);
+
+    --ui-primary: var(--primary, #b8860b);
+    --ui-primary-strong: var(--primary-strong, #8a6508);
+    --ui-primary-soft: var(--primary-soft, #f5eddc);
+
+    // -strong 用于「深色语义字压浅色底」的场景（状态徽标、错误提示条）
+    --ui-danger: var(--danger, #dc2626);
+    --ui-danger-strong: var(--danger-strong, #b91c1c);
+    --ui-danger-soft: var(--danger-soft, #fee2e2);
+    --ui-success: var(--success, #16a34a);
+    --ui-success-strong: var(--success-strong, #15803d);
+    --ui-success-soft: var(--success-soft, #dcfce7);
+    --ui-warning: var(--warning, #d97706);
+    --ui-warning-strong: var(--warning-strong, #b45309);
+    --ui-warning-soft: var(--warning-soft, #fef3c7);
+
+    --ui-mask: var(--mask, rgba(20, 24, 31, 0.4));
+
+    --ui-radius-sm: var(--radius-sm, 2px);
+    --ui-radius: var(--radius, 3px);
+    --ui-radius-lg: var(--radius-lg, 4px);
+
+    --ui-shadow: var(--shadow, 0 12px 32px rgba(20, 24, 31, 0.12));
+
+    --ui-transition: var(--transition, 150ms ease);
+  }
+}

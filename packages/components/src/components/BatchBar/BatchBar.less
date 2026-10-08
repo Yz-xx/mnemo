@@ -1,0 +1,43 @@
+// 组件样式必须完整包在 repo-components 层内：
+// 消费方任意未分层规则都能覆盖它，无需更高特异性或 !important
+@layer repo-components {
+  .ui-batch-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background-color: var(--ui-bg-active);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+
+    &__count {
+      color: var(--ui-text-muted);
+      font-family: var(--ui-font-mono);
+      font-size: 12px;
+      letter-spacing: var(--ui-tracking-mono);
+    }
+
+    &__actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-left: auto;
+    }
+
+    &__clear {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0;
+      background-color: transparent;
+      border: none;
+      color: var(--ui-text-faint);
+      font-size: 12px;
+      transition: color var(--ui-transition);
+
+      &:hover {
+        color: var(--ui-text);
+      }
+    }
+  }
+}

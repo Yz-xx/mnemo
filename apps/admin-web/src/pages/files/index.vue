@@ -1,12 +1,9 @@
 <script setup lang="ts">
 // 文件管理：管理视角列出全部用户的上传文件，可清理。
 // 列表只展示元数据（文件名、类型、大小、归属），文件字节留在服务端，不在此页预览。
+import { Search, X } from 'lucide-vue-next';
+import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
-import BatchBar from '@/components/BatchBar';
-import DataTable from '@/components/DataTable';
-import ModalDialog from '@/components/ModalDialog';
-import PageBar from '@/components/PageBar';
-import SearchBar from '@/components/SearchBar';
 import { useFilesPage } from './files';
 
 const {
@@ -39,12 +36,15 @@ const {
     </header>
 
     <div class="files__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索文件名" @search="handleSearch" />
+      <SearchBar v-model:keyword="keyword" placeholder="搜索文件名" @search="handleSearch">
+        <template #icon><Search :size="15" /></template>
+      </SearchBar>
     </div>
 
     <p v-if="errorMsg" class="files__error">{{ errorMsg }}</p>
 
     <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+      <template #clear-icon><X :size="13" /></template>
       <button class="files__link files__link--danger" type="button" @click="confirmingBatch = true">
         批量删除
       </button>
@@ -98,6 +98,7 @@ const {
       @close="pendingDelete = null"
       @confirm="confirmDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="files__confirm">
         确定删除文件「{{ pendingDelete.name }}」？服务端存放的原始字节会一并清除，操作不可撤销。
       </p>
@@ -112,6 +113,7 @@ const {
       @close="confirmingBatch = false"
       @confirm="confirmBatchDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="files__confirm">
         确定删除选中的
         {{ selectedKeys.length }} 个文件？服务端存放的原始字节会一并清除，操作不可撤销。

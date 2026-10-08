@@ -54,7 +54,7 @@ apps/admin-web/
 │   │   └── [...all].vue         # 未匹配路径的兜底页
 │   ├── composables/
 │   │   └── usePagedList.ts      # 列表页共用的分页取数（页码 / 加载态 / 错误文案 + 并发竞态防护）
-│   ├── components/              # 8 个目录化自建组件，见第五章
+│   ├── components/              # 4 个应用内组件（3 个业务弹窗 + 消息趋势图），见第五章
 │   ├── styles/
 │   │   ├── base.less            # 全局重置与基础排版
 │   │   └── tokens.less          # CSS 变量令牌（固定亮色）
@@ -145,18 +145,18 @@ apps/admin-web/
 - **登录**：独立布局，成功即进总览。
 - **[`[...all].vue`](../admin-web/src/pages/[...all].vue)**：仅兜底未匹配的路径，侧边栏入口已全部指向具体页面。
 
-**组件**（均按 `Xxx/{index.ts, Xxx.vue, Xxx.less}` 目录化，`index.ts` 用 `export { default } from './Xxx.vue'` 导出）
+**组件**（应用内仅剩 4 个，均按 `Xxx/{index.ts, Xxx.vue, Xxx.less}` 目录化，`index.ts` 用 `export { default } from './Xxx.vue'` 导出）
 
-| 组件                  | 职责                                                                                                                                                         |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DataTable`           | 泛型表格（`generic="T extends object"`），列由 `ColumnSpec` 数组描述；`selectable` 打开行选择，经 `v-model:selected-keys` 双向绑定，表头复选框只作用于当前页 |
-| `PageBar`             | 分页条，受控于 `page` / `pageSize` / `total`，含上一页 / 下一页与「跳至指定页」（越界收敛到首尾页）                                                          |
-| `BatchBar`            | 批量操作条：展示已选条数，动作按钮由默认插槽提供，另带取消选择                                                                                               |
-| `SearchBar`           | 关键词输入 + 搜索按钮                                                                                                                                        |
-| `ModalDialog`         | 弹窗骨架（遮罩、标题栏、内容插槽、底部取消与确认），`loading` 期间锁关闭                                                                                     |
-| `UserFormDialog`      | 基于 `ModalDialog` 的新建用户表单（用户名 / 密码 / 角色），可选角色由父级按调用者身份传入（非超管只能建客户端账号）                                          |
-| `KnowledgeFormDialog` | 基于 `ModalDialog` 的新增全局文档表单（标题 / 正文）                                                                                                         |
-| `MessageTrendChart`   | 基于 echarts 的消息趋势折线图，随容器尺寸自适应                                                                                                              |
+`PageBar` / `DataTable` / `SearchBar` / `ModalDialog` / `BatchBar` 已迁出到公共组件库 `@repo/components`：改从该包具名引入（`import { DataTable, ModalDialog } from '@repo/components'`），样式已由 `main.ts` 一次性 `import '@repo/components/style.css'` 导入。组件库样式包在 `@layer repo-components` 内，应用侧未分层的规则天然覆盖它，不需要更高的特异性或 `!important`。
+
+迁出组件的图标按组件库规范改由消费方经具名插槽传入——`SearchBar` 的 `#icon` 传 `<Search :size="15" />`，`ModalDialog` 的 `#close-icon` 传 `<X :size="16" />`，`BatchBar` 的 `#clear-icon` 传 `<X :size="13" />`；组件库自身不依赖任何图标库，也就不锁死消费方的图标方案。改动组件库样式契约见 [packages/components/README.md](../../packages/components/README.md)。
+
+| 组件                     | 职责                                                                                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UserFormDialog`         | 基于 `ModalDialog` 的新建用户表单（用户名 / 密码 / 角色），可选角色由父级按调用者身份传入（非超管只能建客户端账号）                             |
+| `KnowledgeFormDialog`    | 基于 `ModalDialog` 的新增全局文档表单（标题 / 正文）                                                                                            |
+| `KnowledgeContentDialog` | 基于 `ModalDialog` 的文档查看与编辑弹窗，查看态展示原文（旧文档为分片拼接，带提示），确认按钮切到编辑态，提交为整体替换（服务端重切分重向量化） |
+| `MessageTrendChart`      | 基于 echarts 的消息趋势折线图，随容器尺寸自适应                                                                                                 |
 
 ---
 

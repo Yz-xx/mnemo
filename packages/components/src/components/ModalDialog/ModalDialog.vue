@@ -2,7 +2,7 @@
 // 通用弹窗：遮罩 + 卡片 + 标题栏 + 内容插槽 + 底部按钮。
 // 关闭方式（点遮罩、Esc、右上角 ×）与请求中的锁定都收在这里，
 // 调用方只需给内容与 confirm 事件，不必各自复刻遮罩、按钮与关闭逻辑。
-import { X } from 'lucide-vue-next';
+// 关闭图标经具名插槽 close-icon 由消费方传入：组件库不自带图标依赖。
 import { onBeforeUnmount, onMounted } from 'vue';
 
 const props = withDefaults(
@@ -37,20 +37,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 </script>
 
 <template>
-  <div class="modal">
-    <div class="modal__mask" @click="requestClose" />
-    <div class="modal__card" :style="{ width }" role="dialog" aria-modal="true">
-      <header class="modal__head">
-        <h2 class="modal__title">{{ title }}</h2>
-        <button class="modal__close" type="button" title="关闭" @click="requestClose">
-          <X :size="16" />
+  <div class="ui-modal">
+    <div class="ui-modal__mask" @click="requestClose" />
+    <div class="ui-modal__card" :style="{ width }" role="dialog" aria-modal="true">
+      <header class="ui-modal__head">
+        <h2 class="ui-modal__title">{{ title }}</h2>
+        <button class="ui-modal__close" type="button" title="关闭" @click="requestClose">
+          <slot name="close-icon" />
         </button>
       </header>
-      <div class="modal__body"><slot /></div>
-      <footer class="modal__foot">
+      <div class="ui-modal__body"><slot /></div>
+      <footer class="ui-modal__foot">
         <button
           v-if="cancelText !== null"
-          class="modal__button"
+          class="ui-modal__button"
           type="button"
           :disabled="loading"
           @click="requestClose"
@@ -58,8 +58,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
           {{ cancelText }}
         </button>
         <button
-          class="modal__button"
-          :class="danger ? 'modal__button--danger' : 'modal__button--primary'"
+          class="ui-modal__button"
+          :class="danger ? 'ui-modal__button--danger' : 'ui-modal__button--primary'"
           type="button"
           :disabled="loading"
           @click="emit('confirm')"

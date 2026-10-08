@@ -1,13 +1,9 @@
 <script setup lang="ts">
-import { Plus } from 'lucide-vue-next';
+import { Plus, Search, X } from 'lucide-vue-next';
+import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
-import BatchBar from '@/components/BatchBar';
-import DataTable from '@/components/DataTable';
 import KnowledgeContentDialog from '@/components/KnowledgeContentDialog';
 import KnowledgeFormDialog from '@/components/KnowledgeFormDialog';
-import ModalDialog from '@/components/ModalDialog';
-import PageBar from '@/components/PageBar';
-import SearchBar from '@/components/SearchBar';
 import { useKnowledgePage } from './knowledge';
 
 const {
@@ -48,7 +44,9 @@ const {
 <template>
   <div class="knowledge">
     <div class="knowledge__toolbar">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索文档标题" @search="handleSearch" />
+      <SearchBar v-model:keyword="keyword" placeholder="搜索文档标题" @search="handleSearch">
+        <template #icon><Search :size="15" /></template>
+      </SearchBar>
       <button class="knowledge__create" type="button" @click="openCreate">
         <Plus :size="15" />
         <span>新增全局文档</span>
@@ -58,6 +56,7 @@ const {
     <p v-if="errorMsg" class="knowledge__error">{{ errorMsg }}</p>
 
     <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+      <template #clear-icon><X :size="13" /></template>
       <button
         class="knowledge__link knowledge__link--danger"
         type="button"
@@ -137,6 +136,7 @@ const {
       @close="closeDialog"
       @confirm="confirmDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="knowledge__confirm">
         确定删除文档「{{ selected?.title }}」？其全部向量片段会一并清除，操作不可撤销。
       </p>
@@ -151,6 +151,7 @@ const {
       @close="closeDialog"
       @confirm="confirmBatchDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="knowledge__confirm">
         确定删除选中的 {{ selectedKeys.length }} 篇文档？其全部向量片段会一并清除，操作不可撤销。
       </p>

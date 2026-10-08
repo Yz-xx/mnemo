@@ -2,8 +2,11 @@
   "name": "@repo/components",
   "version": "0.0.0",
   "private": true,
-  "description": "基于 Vue 3 的共享组件库",
+  "description": "跨 web 应用复用的 Vue 3 组件库（内部使用，不对外发布）",
   "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -19,9 +22,13 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "test": "vitest run --passWithNoTests"
   },
   "peerDependencies": {
-    "vue": "^3.4.0"
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "less": "^4.9.1"
   }
 }

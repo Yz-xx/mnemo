@@ -4,8 +4,9 @@
 // 可授予的角色由父级按调用者身份给（admin 只有「普通用户」一项，见 docs/adr/0006），
 // 因此只有一项时不渲染选择器，免得出现一个只能选一项的下拉。
 import type { RoleOption, UserRole } from '@/api/types';
+import { X } from 'lucide-vue-next';
 import { ref } from 'vue';
-import ModalDialog from '../ModalDialog';
+import { ModalDialog } from '@repo/components';
 
 withDefaults(
   defineProps<{
@@ -48,6 +49,7 @@ function handleConfirm(): void {
     @close="emit('close')"
     @confirm="handleConfirm"
   >
+    <template #close-icon><X :size="16" /></template>
     <div class="user-form">
       <label class="user-form__field">
         <span class="user-form__label">用户名</span>

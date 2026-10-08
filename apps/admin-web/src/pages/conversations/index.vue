@@ -1,10 +1,7 @@
 <script setup lang="ts">
+import { Search, X } from 'lucide-vue-next';
+import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
-import BatchBar from '@/components/BatchBar';
-import DataTable from '@/components/DataTable';
-import ModalDialog from '@/components/ModalDialog';
-import PageBar from '@/components/PageBar';
-import SearchBar from '@/components/SearchBar';
 import { useConversationsPage } from './conversations';
 
 const {
@@ -41,12 +38,15 @@ const {
     </header>
 
     <div class="conversations__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索会话标题" @search="handleSearch" />
+      <SearchBar v-model:keyword="keyword" placeholder="搜索会话标题" @search="handleSearch">
+        <template #icon><Search :size="15" /></template>
+      </SearchBar>
     </div>
 
     <p v-if="errorMsg" class="conversations__error">{{ errorMsg }}</p>
 
     <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+      <template #clear-icon><X :size="13" /></template>
       <button
         class="conversations__link conversations__link--danger"
         type="button"
@@ -108,6 +108,7 @@ const {
       @close="closeDetail()"
       @confirm="closeDetail()"
     >
+      <template #close-icon><X :size="16" /></template>
       <p v-if="detailLoading" class="conversations__hint">加载中…</p>
       <div v-else-if="detail" class="conversations__detail">
         <p class="conversations__meta">
@@ -143,6 +144,7 @@ const {
       @close="pendingDelete = null"
       @confirm="confirmDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="conversations__confirm">
         确定删除会话「{{ pendingDelete.title }}」？其全部消息会一并清除，操作不可撤销。
       </p>
@@ -157,6 +159,7 @@ const {
       @close="confirmingBatch = false"
       @confirm="confirmBatchDelete"
     >
+      <template #close-icon><X :size="16" /></template>
       <p class="conversations__confirm">
         确定删除选中的 {{ selectedKeys.length }} 条会话？其全部消息会一并清除，操作不可撤销。
       </p>

@@ -1,0 +1,72 @@
+// 组件样式必须完整包在 repo-components 层内：
+// 消费方任意未分层规则都能覆盖它，无需更高特异性或 !important
+@layer repo-components {
+  .ui-page-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+
+    &__info {
+      margin-right: auto;
+      color: var(--ui-text-muted);
+      font-size: 13px;
+    }
+
+    &__jump {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    &__jump-label {
+      color: var(--ui-text-muted);
+      font-size: 13px;
+    }
+
+    &__input {
+      width: 56px;
+      height: 30px;
+      padding: 0 6px;
+      background-color: var(--ui-bg);
+      border: 1px solid var(--ui-border);
+      border-radius: var(--ui-radius);
+      color: var(--ui-text);
+      font-family: var(--ui-font-mono);
+      font-size: 13px;
+      text-align: center;
+      transition: border-color var(--ui-transition);
+
+      &:focus {
+        border-color: var(--ui-primary);
+        outline: none;
+      }
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+    }
+
+    &__button {
+      height: 30px;
+      padding: 0 12px;
+      background-color: var(--ui-bg);
+      border: 1px solid var(--ui-border);
+      border-radius: var(--ui-radius);
+      color: var(--ui-text-muted);
+      font-size: 13px;
+      transition: all var(--ui-transition);
+
+      &:hover:not(:disabled) {
+        background-color: var(--ui-bg-hover);
+        color: var(--ui-text);
+      }
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+    }
+  }
+}

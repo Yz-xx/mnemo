@@ -2,11 +2,9 @@
 // API 日志：服务端在响应结束时把每个请求的汇总落库，本页只做检索与详情查看。
 // 过滤三个维度（路径关键词、请求方法、状态档位）都是服务端能力，前端不本地过滤，
 // 避免列表与总数对不上。
+import { Search, X } from 'lucide-vue-next';
+import { DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
-import DataTable from '@/components/DataTable';
-import ModalDialog from '@/components/ModalDialog';
-import PageBar from '@/components/PageBar';
-import SearchBar from '@/components/SearchBar';
 import { useLogsPage } from './logs';
 
 const {
@@ -38,7 +36,9 @@ const {
     </header>
 
     <div class="logs__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索请求路径" @search="handleSearch" />
+      <SearchBar v-model:keyword="keyword" placeholder="搜索请求路径" @search="handleSearch">
+        <template #icon><Search :size="15" /></template>
+      </SearchBar>
       <div class="logs__filters">
         <select v-model="method" class="logs__select" @change="handleSearch">
           <option value="">全部方法</option>
@@ -103,6 +103,7 @@ const {
       @close="detail = null"
       @confirm="detail = null"
     >
+      <template #close-icon><X :size="16" /></template>
       <dl class="logs__detail">
         <template v-for="field in detailFields" :key="field.label">
           <dt class="logs__detail-label">{{ field.label }}</dt>
