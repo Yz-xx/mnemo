@@ -209,7 +209,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 - **向量一致性**：首次入库时把向量模型名与维度登记在文档表，之后入库与检索都会校验；模型或维度变化时直接报错并提示重建，避免按较短维度截断算出错误的相似度；
 - 切分参数：`chunkSize = 500`、`chunkOverlap = 80`，检索 `topK = 4`、相似度下限 `minScore = 0.6`（均可用环境变量覆盖）；
 - 低于相似度下限的片段视为噪声丢弃，因此命中条数可能少于 `topK`；
-- 向量化失败（如本地 embedding 服务未启动）时接口返回 **500**（5xx 对外统一一个状态码）与可读的失败原因（提示中带上当前向量化服务地址，便于区分“服务未启动”与“模型或维度不符”）；
+- 向量化失败（如本地 embedding 服务未启动）时接口返回 **500**（依赖失败一律 500；503 是并发闸门在硬水位处签发的过载拒绝专用码，不在此列）与可读的失败原因（提示中带上当前向量化服务地址，便于区分“服务未启动”与“模型或维度不符”）；
 - 删除文档会级联清理其全部片段，保持索引与文档一致。
 
 ## 九、会话与消息持久化（MySQL）
@@ -244,6 +244,8 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                                                           |
 | `MYSQL_PASSWORD`                                               | 空                          | MySQL 密码（默认留空，部署时注入，见第十一章）                         |
 | `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                                               |
+| `MYSQL_QUEUE_LIMIT`                                            | `32`                        | 池满后的等待队列长度上限（`0` 表示不排队，池满即失败）                 |
+| `MYSQL_CONNECT_TIMEOUT_MS`                                     | `10000`                     | 建连超时（毫秒），MySQL 不可达时尽快失败                               |
 | `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                                                 |
 | `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                                               |
 | `LLM_THINKING`                                                 | `false`                     | 是否输出推理链（thinking）：仅对 Ollama 生效，且需模型自身支持         |
@@ -272,6 +274,27 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `UPLOAD_MAX_FILES`                                             | `1`                         | 单请求文件数上限                                                       |
 | `UPLOAD_ALLOWED_TYPES`                                         | `docx,xlsx,pdf,png,jpg`     | 允许的扩展名白名单，与 magic bytes 判定结果比对                        |
 | `UPLOAD_DIR`                                                   | `<数据目录>/uploads`        | 上传文件落盘根目录                                                     |
+| `HTTP_HEADERS_TIMEOUT_MS`                                      | `20000`                     | 请求头接收超时（毫秒）                                                 |
+| `HTTP_REQUEST_TIMEOUT_MS`                                      | `120000`                    | 整个请求（头 + 体）接收超时（毫秒），SSE 响应期不受它约束              |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS`                                   | `65000`                     | keep-alive 空闲连接保持时长（毫秒）                                    |
+| `HTTP_MAX_REQUESTS_PER_SOCKET`                                 | `1000`                      | 单条连接可复用的最大请求数（`0` 表示不限）                             |
+| `CONCURRENCY_CHAT_MAX_IN_FLIGHT`                               | `8`                         | 对话流档硬水位（在途上限），达到即拒绝                                 |
+| `CONCURRENCY_CHAT_SOFT_LIMIT`                                  | `6`                         | 对话流档软水位，超过即进入有界队列等待                                 |
+| `CONCURRENCY_CHAT_QUEUE_LIMIT`                                 | `32`                        | 对话流档排队长度上限                                                   |
+| `CONCURRENCY_CHAT_QUEUE_TIMEOUT_MS`                            | `20000`                     | 对话流档排队等待上限（毫秒），超时即拒绝                               |
+| `CONCURRENCY_UPLOAD_MAX_IN_FLIGHT`                             | `2`                         | 上传解析档硬水位（在途上限）                                           |
+| `CONCURRENCY_UPLOAD_SOFT_LIMIT`                                | `1`                         | 上传解析档软水位                                                       |
+| `CONCURRENCY_UPLOAD_QUEUE_LIMIT`                               | `8`                         | 上传解析档排队长度上限                                                 |
+| `CONCURRENCY_UPLOAD_QUEUE_TIMEOUT_MS`                          | `10000`                     | 上传解析档排队等待上限（毫秒）                                         |
+| `CONCURRENCY_CRUD_MAX_IN_FLIGHT`                               | `32`                        | 普通读写档硬水位（在途上限）                                           |
+| `CONCURRENCY_CRUD_SOFT_LIMIT`                                  | `24`                        | 普通读写档软水位                                                       |
+| `CONCURRENCY_CRUD_QUEUE_LIMIT`                                 | `64`                        | 普通读写档排队长度上限                                                 |
+| `CONCURRENCY_CRUD_QUEUE_TIMEOUT_MS`                            | `5000`                      | 普通读写档排队等待上限（毫秒）                                         |
+| `CHAT_MAX_DURATION_MS`                                         | `180000`                    | 单轮对话最长时长（毫秒），到点中断并按已产出收尾                       |
+| `SSE_DRAIN_TIMEOUT_MS`                                         | `30000`                     | SSE 背压：写缓冲满后等待 `drain` 的上限（毫秒），超时按慢客户端断开    |
+| `SHUTDOWN_GRACE_MS`                                            | `15000`                     | 优雅停机：停止接单后等待在途请求收尾的上限（毫秒）                     |
+
+并发闸门是**进程内状态**：进程重启即清零，多实例下各算各的，不能当作全局配额（见 [ADR 0010](../../docs/adr/0010-concurrency-governance.md)）。过载时返回 `503` 并附 `Retry-After`；健康检查与登录接口不挂闸门，过载时仍可观测、仍能进后台。默认阈值只保证不雪崩，吞吐基线须按容量模型压测后校准。
 
 对话模型与向量模型**分开配置**：DeepSeek 不提供 embedding 接口，所以即便对话走线上，向量仍可继续使用本地 Ollama。
 

@@ -10,16 +10,22 @@ import { createUploadMiddleware } from '../../middleware/upload.js';
 /** 展示用文件名的保留长度：只存数据库、不参与拼路径，截断是为免超出列宽与界面排版 */
 const NAME_MAX_LENGTH = 180;
 
-/** 本模块用到的依赖：文件存储与上传配置 */
-type FilesDependencies = Pick<AppDependencies, 'files' | 'config'>;
+/** 本模块用到的依赖：文件存储、上传配置与分档闸门 */
+type FilesDependencies = Pick<AppDependencies, 'files' | 'config' | 'guard'>;
 
 /** 文件接口：上传与按 ID 下载（下载同时服务于应用户要求由智能体生成的导出文件） */
 export function createFilesRouter(deps: FilesDependencies): Router {
   const router = Router();
 
-  router.post('/', createUploadMiddleware(deps.config.upload), (req, res) =>
-    handleUploadFile(deps, req, res),
+  // 上传解析会阻塞事件循环，单独入上传档；下载只是轻量字节转发，入普通读写档
+  router.post(
+    '/',
+    deps.guard.middleware('upload'),
+    createUploadMiddleware(deps.config.upload),
+    (req, res) => handleUploadFile(deps, req, res),
   );
+  // 下载只是轻量字节转发，入普通读写档；先挂闸门再注册路由，保持路径参数的原有类型推断
+  router.use('/:id/download', deps.guard.middleware('crud'));
   router.get('/:id/download', (req, res) => handleDownloadFile(deps, req, res));
 
   return router;

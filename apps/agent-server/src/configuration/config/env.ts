@@ -27,6 +27,10 @@ export interface MysqlConfig {
   user: string;
   password: string;
   database: string;
+  /** 池满后的等待队列长度上限：0 表示不排队（池满即失败），避免等待时间无界增长 */
+  queueLimit: number;
+  /** 建立单条连接的超时（毫秒）：MySQL 不可达时尽快失败，不让请求一直挂着 */
+  connectTimeoutMs: number;
 }
 
 /** 上下文治理配置：窗口预算与触发比例，以及单轮工具结果的额度占比 */
@@ -41,11 +45,58 @@ export interface ContextConfig {
   toolRatio: number;
 }
 
+/**
+ * 单档闸门的水位与队列：软水位之上开始排队，硬水位之上直接拒绝。
+ * 对话流 / 上传解析 / 普通读写三档各持一份，配额互不挤占（见 docs/adr/0010 决策 5）。
+ */
+export interface GateConfig {
+  /** 硬水位（在途上限）：达到即拒绝，同时是放行的并发上限 */
+  maxInFlight: number;
+  /** 软水位：在途达到它后新请求改为排队，恒不大于 maxInFlight */
+  softLimit: number;
+  /** 队列长度上限：队列满即拒绝，保证等待时间有上界 */
+  queueLimit: number;
+  /** 排队等待上限（毫秒）：超时即拒绝 */
+  queueTimeoutMs: number;
+}
+
+/** 并发治理配置：分档闸门水位，以及单轮时长、背压与停机宽限 */
+export interface ConcurrencyConfig {
+  /** 对话流档：单轮占用长，单独配额 */
+  chat: GateConfig;
+  /** 上传解析档：CPU 密集，单独配额 */
+  upload: GateConfig;
+  /** 普通读写档：会话 / 文件 / 知识库 / 管理端，配额较宽 */
+  crud: GateConfig;
+  /** 单轮对话最长时长（毫秒）：到点中断并按已产出收尾，防止半死连接永久占住额度 */
+  chatMaxDurationMs: number;
+  /** SSE 背压：写缓冲满后等待 drain 的上限（毫秒），超时按慢客户端断开 */
+  sseDrainTimeoutMs: number;
+  /** 优雅停机：停止接单后等待在途请求收尾的上限（毫秒） */
+  shutdownGraceMs: number;
+}
+
+/** HTTP 层超时与连接回收：防止半死连接永久占用连接与额度 */
+export interface HttpConfig {
+  /** 请求头接收超时（毫秒） */
+  headersTimeoutMs: number;
+  /** 整个请求（头 + 体）接收超时（毫秒）；SSE 的响应期本就不受它约束 */
+  requestTimeoutMs: number;
+  /** keep-alive 空闲连接保持时长（毫秒） */
+  keepAliveTimeoutMs: number;
+  /** 单条连接可复用的最大请求数：0 表示不限 */
+  maxRequestsPerSocket: number;
+}
+
 export interface AppConfig {
   port: number;
   dataDir: string;
   log: LogConfig;
   mysql: MysqlConfig;
+  /** HTTP 服务端超时与连接回收 */
+  http: HttpConfig;
+  /** 并发治理：分档闸门与过载兜底 */
+  concurrency: ConcurrencyConfig;
   llm: {
     provider: LlmProvider;
     temperature: number;
@@ -113,6 +164,31 @@ function toNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** 非负整数：0 有意义的计数用它（如队列长度上限 0 表示不排队），与只收正数的 toNumber 区分 */
+function toCount(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/** 按档组装闸门：四项水位成套读取，缺省或非法时回落到该档默认值 */
+function readGate(prefix: 'CHAT' | 'UPLOAD' | 'CRUD', fallback: GateConfig): GateConfig {
+  const maxInFlight = toNumber(
+    process.env[`CONCURRENCY_${prefix}_MAX_IN_FLIGHT`],
+    fallback.maxInFlight,
+  );
+  const softLimit = toNumber(process.env[`CONCURRENCY_${prefix}_SOFT_LIMIT`], fallback.softLimit);
+  return {
+    maxInFlight,
+    // 软水位不得高于硬水位：否则一进入排队就再也等不到放行
+    softLimit: Math.min(softLimit, maxInFlight),
+    queueLimit: toCount(process.env[`CONCURRENCY_${prefix}_QUEUE_LIMIT`], fallback.queueLimit),
+    queueTimeoutMs: toNumber(
+      process.env[`CONCURRENCY_${prefix}_QUEUE_TIMEOUT_MS`],
+      fallback.queueTimeoutMs,
+    ),
+  };
+}
+
 /** 比例取值：限定在 (0, 1] 内，越界或非法一律退回默认值，避免配错把上下文整段裁空 */
 function toRatio(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -150,6 +226,44 @@ export function loadConfig(): AppConfig {
       // 默认留空而非写死常见弱口令：宁可连接失败，也不让误部署直接用上猜到的密码
       password: process.env.MYSQL_PASSWORD ?? '',
       database: process.env.MYSQL_DATABASE ?? 'agent_data',
+      // 池满快速失败而非无限排队：默认给一段能排完的余量
+      queueLimit: toCount(process.env.MYSQL_QUEUE_LIMIT, 32),
+      connectTimeoutMs: toNumber(process.env.MYSQL_CONNECT_TIMEOUT_MS, 10000),
+    },
+    // HTTP 超时只保证半死连接不永久占位，具体取值须由 P4 压测校准
+    http: {
+      headersTimeoutMs: toNumber(process.env.HTTP_HEADERS_TIMEOUT_MS, 20000),
+      // 需覆盖 20MB 上传的接收耗时，故给到 2 分钟
+      requestTimeoutMs: toNumber(process.env.HTTP_REQUEST_TIMEOUT_MS, 120000),
+      keepAliveTimeoutMs: toNumber(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS, 65000),
+      maxRequestsPerSocket: toCount(process.env.HTTP_MAX_REQUESTS_PER_SOCKET, 1000),
+    },
+    // 并发治理默认值只保证不雪崩，吞吐基线须按容量模型压测后校准（见 docs/adr/0010）
+    concurrency: {
+      // 对话流：真实瓶颈在模型算力，档位收得最紧
+      chat: readGate('CHAT', {
+        maxInFlight: 8,
+        softLimit: 6,
+        queueLimit: 32,
+        queueTimeoutMs: 20000,
+      }),
+      // 上传解析：CPU 密集且会阻塞事件循环，档位最紧
+      upload: readGate('UPLOAD', {
+        maxInFlight: 2,
+        softLimit: 1,
+        queueLimit: 8,
+        queueTimeoutMs: 10000,
+      }),
+      // 普通读写：查询轻、往返多，给较宽上限
+      crud: readGate('CRUD', {
+        maxInFlight: 32,
+        softLimit: 24,
+        queueLimit: 64,
+        queueTimeoutMs: 5000,
+      }),
+      chatMaxDurationMs: toNumber(process.env.CHAT_MAX_DURATION_MS, 180000),
+      sseDrainTimeoutMs: toNumber(process.env.SSE_DRAIN_TIMEOUT_MS, 30000),
+      shutdownGraceMs: toNumber(process.env.SHUTDOWN_GRACE_MS, 15000),
     },
     llm: {
       provider,

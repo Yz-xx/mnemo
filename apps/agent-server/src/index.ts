@@ -1,4 +1,7 @@
 import type { Logger } from '@repo/logger';
+import type { Pool } from 'mysql2/promise';
+import { once } from 'node:events';
+import http from 'node:http';
 import { createLogger } from '@repo/logger';
 import { createApp } from './app.js';
 import { AuditLogStore } from './audit/store.js';
@@ -12,6 +15,7 @@ import {
   loadConfig,
   SERVICE_NAME,
 } from './configuration/config/index.js';
+import { createConversationLock } from './conversation/lock.js';
 import { ConversationStore } from './conversation/store/index.js';
 import { createMysqlPool } from './db/pool.js';
 import { ensureSchema } from './db/schema/index.js';
@@ -19,6 +23,7 @@ import { FileStore } from './files/store.js';
 import { AgentService } from './llm/agent.js';
 import { createEmbeddings } from './llm/model.js';
 import { ApiLogStore } from './logging/store.js';
+import { createConcurrencyGuard } from './middleware/concurrencyGuard.js';
 import { KnowledgeStore } from './rag/index.js';
 
 // 配置与日志先于其它依赖建立：建库、连接池等启动环节失败时也能留下可排查的记录
@@ -54,6 +59,46 @@ async function bootstrapSuperAdmin(
   }
 }
 
+/**
+ * 运行期兜底与优雅停机。
+ * - 崩溃：未捕获的异常与拒绝记一条日志后退出，交由进程守护重启，不让进程带着未知状态继续对外服务；
+ * - 停机：先停止接单、断开空闲 keep-alive 连接，等在途请求收尾（超过宽限即强制断开），
+ *   最后关闭数据库连接池与向量库连接。停机因此比现在慢，等待上限由 SHUTDOWN_GRACE_MS 约定。
+ */
+function installShutdownHandlers(server: http.Server, pool: Pool, knowledge: KnowledgeStore): void {
+  let stopping = false;
+
+  const shutdown = async (reason: string): Promise<void> => {
+    if (stopping) return;
+    stopping = true;
+    logger.info('开始优雅停机', { reason, graceMs: config.concurrency.shutdownGraceMs });
+    server.close();
+    server.closeIdleConnections();
+    // 宽限到点仍未收尾的连接直接断开，避免停机无限期挂住
+    const forceTimer = setTimeout(() => {
+      logger.warn('停机宽限已到，强制断开剩余连接');
+      server.closeAllConnections();
+    }, config.concurrency.shutdownGraceMs);
+    await once(server, 'close');
+    clearTimeout(forceTimer);
+    // 在途请求已收尾，再关掉对外连接
+    await pool.end();
+    await knowledge.close();
+    logger.info('已停机', { reason });
+  };
+
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('unhandledRejection', (reason) => {
+    logger.error('未处理的 Promise 拒绝，进程即将退出', { error: reason });
+    process.exit(1);
+  });
+  process.on('uncaughtException', (error) => {
+    logger.error('未捕获异常，进程即将退出', { error });
+    process.exit(1);
+  });
+}
+
 /** 组合根：集中完成依赖装配，路由层只依赖抽象出来的实例 */
 async function bootstrap(): Promise<void> {
   // 首次启动时自动建库建表，随后复用同一个连接池
@@ -79,6 +124,9 @@ async function bootstrap(): Promise<void> {
     embeddingEndpoint: describeEmbeddingEndpoint(config),
   });
   const agent = new AgentService(config, knowledge, files);
+  // 并发治理：分档闸门与会话级串行锁都是进程内状态，重启即清零（见 docs/adr/0010）
+  const guard = createConcurrencyGuard(config.concurrency, logger);
+  const chatLock = createConversationLock(config.concurrency.chat.queueTimeoutMs);
 
   // 超管自举：库中没有任何后台侧账号时建一枚，保证新库启动后立刻能进管理后台
   await bootstrapSuperAdmin(users, config.initialAdmin, logger);
@@ -87,6 +135,8 @@ async function bootstrap(): Promise<void> {
     config,
     logger,
     agent,
+    guard,
+    chatLock,
     apiLogs,
     auditLogs,
     conversations,
@@ -97,7 +147,15 @@ async function bootstrap(): Promise<void> {
     passwordCipher,
   });
 
-  app.listen(config.port, () => {
+  // 显式建 HTTP 服务而非 app.listen：需要设超时与连接回收，拿不到 server 实例就设不了。
+  // SSE 的响应期本不受 requestTimeout 约束，其长耗时由「单轮最长时长」兜底（见 docs/adr/0010 决策 6）
+  const server = http.createServer(app);
+  server.headersTimeout = config.http.headersTimeoutMs;
+  server.requestTimeout = config.http.requestTimeoutMs;
+  server.keepAliveTimeout = config.http.keepAliveTimeoutMs;
+  server.maxRequestsPerSocket = config.http.maxRequestsPerSocket;
+
+  server.listen(config.port, () => {
     logger.info('智能体服务已启动', {
       url: `http://localhost:${config.port}`,
       chatModel: `${config.llm.provider} / ${describeChatModel(config)}`,
@@ -110,6 +168,8 @@ async function bootstrap(): Promise<void> {
     });
     if (prunedSessions > 0) logger.info('已清理历史登录会话', { count: prunedSessions });
   });
+
+  installShutdownHandlers(server, pool, knowledge);
 }
 
 bootstrap().catch((error: unknown) => {

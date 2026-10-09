@@ -1,8 +1,11 @@
 export { SERVICE_NAME, loadConfig } from './env.js';
 export type {
   AppConfig,
+  ConcurrencyConfig,
   ContextConfig,
   EmbeddingProvider,
+  GateConfig,
+  HttpConfig,
   LlmProvider,
   LogConfig,
   MysqlConfig,

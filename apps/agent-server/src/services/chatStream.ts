@@ -1,4 +1,4 @@
-import type { ContextConfig } from '../configuration/config/index.js';
+import type { ConcurrencyConfig, ContextConfig } from '../configuration/config/index.js';
 import type { ConversationStore } from '../conversation/store/index.js';
 import type { AgentService } from '../llm/agent.js';
 import type { Logger } from '@repo/logger';
@@ -44,6 +44,8 @@ export async function streamChatReply(input: {
   attachmentNames: string[];
   /** 上下文治理配置：决定本轮是否裁剪历史以及裁到多少 */
   contextConfig: ContextConfig;
+  /** 并发治理配置：决定单轮最长时长与 SSE 背压上限 */
+  concurrencyConfig: ConcurrencyConfig;
 }): Promise<void> {
   const {
     res,
@@ -56,6 +58,7 @@ export async function streamChatReply(input: {
     fileIds,
     attachmentNames,
     contextConfig,
+    concurrencyConfig,
   } = input;
 
   // 先落库提问：新会话在这里创建，本轮若没有产出才好整体回滚。
@@ -67,16 +70,49 @@ export async function streamChatReply(input: {
   const startedAt = Date.now();
   openEventStream(res);
 
-  const send = (event: ChatStreamEvent): void => {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-
   // 注意：req 的 close 在请求体读取完成后即会触发（会误中断流式响应），故监听 res；
   // 排除 res.writableEnded 以跳过正常结束时的回调。
   const controller = new AbortController();
   res.on('close', () => {
     if (!res.writableEnded) controller.abort();
   });
+
+  // 单轮最长时长：到点中断本轮，防止半死连接永久占住一个在途额度与一份内存
+  let roundTimedOut = false;
+  const roundTimer = setTimeout(() => {
+    roundTimedOut = true;
+    controller.abort();
+  }, concurrencyConfig.chatMaxDurationMs);
+  // 慢客户端：SSE 写缓冲满且等不到 drain，本轮已主动断开
+  let slowClient = false;
+
+  /** 直写一帧：写缓冲满时等 drain，等不到则返回 false 交由调用方断开 */
+  const writeChunk = (chunk: string): Promise<boolean> => {
+    if (res.write(chunk)) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      let settle: (ok: boolean) => void = () => undefined;
+      const onDrain = (): void => settle(true);
+      // 定时器先建好、settle 后赋值：既能在此处引用 settle，又不必用可变量持有句柄
+      const timer = setTimeout(() => settle(false), concurrencyConfig.sseDrainTimeoutMs);
+      settle = (ok: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        res.off('drain', onDrain);
+        resolve(ok);
+      };
+      res.once('drain', onDrain);
+    });
+  };
+
+  /** 推送一个 SSE 事件；背压超时即按慢客户端断开并中断本轮，避免内存继续堆积 */
+  const send = async (event: ChatStreamEvent): Promise<void> => {
+    if (res.writableEnded) return;
+    if (await writeChunk(`data: ${JSON.stringify(event)}\n\n`)) return;
+    slowClient = true;
+    controller.abort();
+  };
 
   let answer = '';
   // 模型是否已经开始回应：中途被停止时，用户已经看到内容，此时不回滚，避免丢掉刚发出的提问
@@ -126,11 +162,11 @@ export async function streamChatReply(input: {
         // 首个产出之前补推会话 ID：本轮从此刻起一定会保留（回滚只看有没有产出），
         // 客户端因此在同一时刻知晓会话 ID，不会记住一个稍后会被删掉的会话
         responded = true;
-        send({ type: 'conversation', conversationId: conversation.id });
+        await send({ type: 'conversation', conversationId: conversation.id });
         // 上下文治理痕迹：只在真的裁掉历史时下发，避免每轮都挂一条无意义提示。
         // 与 conversation 同刻推送：本轮确认有产出、会话会保留，这条提示才不会挂在随后被回滚的消息上
         if (governed.trimmedMessages > 0) {
-          send({
+          await send({
             type: 'context',
             trimmedMessages: governed.trimmedMessages,
             summarized: governed.summarized,
@@ -146,7 +182,7 @@ export async function streamChatReply(input: {
       }
       // 检索来源随回复一起落库：切换历史会话时由服务端回读，标签不会凭空消失
       if (event.type === 'source') usedSources.add(event.name);
-      send(event);
+      await send(event);
     }
     await persistAnswer();
     const latest = await conversations.get(userId, conversation.id);
@@ -165,7 +201,7 @@ export async function streamChatReply(input: {
       // 本轮是否产出新的滚动摘要：与上两项对照，判断治理走的是摘要还是丢弃
       summarized: governed.summarized,
     });
-    send({
+    await send({
       type: 'done',
       conversationId: conversation.id,
       title: latest?.title ?? conversation.title,
@@ -180,17 +216,25 @@ export async function streamChatReply(input: {
     } catch (saveError) {
       log.warn('部分回复落库失败', { error: saveError });
     }
-    // 客户端主动中断不算错误，无需回推
-    if (controller.signal.aborted) {
-      log.info('客户端中断，已停止生成', {
+    if (roundTimedOut) {
+      // 单轮超时：已产出的正文已落库，再推一条 error 让客户端知道本轮被截断
+      log.warn('单轮对话超时已中断', {
+        durationMs: Date.now() - startedAt,
+        answerLength: answer.length,
+      });
+      await send({ type: 'error', message: '本轮对话超时，已中断' });
+    } else if (controller.signal.aborted) {
+      // 客户端中断与慢客户端断开都不算错误，无需回推
+      log.info(slowClient ? '慢客户端，已断开' : '客户端中断，已停止生成', {
         durationMs: Date.now() - startedAt,
         answerLength: answer.length,
       });
     } else {
       log.error('本轮对话失败', { durationMs: Date.now() - startedAt, error });
-      send({ type: 'error', message: toErrorMessage(error) });
+      await send({ type: 'error', message: toErrorMessage(error) });
     }
   } finally {
+    clearTimeout(roundTimer);
     res.end();
   }
 

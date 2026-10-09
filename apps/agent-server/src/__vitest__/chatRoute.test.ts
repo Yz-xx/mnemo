@@ -16,6 +16,7 @@ import { SystemMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '@repo/logger';
 import { HTTP_STATUS } from '@repo/reusable';
+import { ConversationBusyError } from '../conversation/lock.js';
 import { handleChatMessage } from '../routes/client/chat.js';
 
 const USER_ID = 1;
@@ -142,6 +143,23 @@ class FakeHttpResponse extends EventEmitter {
   }
 }
 
+/** 写不下去的假响应：模拟 socket 缓冲已满，write 恒返回 false 且永不触发 drain */
+class SlowHttpResponse extends FakeHttpResponse {
+  write(): boolean {
+    return false;
+  }
+}
+
+/** 记录响应头的假响应：用于断言过载响应确实附上了 Retry-After */
+class HeaderRecordingResponse extends FakeHttpResponse {
+  readonly received: Record<string, string> = {};
+
+  setHeader(name?: string, value?: string): this {
+    if (name && value) this.received[name] = value;
+    return this;
+  }
+}
+
 /**
  * 按脚本产出流事件的假智能体；传入 Error 时模拟对话模型服务未启动。
  * onOptions 用于观察透传给智能体的调用参数（如附件 ID）。
@@ -177,10 +195,26 @@ class FakeFiles {
   }
 }
 
-/** 路由层只读 config.llm.context，其余配置与本组用例无关，用断言占位即可 */
+/**
+ * 路由层只读 config.llm.context 与 config.concurrency，
+ * 其余配置与本组用例无关，用断言占位即可。
+ */
 const CONFIG = {
   llm: { context: { windowTokens: 8192, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 } },
+  concurrency: {
+    chat: { maxInFlight: 8, softLimit: 6, queueLimit: 32, queueTimeoutMs: 20000 },
+    upload: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 10000 },
+    crud: { maxInFlight: 32, softLimit: 24, queueLimit: 64, queueTimeoutMs: 5000 },
+    chatMaxDurationMs: 180000,
+    sseDrainTimeoutMs: 30000,
+    shutdownGraceMs: 15000,
+  },
 } as unknown as AppConfig;
+
+/** 会话锁替身：默认顺序执行任务（无并发的常态）；验证占用与超时时由用例注入专用替身 */
+const passthroughLock = {
+  run: <T>(_conversationId: string, task: () => Promise<T>): Promise<T> => task(),
+};
 
 /** 假依赖集合：会话存储、文件存储与智能体均为替身，用于隔离数据库与模型服务 */
 function fakeDeps(
@@ -193,6 +227,7 @@ function fakeDeps(
     conversations: conversations as unknown as ConversationStore,
     files: files as unknown as FileStore,
     config: CONFIG,
+    chatLock: passthroughLock,
   };
 }
 
@@ -472,6 +507,7 @@ describe('handleChatMessage', () => {
           llm: {
             context: { windowTokens: 1000, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 },
           },
+          concurrency: CONFIG.concurrency,
         } as unknown as AppConfig,
       },
       fakeRequest({ message: '再问', conversationId: id }),
@@ -506,5 +542,89 @@ describe('handleChatMessage', () => {
 
     // 只有 conversation / token / done：没裁历史就不该有治理提示
     expect(res.events.map((event) => event.type)).toEqual(['conversation', 'token', 'done']);
+  });
+
+  it('同一会话的上一轮仍在途时，等待超时按可重试过载返回 503', async () => {
+    const conversations = new FakeConversations();
+    const { id } = await conversations.append(USER_ID, undefined, 'user', '先到的一轮');
+    const res = new HeaderRecordingResponse();
+    // 会话锁替身直接抛「忙」，等价于排队等待超过上限——真实的排队行为由会话锁单测覆盖
+    const busyLock = {
+      run: async () => {
+        throw new ConversationBusyError(id);
+      },
+    };
+
+    await handleChatMessage(
+      { ...fakeDeps(conversations, fakeAgent([])), chatLock: busyLock },
+      fakeRequest({ message: '再问一句', conversationId: id }),
+      res as unknown as Response,
+    );
+
+    // 过载是「可重试的临时态」：除 503 外必须给出退避建议
+    expect(res.statusCode).toBe(HTTP_STATUS.SERVICE_UNAVAILABLE);
+    expect(res.body).toEqual({ message: '服务繁忙，请稍后再试' });
+    expect(res.received['Retry-After']).toBe('20');
+  });
+
+  it('单轮超时中断后已产出的正文仍落库，并回推 error', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+    // 单轮最长时长压到 20ms：模拟模型推出一段后迟迟不再产出
+    const config = {
+      ...CONFIG,
+      concurrency: { ...CONFIG.concurrency, chatMaxDurationMs: 20 },
+    } as unknown as AppConfig;
+    const agent = {
+      async *stream(_messages: unknown, options: { signal: AbortSignal }) {
+        yield { type: 'token' as const, content: '已经开始了' };
+        // 悬停到本轮被中断为止，再抛错走「超时中断」收尾路径
+        await new Promise<void>((resolve) => {
+          options.signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+        throw new Error('本轮已中断');
+      },
+    } as unknown as AgentService;
+
+    await handleChatMessage(
+      { ...fakeDeps(conversations, agent), config },
+      fakeRequest({ message: '在吗' }),
+      res as unknown as Response,
+    );
+
+    // 用户已经看到的正文必须留库，否则重开会话时那段回复会凭空消失
+    const [summary] = await conversations.list();
+    const saved = await conversations.get(USER_ID, summary.id);
+    expect(saved?.messages.at(-1)?.content).toBe('已经开始了');
+    // 超时是被动中断，客户端需要知道本轮被截断
+    expect(res.events).toContainEqual({ type: 'error', message: '本轮对话超时，已中断' });
+  });
+
+  it('慢客户端写不下去时中断本轮，不在内存里无限堆积', async () => {
+    const conversations = new FakeConversations();
+    const res = new SlowHttpResponse();
+    // 背压等待上限压到 10ms：write 恒失败且永不 drain，等价于客户端不再读取
+    const config = {
+      ...CONFIG,
+      concurrency: { ...CONFIG.concurrency, sseDrainTimeoutMs: 10 },
+    } as unknown as AppConfig;
+    let aborted = false;
+    const agent = {
+      async *stream(_messages: unknown, options: { signal: AbortSignal }) {
+        yield { type: 'token' as const, content: '一' };
+        // 推下一个事件前，背压超时已把本轮中断
+        aborted = options.signal.aborted;
+      },
+    } as unknown as AgentService;
+
+    await handleChatMessage(
+      { ...fakeDeps(conversations, agent), config },
+      fakeRequest({ message: '在吗' }),
+      res as unknown as Response,
+    );
+
+    expect(aborted).toBe(true);
+    // 本轮在有限时间内收尾，不会因为客户端不读而永久挂住
+    expect(res.writableEnded).toBe(true);
   });
 });

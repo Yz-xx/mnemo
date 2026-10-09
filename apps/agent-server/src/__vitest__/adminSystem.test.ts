@@ -21,6 +21,22 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       user: 'root',
       password: 'mysql-secret',
       database: 'agent_data',
+      queueLimit: 32,
+      connectTimeoutMs: 10000,
+    },
+    http: {
+      headersTimeoutMs: 20000,
+      requestTimeoutMs: 120000,
+      keepAliveTimeoutMs: 65000,
+      maxRequestsPerSocket: 1000,
+    },
+    concurrency: {
+      chat: { maxInFlight: 8, softLimit: 6, queueLimit: 32, queueTimeoutMs: 20000 },
+      upload: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 10000 },
+      crud: { maxInFlight: 32, softLimit: 24, queueLimit: 64, queueTimeoutMs: 5000 },
+      chatMaxDurationMs: 180000,
+      sseDrainTimeoutMs: 30000,
+      shutdownGraceMs: 15000,
     },
     llm: {
       provider: 'ollama',

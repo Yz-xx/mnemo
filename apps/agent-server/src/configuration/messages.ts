@@ -39,4 +39,6 @@ export const ERROR_MESSAGE = {
   BATCH_IDS_STRING: 'ids 需为非空的字符串数组',
   /** 5xx 对外兜底文案：错误兜底中间件与知识库入库失败共用 */
   INTERNAL: '服务内部错误',
+  /** 过载拒绝文案：并发闸门在硬水位处签发 503 时使用，与真故障分开（见 docs/adr/0010） */
+  OVERLOADED: '服务繁忙，请稍后再试',
 } as const;

@@ -58,6 +58,11 @@ function fakeDeps(
   return {
     files: files as unknown as FileStore,
     config: { upload: { allowedTypes } } as unknown as AppConfig,
+    // 并发闸门挂在上传路由外层，本组用例只测处理函数本身，给个空替身
+    guard: {
+      middleware: () => (_req: Request, _res: Response, next: () => void) => next(),
+      snapshot: () => [],
+    },
   };
 }
 

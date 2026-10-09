@@ -4,11 +4,16 @@ import { Router } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { currentUserId } from '../../auth/middleware.js';
 import { ERROR_MESSAGE } from '../../configuration/messages.js';
+import { ConversationBusyError } from '../../conversation/lock.js';
+import { retryAfterSeconds } from '../../middleware/concurrencyGuard.js';
 import { requestLogger } from '../../middleware/requestLog.js';
 import { streamChatReply } from '../../services/chatStream.js';
 
-/** 本轮对话需要的依赖：只取用到的四项，便于单独编排与测试 */
-type ChatDependencies = Pick<AppDependencies, 'agent' | 'conversations' | 'files' | 'config'>;
+/** 本轮对话需要的依赖：只取用到的几项，便于单独编排与测试 */
+type ChatDependencies = Pick<
+  AppDependencies,
+  'agent' | 'conversations' | 'files' | 'config' | 'chatLock'
+>;
 
 /** 对话接口：校验入参后交由 streamChatReply 编排整轮对话 */
 export function createChatRouter(deps: ChatDependencies): Router {
@@ -28,7 +33,7 @@ function parseFileIds(value: unknown): string[] {
 
 /** 单轮对话入口：只做入参与会话、附件归属校验，编排交给服务层 */
 export async function handleChatMessage(
-  { agent, conversations, files, config }: ChatDependencies,
+  { agent, conversations, files, config, chatLock }: ChatDependencies,
   req: Request,
   res: Response,
 ): Promise<void> {
@@ -52,18 +57,37 @@ export async function handleChatMessage(
     return;
   }
 
-  await streamChatReply({
-    res,
-    agent,
-    conversations,
-    logger: requestLogger(res),
-    userId,
-    conversationId: body.conversationId,
-    content,
-    fileIds,
-    // 附件名随提问一起落库：历史回看时还原附件标签，否则切换会话后用户看不出回答基于哪些文件
-    attachmentNames: storedFiles.map((file) => file.name),
-    // 上下文治理配置：只取用到的 llm.context，不让整个 AppConfig 穿透到服务层
-    contextConfig: config.llm.context,
-  });
+  const reply = (): Promise<void> =>
+    streamChatReply({
+      res,
+      agent,
+      conversations,
+      logger: requestLogger(res),
+      userId,
+      conversationId: body.conversationId,
+      content,
+      fileIds,
+      // 附件名随提问一起落库：历史回看时还原附件标签，否则切换会话后用户看不出回答基于哪些文件
+      attachmentNames: storedFiles.map((file) => file.name),
+      // 配置只取用到的两项：不让整个 AppConfig 穿透到服务层
+      contextConfig: config.llm.context,
+      concurrencyConfig: config.concurrency,
+    });
+
+  // 新建会话没有并发可言，无需串行；既有会话同刻只跑一轮，
+  // 等待超过上限按「可重试的过载」返回 503（见 docs/adr/0010 决策 12）
+  if (!body.conversationId) {
+    await reply();
+    return;
+  }
+  try {
+    await chatLock.run(body.conversationId, reply);
+  } catch (error) {
+    if (error instanceof ConversationBusyError) {
+      res.setHeader('Retry-After', String(retryAfterSeconds(config.concurrency.chat)));
+      res.status(HTTP_STATUS.SERVICE_UNAVAILABLE).json({ message: ERROR_MESSAGE.OVERLOADED });
+      return;
+    }
+    throw error;
+  }
 }
