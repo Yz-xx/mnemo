@@ -5,12 +5,13 @@ import type { BaseMessage } from '@langchain/core/messages';
 import type { LogSink } from '@repo/logger';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage, ToolMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { createAgent } from 'langchain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createLogger } from '@repo/logger';
+import { createToolBudget } from '../llm/context/index.js';
 import { createTools } from '../llm/tools/index.js';
 import { DISABLED_VISION, VISION_DISABLED_MESSAGE } from '../llm/vision.js';
 import { KnowledgeStore } from '../rag/index.js';
@@ -116,7 +117,54 @@ describe('search_knowledge_base 工具', () => {
     expect(searchLine).toMatch(/hits=[1-9]\d*/);
     expect(searchLine).toMatch(/topScore=\d/);
   });
+
+  it('同一文档在本轮被再次命中时不重复注入内容', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
+      .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
+      .respond((messages: BaseMessage[]) => new AIMessage(String(messages.at(-1)?.content ?? '')));
+
+    const result = await buildSearchAgent(model).invoke(
+      { messages: [{ role: 'user', content: '香蕉在哪个文档里？' }] },
+      { configurable: { userId: 1, toolBudget: createToolBudget(1000) } },
+    );
+
+    const toolMessages = result.messages.filter((message) => message instanceof ToolMessage);
+    // 两次命中同一份文档：第一次回填片段，第二次只说明已经给过，不重复占窗口
+    expect(toolMessages).toHaveLength(2);
+    expect(String(toolMessages[0].content)).toContain('公共手册');
+    expect(String(toolMessages[1].content)).toContain('未重复注入');
+  });
+
+  it('本轮额度耗尽时不再注入检索结果，并如实说明', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
+      .respond((messages: BaseMessage[]) => new AIMessage(String(messages.at(-1)?.content ?? '')));
+
+    const result = await buildSearchAgent(model).invoke(
+      { messages: [{ role: 'user', content: '香蕉在哪个文档里？' }] },
+      // 预算 1 个 token：连提示都放不下，检索结果只能整体不注入
+      { configurable: { userId: 1, toolBudget: createToolBudget(1) } },
+    );
+
+    const toolMessage = result.messages.find((message) => message instanceof ToolMessage);
+    expect(String(toolMessage?.content)).toContain('上下文预算上限');
+  });
 });
+
+/** 组装检索智能体：本组用例不涉及文件能力，附件存储给空替身 */
+function buildSearchAgent(model: ReturnType<typeof fakeModel>) {
+  return createAgent({
+    model,
+    tools: createTools(
+      store,
+      new FakeFiles() as unknown as Pick<FileStore, 'list' | 'read' | 'save'>,
+      DISABLED_VISION,
+    ),
+    systemPrompt: '测试用智能体',
+    name: 'agent',
+  });
+}
 
 /** 内存版文件存储：伪造元数据与字节，记录读取过的 ID 与生成的导出，用于验证读的边界与导出的产物 */
 class FakeFiles {
@@ -305,6 +353,23 @@ describe('文件工具', () => {
     expect(reply).toContain('销售趋势折线图');
     // 交给视觉模型的必须是原始字节与真实 MIME，否则拼出来的 data URI 是坏的
     expect(seen).toEqual([{ mime: 'image/png', bytes: 9 }]);
+  });
+
+  it('read_file 受本轮额度限制，额度耗尽时如实说明', async () => {
+    const record = await docxRecord('f-1', '季度报告.docx', '营收增长 12%');
+    const files = new FakeFiles({ 'f-1': record });
+
+    const result = await buildFileAgent(files, {
+      name: 'read_file',
+      args: { fileId: 'f-1' },
+    }).invoke(
+      { messages: [{ role: 'user', content: '看看我传的文件' }] },
+      // 预算 1 个 token：连提示都放不下，读取结果只能整体不注入
+      { configurable: { userId: 7, fileIds: ['f-1'], toolBudget: createToolBudget(1) } },
+    );
+
+    const toolMessage = result.messages.find((message) => message instanceof ToolMessage);
+    expect(String(toolMessage?.content)).toContain('上下文预算上限');
   });
 
   it('write_file 生成文件并登记到导出收集器，供客户端下载', async () => {

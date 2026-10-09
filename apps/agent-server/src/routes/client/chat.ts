@@ -7,8 +7,8 @@ import { ERROR_MESSAGE } from '../../configuration/messages.js';
 import { requestLogger } from '../../middleware/requestLog.js';
 import { streamChatReply } from '../../services/chatStream.js';
 
-/** 本轮对话需要的依赖：只取用到的三项，便于单独编排与测试 */
-type ChatDependencies = Pick<AppDependencies, 'agent' | 'conversations' | 'files'>;
+/** 本轮对话需要的依赖：只取用到的四项，便于单独编排与测试 */
+type ChatDependencies = Pick<AppDependencies, 'agent' | 'conversations' | 'files' | 'config'>;
 
 /** 对话接口：校验入参后交由 streamChatReply 编排整轮对话 */
 export function createChatRouter(deps: ChatDependencies): Router {
@@ -28,7 +28,7 @@ function parseFileIds(value: unknown): string[] {
 
 /** 单轮对话入口：只做入参与会话、附件归属校验，编排交给服务层 */
 export async function handleChatMessage(
-  { agent, conversations, files }: ChatDependencies,
+  { agent, conversations, files, config }: ChatDependencies,
   req: Request,
   res: Response,
 ): Promise<void> {
@@ -63,5 +63,7 @@ export async function handleChatMessage(
     fileIds,
     // 附件名随提问一起落库：历史回看时还原附件标签，否则切换会话后用户看不出回答基于哪些文件
     attachmentNames: storedFiles.map((file) => file.name),
+    // 上下文治理配置：只取用到的 llm.context，不让整个 AppConfig 穿透到服务层
+    contextConfig: config.llm.context,
   });
 }

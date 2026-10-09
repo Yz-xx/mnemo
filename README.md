@@ -7,7 +7,7 @@
 - 存储：MySQL 保存用户、登录会话与对话记录；知识库为本地 LanceDB 向量库
 - 账号：注册 / 登录 / 登出，密码经 RSA-OAEP 加密传输、`scrypt` 加盐哈希入库，接口以 Bearer 令牌鉴权；账号与端绑定（客户端 / 管理后台），后台角色分超管与管理员两级，取舍见 [ADR 0006](./docs/adr/0006-account-isolation-and-admin-hierarchy.md)
 - 文档：支持上传 docx / xlsx / pdf / 图片附件，可理解图片（本地多模态模型），并按需导出 docx / xlsx / pdf
-- 模型：默认本地 Ollama（`qwen2.5:7b` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
+- 模型：默认本地 Ollama（`qwen3` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
 ---
 

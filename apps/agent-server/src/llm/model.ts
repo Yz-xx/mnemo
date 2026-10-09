@@ -18,6 +18,10 @@ export function createChatModel(config: AppConfig): ChatOllama | ChatOpenAI {
     model: config.ollama.chatModel,
     baseUrl: config.ollama.baseUrl,
     temperature: config.llm.temperature,
+    // 始终显式透传 think：Ollama 对 thinking 模型（如 qwen3）省略该参数等同于开启，
+    // 只在打开时传会让「默认关闭」形同虚设——实测不传 think 仍会返回推理内容；
+    // 显式传 false 对非 thinking 模型（如 qwen2.5:7b）安全，不会报错
+    think: config.llm.thinking,
   });
 }
 

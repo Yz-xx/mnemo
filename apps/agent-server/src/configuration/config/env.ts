@@ -29,6 +29,18 @@ export interface MysqlConfig {
   database: string;
 }
 
+/** 上下文治理配置：窗口预算与触发比例，以及单轮工具结果的额度占比 */
+export interface ContextConfig {
+  /** 模型上下文窗口的 token 预算，按对话模型提供方取默认值 */
+  windowTokens: number;
+  /** 窗口占用超过该比例即触发治理 */
+  triggerRatio: number;
+  /** 触发后保留的窗口占比，恒不超过 triggerRatio */
+  keepRatio: number;
+  /** 单轮附件预读、检索、读取结果合计可注入的窗口占比：按窗口取值，避免每个提供方各配一个绝对数 */
+  toolRatio: number;
+}
+
 export interface AppConfig {
   port: number;
   dataDir: string;
@@ -37,6 +49,10 @@ export interface AppConfig {
   llm: {
     provider: LlmProvider;
     temperature: number;
+    /** 是否让对话模型输出推理链（thinking）：默认关闭，仅对 Ollama 生效 */
+    thinking: boolean;
+    /** 上下文治理：决定每轮注入模型的历史是否裁剪、裁到多少 */
+    context: ContextConfig;
   };
   ollama: {
     baseUrl: string;
@@ -97,6 +113,12 @@ function toNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** 比例取值：限定在 (0, 1] 内，越界或非法一律退回默认值，避免配错把上下文整段裁空 */
+function toRatio(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 1 ? parsed : fallback;
+}
+
 /** 日志级别：非法值一律退回 info，避免拼错环境变量导致日志全部静默 */
 function toLogLevel(value: string | undefined): LogLevel {
   return value === 'debug' || value === 'warn' || value === 'error' ? value : 'info';
@@ -106,6 +128,12 @@ function toLogLevel(value: string | undefined): LogLevel {
 export function loadConfig(): AppConfig {
   // 数据目录先解析出来，供知识库与日志目录共用同一基准
   const dataDir = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
+  // 对话模型提供方先解析出来：上下文窗口预算的默认值按它区分
+  const provider: LlmProvider = process.env.LLM_PROVIDER === 'deepseek' ? 'deepseek' : 'ollama';
+  // 上下文比例先解析出来：保留比例要与触发比例比对，须在同一处算好
+  const triggerRatio = toRatio(process.env.CONTEXT_TRIGGER_RATIO, 0.7);
+  const keepRatio = toRatio(process.env.CONTEXT_KEEP_RATIO, 0.4);
+  const toolRatio = toRatio(process.env.CONTEXT_TOOL_RATIO, 0.3);
 
   return {
     port: toNumber(process.env.PORT, 3000),
@@ -124,12 +152,28 @@ export function loadConfig(): AppConfig {
       database: process.env.MYSQL_DATABASE ?? 'agent_data',
     },
     llm: {
-      provider: process.env.LLM_PROVIDER === 'deepseek' ? 'deepseek' : 'ollama',
+      provider,
       temperature: toNumber(process.env.LLM_TEMPERATURE, 0.3),
+      // 显式等于 true 才算开启：留空、拼错、写 1 都保持关闭，避免误开这条主链路变更
+      thinking: process.env.LLM_THINKING === 'true',
+      context: {
+        // 窗口预算按提供方取：线上 DeepSeek 为 64K；本地 Ollama 保守取 8K，
+        // 该值需与 Ollama 的 num_ctx 对齐，配大了估出的窗口会比模型实际能吃下的宽
+        windowTokens: toNumber(
+          provider === 'deepseek'
+            ? process.env.DEEPSEEK_CONTEXT_WINDOW_TOKENS
+            : process.env.OLLAMA_CONTEXT_WINDOW_TOKENS,
+          provider === 'deepseek' ? 65536 : 8192,
+        ),
+        triggerRatio,
+        // 保留比例不得超过触发比例：否则触发后仍丢不掉任何一轮，等于没裁
+        keepRatio: Math.min(keepRatio, triggerRatio),
+        toolRatio,
+      },
     },
     ollama: {
       baseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
-      chatModel: process.env.OLLAMA_CHAT_MODEL ?? 'qwen2.5:7b',
+      chatModel: process.env.OLLAMA_CHAT_MODEL ?? 'qwen3',
       embeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? 'nomic-embed-text',
       // 默认指向本机已装的视觉模型；置空字符串即关闭图片理解
       visionModel: process.env.OLLAMA_VISION_MODEL ?? 'qwen3-vl:8b',

@@ -1,3 +1,4 @@
+import type { ToolBudget } from '../context/index.js';
 import type { ToolRunnableConfig } from '@langchain/core/tools';
 import type { Logger } from '@repo/logger';
 
@@ -45,4 +46,13 @@ export function readFileIds(config?: ToolRunnableConfig): string[] {
 export function readLogger(config?: ToolRunnableConfig): Logger | undefined {
   const logger = config?.configurable?.logger as Logger | undefined;
   return typeof logger?.debug === 'function' ? logger : undefined;
+}
+
+/**
+ * 从运行时配置中取出本轮工具结果额度：由 Agent 注入，检索与读取共用同一份。
+ * 未注入时返回 undefined，工具按「无治理」处理——直接调用工具的单测即属此情形。
+ */
+export function readToolBudget(config?: ToolRunnableConfig): ToolBudget | undefined {
+  const budget = config?.configurable?.toolBudget as ToolBudget | undefined;
+  return typeof budget?.admit === 'function' ? budget : undefined;
 }

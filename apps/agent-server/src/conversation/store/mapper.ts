@@ -51,6 +51,16 @@ interface ConversationRow extends RowDataPacket {
   message_count: number;
 }
 
+/** 单会话详情行：比列表行多取滚动摘要与截断点，供上下文治理使用 */
+interface ConversationDetailRow extends RowDataPacket {
+  id: string;
+  title: string;
+  created_at: Date;
+  updated_at: Date;
+  summary: string | null;
+  summary_upto_seq: number | string | null;
+}
+
 /** 管理端列表行：在客户端摘要列之上多取所属用户 */
 interface AdminConversationRow extends RowDataPacket {
   id: string;
@@ -71,4 +81,4 @@ export function buildTitle(content: string): string {
   return normalized ? truncate(normalized, TITLE_MAX_LENGTH) : DEFAULT_TITLE;
 }
 
-export type { AdminConversationRow, ConversationRow, CountRow };
+export type { AdminConversationRow, ConversationDetailRow, ConversationRow, CountRow };

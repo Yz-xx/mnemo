@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import type { ChatMessage, GeneratedFileInfo } from '../../types';
+import type { ChatMessage, ChatStep, GeneratedFileInfo } from '../../types';
 import MarkdownIt from 'markdown-it';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+
+/** 工具标签文案：有 detail 时用后端给的人话，缺省（历史回看）时退回工具名 */
+function stepLabel(step: ChatStep): string {
+  if (!step.detail) return step.running ? `调用工具 ${step.name}` : `完成 ${step.name}`;
+  return step.running ? `正在${step.detail}` : `已完成 ${step.detail}`;
+}
 
 const props = defineProps<{ message: ChatMessage }>();
 
@@ -21,6 +27,25 @@ markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
 const content = computed(() => props.message.content.trim());
 const isAssistant = computed(() => props.message.role === 'assistant');
 const rendered = computed(() => markdown.render(content.value));
+
+// 思考过程面板默认展开跟随推理输出；正文首个 token 到达即自动折叠——
+// thinking 与正文可能交错出现，不折叠会让界面反复跳动
+const thinkingExpanded = ref(true);
+watch(
+  () => content.value.length > 0,
+  (hasContent) => {
+    if (hasContent) thinkingExpanded.value = false;
+  },
+);
+
+// 上下文治理提示：服务端只在真的裁掉历史时下发，历史回看时缺省。
+// 摘要版与直接丢弃版分开说，用户才知道那段历史是被压缩还是被丢掉
+const contextHint = computed(() => {
+  const context = props.message.context;
+  if (!context) return '';
+  const count = `${context.trimmedMessages} 条更早的对话`;
+  return context.summarized ? `已将 ${count}压缩为摘要` : `已丢弃 ${count}`;
+});
 
 // 复制反馈：按钮自身临时变成对勾，1.5 秒后回落到常态，不弹提示打断阅读
 const copied = ref(false);
@@ -44,6 +69,31 @@ async function copyContent() {
 <template>
   <div class="message" :class="`message--${message.role}`">
     <div class="message__body">
+      <!-- 模型推理链：排在正文之前，正文首个 token 到达时自动收起（见 thinkingExpanded）。
+           历史回看时服务端不落库该字段，面板整块不渲染 -->
+      <div v-if="isAssistant && message.thinking" class="message__thinking">
+        <button
+          class="message__thinking-toggle"
+          type="button"
+          :aria-expanded="thinkingExpanded"
+          @click="thinkingExpanded = !thinkingExpanded"
+        >
+          <svg
+            class="message__thinking-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+          思考过程
+        </button>
+        <div v-show="thinkingExpanded" class="message__thinking-body">{{ message.thinking }}</div>
+      </div>
       <!-- 等待首个 token 时用三点脉冲示意工作状态 -->
       <div
         v-if="!content"
@@ -62,6 +112,10 @@ async function copyContent() {
       <div v-if="message.attachments?.length" class="message__files">
         <span v-for="name in message.attachments" :key="name" class="chip">{{ name }}</span>
       </div>
+      <!-- 上下文治理痕迹：只在服务端真的裁掉历史时渲染（历史回看时不还原） -->
+      <div v-if="isAssistant && contextHint" class="message__context">
+        <span class="chip chip--context">{{ contextHint }}</span>
+      </div>
       <!-- 工具调用记录属于“过程信息”，排在正文之后，避免正文首行被顶下去 -->
       <div v-if="message.steps?.length" class="message__steps">
         <!-- 执行中的标签带一枚转圈：工具等待结果时不会看起来像卡住 -->
@@ -72,7 +126,7 @@ async function copyContent() {
           :class="{ 'chip--running': step.running }"
         >
           <span v-if="step.running" class="chip__spinner" aria-hidden="true" />
-          {{ step.running ? `调用工具 ${step.name}` : `完成 ${step.name}` }}
+          {{ stepLabel(step) }}
         </span>
       </div>
       <!-- 本轮检索命中的知识库文档：由服务端在检索工具结束后确定地推来，

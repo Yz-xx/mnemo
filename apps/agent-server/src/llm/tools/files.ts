@@ -7,8 +7,10 @@ import { z } from 'zod';
 import { formatBytes, toErrorMessage } from '@repo/shared';
 import { buildDocument, EXPORT_FORMATS } from '../../files/generate.js';
 import { extractText } from '../../files/parser.js';
+import { BUDGET_EXHAUSTED_NOTE } from '../context/index.js';
 import { DISABLED_VISION } from '../vision.js';
-import { readExports, readFileIds, readLogger, readUserId } from './runtime.js';
+import { withLabel } from './label.js';
+import { readExports, readFileIds, readLogger, readToolBudget, readUserId } from './runtime.js';
 
 /** 单次读文件回给模型的正文字数上限：整篇塞进去会挤爆上下文，超出部分截断并说明 */
 const CONTENT_LIMIT = 8000;
@@ -108,7 +110,11 @@ export function createFileTools(files: FileSource, vision: VisionReader = DISABL
           readLogger(config),
         );
         // 读不到要让模型知道原因并如实转达，抛错只会把整轮对话打断
-        return text ?? '该文件不存在或已失效，请让用户重新上传。';
+        if (text === null) return '该文件不存在或已失效，请让用户重新上传。';
+        // 单次读的上限之外还有本轮总额度：同轮反复读文件会累计计入，超出即截断
+        const budget = readToolBudget(config);
+        const admitted = budget ? budget.admit(text) : { text, truncated: false };
+        return admitted?.text ?? BUDGET_EXHAUSTED_NOTE;
       } catch (error) {
         return toErrorMessage(error);
       }
@@ -164,5 +170,9 @@ export function createFileTools(files: FileSource, vision: VisionReader = DISABL
     },
   );
 
-  return [listFiles, readFile, writeFile];
+  return [
+    withLabel(listFiles, '列出文件'),
+    withLabel(readFile, '读取文件'),
+    withLabel(writeFile, '生成文件'),
+  ];
 }

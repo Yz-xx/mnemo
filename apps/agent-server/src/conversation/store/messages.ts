@@ -1,7 +1,9 @@
 import type { MessageRole, StoredMessage } from '../types.js';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { Pool, RowDataPacket } from 'mysql2/promise';
 
 interface MessageRow extends RowDataPacket {
+  /** 自增序号：BIGINT UNSIGNED 经驱动读回可能是字符串，取值处统一 Number() 收敛 */
+  seq: number | string;
   id: string;
   role: MessageRole;
   content: string;
@@ -39,6 +41,7 @@ export function parseJsonArray(raw: string[] | string | null): string[] | undefi
 
 export function toStoredMessage(row: MessageRow): StoredMessage {
   return {
+    seq: Number(row.seq),
     id: row.id,
     role: row.role,
     content: row.content,
@@ -47,6 +50,18 @@ export function toStoredMessage(row: MessageRow): StoredMessage {
     sources: parseJsonArray(row.sources),
     createdAt: row.created_at.toISOString(),
   };
+}
+
+/**
+ * 读取某会话的全部消息，按 seq 升序。
+ * 会话详情（客户端）与后台核查（管理端）共用这一条查询，避免两处各写一份 SELECT 后漂移。
+ */
+export async function readMessages(pool: Pool, conversationId: string): Promise<StoredMessage[]> {
+  const [rows] = await pool.execute<MessageRow[]>(
+    'SELECT seq, id, role, content, tools, attachments, sources, created_at FROM messages WHERE conversation_id = ? ORDER BY seq',
+    [conversationId],
+  );
+  return rows.map(toStoredMessage);
 }
 
 export type { MessageRow };

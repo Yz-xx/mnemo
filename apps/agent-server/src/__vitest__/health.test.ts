@@ -13,7 +13,7 @@ function configWith(provider: 'ollama' | 'deepseek', model: string): AppConfig {
 
 describe('describeHealth', () => {
   it('服务名与包名一致，不再出现旧代号 backend', () => {
-    expect(describeHealth(configWith('ollama', 'qwen2.5:7b')).service).toBe('agent-server');
+    expect(describeHealth(configWith('ollama', 'qwen3')).service).toBe('agent-server');
   });
 
   it('按当前提供方给出对话模型名与知识库状态，供客户端展示连接状态', () => {
@@ -28,7 +28,7 @@ describe('describeHealth', () => {
   it('附带 ISO 时间戳，字段与规范约定的六项一一对应', () => {
     const now = new Date('2026-09-26T08:00:00.000Z');
 
-    expect(Object.keys(describeHealth(configWith('ollama', 'qwen2.5:7b'), now)).sort()).toEqual([
+    expect(Object.keys(describeHealth(configWith('ollama', 'qwen3'), now)).sort()).toEqual([
       'knowledgeEnabled',
       'model',
       'provider',
@@ -36,7 +36,7 @@ describe('describeHealth', () => {
       'status',
       'timestamp',
     ]);
-    expect(describeHealth(configWith('ollama', 'qwen2.5:7b'), now).timestamp).toBe(
+    expect(describeHealth(configWith('ollama', 'qwen3'), now).timestamp).toBe(
       '2026-09-26T08:00:00.000Z',
     );
   });

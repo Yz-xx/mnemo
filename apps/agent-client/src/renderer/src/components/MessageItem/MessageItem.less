@@ -109,6 +109,7 @@
   }
 }
 
+.message__context,
 .message__steps,
 .message__sources,
 .message__files {
@@ -116,6 +117,13 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+
+// 上下文治理提示：交代的是服务端对历史做的事，不是回答内容——
+// 用虚线边框与实线的工具/来源标签区分开
+.chip--context {
+  border-style: dashed;
+  color: var(--text-faint);
 }
 
 // 用户消息靠右，附件标签随之收在同一侧，与气泡右边界对齐
@@ -187,6 +195,55 @@
     opacity: 1;
     transform: translateY(-2px);
   }
+}
+
+// 模型推理链：以可折叠面板排在正文之前，是旁注而非正文，视觉上不与正文抢重心
+.message__thinking {
+  margin-bottom: 12px;
+}
+
+.message__thinking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color @ease-quick;
+
+  &:hover {
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+.message__thinking-icon {
+  width: 12px;
+  height: 12px;
+  transition: transform @ease-quick;
+}
+
+// 展开态把箭头由右转为向下，一眼能看出面板处于什么状态
+.message__thinking-toggle[aria-expanded='true'] .message__thinking-icon {
+  transform: rotate(90deg);
+}
+
+.message__thinking-body {
+  margin-top: 6px;
+  padding: 8px 12px;
+  // 用一道金线而非整块底色：推理是旁注，不该与正文抢视觉重心
+  border-left: 2px solid var(--gold-line);
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 // markdown 正文规则量大且与消息骨架关注点不同，单独成文件；

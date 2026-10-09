@@ -22,10 +22,15 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       password: 'mysql-secret',
       database: 'agent_data',
     },
-    llm: { provider: 'ollama', temperature: 0.3 },
+    llm: {
+      provider: 'ollama',
+      temperature: 0.3,
+      thinking: false,
+      context: { windowTokens: 8192, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 },
+    },
     ollama: {
       baseUrl: 'http://127.0.0.1:11434',
-      chatModel: 'qwen2.5:7b',
+      chatModel: 'qwen3',
       embeddingModel: 'nomic-embed-text',
       visionModel: 'qwen3-vl:8b',
     },
@@ -92,7 +97,12 @@ describe('管理端系统配置', () => {
   it('线上提供方按是否填了密钥回报', () => {
     const configured = describeSystemConfig(
       baseConfig({
-        llm: { provider: 'deepseek', temperature: 0.3 },
+        llm: {
+          provider: 'deepseek',
+          temperature: 0.3,
+          thinking: false,
+          context: { windowTokens: 8192, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 },
+        },
         embedding: { ...baseConfig().embedding, provider: 'openai' },
       }),
     );
@@ -101,7 +111,12 @@ describe('管理端系统配置', () => {
 
     const missing = describeSystemConfig(
       baseConfig({
-        llm: { provider: 'deepseek', temperature: 0.3 },
+        llm: {
+          provider: 'deepseek',
+          temperature: 0.3,
+          thinking: false,
+          context: { windowTokens: 8192, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 },
+        },
         deepseek: { apiKey: '', baseUrl: 'https://api.deepseek.com', chatModel: 'deepseek-chat' },
       }),
     );
@@ -116,7 +131,7 @@ describe('管理端系统配置', () => {
     expect(view.mysql.passwordConfigured).toBe(true);
     expect(view.knowledge.adminTokenConfigured).toBe(true);
     // 非密钥项照常展示，后台要能核对实际参数
-    expect(view.llm.model).toBe('qwen2.5:7b');
+    expect(view.llm.model).toBe('qwen3');
     expect(view.mysql.database).toBe('agent_data');
   });
 

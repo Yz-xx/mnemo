@@ -35,6 +35,8 @@ const CREATE_TABLES = [
     id CHAR(36) NOT NULL COMMENT '对话 ID',
     user_id BIGINT UNSIGNED NOT NULL COMMENT '所属用户',
     title VARCHAR(128) NOT NULL COMMENT '对话标题',
+    summary TEXT NULL COMMENT '滚动摘要：保留窗口之前的对话压缩结果',
+    summary_upto_seq BIGINT UNSIGNED NULL COMMENT '摘要已覆盖到的消息自增序号，即截断点',
     created_at DATETIME(3) NOT NULL COMMENT '创建时间',
     updated_at DATETIME(3) NOT NULL COMMENT '最近更新时间',
     PRIMARY KEY (id),

@@ -1,3 +1,4 @@
+import type { ContextConfig } from '../configuration/config/index.js';
 import type { ConversationStore } from '../conversation/store/index.js';
 import type { AgentService } from '../llm/agent.js';
 import type { Logger } from '@repo/logger';
@@ -5,6 +6,7 @@ import type { ChatStreamEvent } from '@repo/reusable';
 import type { Response } from 'express';
 import { preview } from '@repo/logger';
 import { toErrorMessage } from '@repo/shared';
+import { governContext } from './contextGovernance.js';
 
 /** 出参摘要保留的回复开头长度：足以判断回答是否切题，又不至于把整篇回答写进日志 */
 const ANSWER_PREVIEW = 200;
@@ -22,9 +24,9 @@ function openEventStream(res: Response): void {
 }
 
 /**
- * 编排一整轮对话：落库提问 → 流式写回响应 → 落库回复，并回滚没有产出的新建会话。
+ * 编排一整轮对话：落库提问 → 组装上下文 → 流式写回响应 → 落库回复，并回滚没有产出的新建会话。
  * 客户端断开时同步中断模型调用，避免继续消耗算力。
- * 日志按「一轮对话」聚合耗时、答复长度与用到的工具，便于事后判断是模型慢还是检索慢。
+ * 日志按「一轮对话」聚合耗时、答复长度、用到的工具与上下文取舍，便于事后判断是模型慢、检索慢还是被裁了历史。
  */
 export async function streamChatReply(input: {
   res: Response;
@@ -40,6 +42,8 @@ export async function streamChatReply(input: {
   fileIds: string[];
   /** 本轮附带的文件名：随提问一起落库，历史回看时还原附件标签 */
   attachmentNames: string[];
+  /** 上下文治理配置：决定本轮是否裁剪历史以及裁到多少 */
+  contextConfig: ContextConfig;
 }): Promise<void> {
   const {
     res,
@@ -51,6 +55,7 @@ export async function streamChatReply(input: {
     content,
     fileIds,
     attachmentNames,
+    contextConfig,
   } = input;
 
   // 先落库提问：新会话在这里创建，本轮若没有产出才好整体回滚。
@@ -95,7 +100,22 @@ export async function streamChatReply(input: {
   };
 
   try {
-    for await (const event of agent.stream(conversation.messages, {
+    // 摘要落库：条件更新保证截断点单调，返回是否真正写入
+    const persistSummary = (text: string, uptoSeq: number): Promise<boolean> =>
+      conversations.saveSummary(userId, conversation.id, text, uptoSeq);
+    // 上下文组装：先把保留窗口之前的未摘要段交给模型摘要，摘要失败才退化为丢弃最老轮次。
+    // 模型调用与落库收在 contextGovernance 内，这层只消费结果并观测取舍
+    const governed = await governContext({
+      history: conversation.messages,
+      summary: conversation.summary ?? null,
+      summaryUptoSeq: conversation.summaryUptoSeq ?? null,
+      config: contextConfig,
+      summarizer: agent,
+      persistSummary,
+      logger: log,
+    });
+
+    for await (const event of agent.stream(governed.messages, {
       userId,
       fileIds,
       signal: controller.signal,
@@ -107,6 +127,15 @@ export async function streamChatReply(input: {
         // 客户端因此在同一时刻知晓会话 ID，不会记住一个稍后会被删掉的会话
         responded = true;
         send({ type: 'conversation', conversationId: conversation.id });
+        // 上下文治理痕迹：只在真的裁掉历史时下发，避免每轮都挂一条无意义提示。
+        // 与 conversation 同刻推送：本轮确认有产出、会话会保留，这条提示才不会挂在随后被回滚的消息上
+        if (governed.trimmedMessages > 0) {
+          send({
+            type: 'context',
+            trimmedMessages: governed.trimmedMessages,
+            summarized: governed.summarized,
+          });
+        }
       }
       if (event.type === 'token') answer += event.content;
       if (event.type === 'tool') {
@@ -128,6 +157,13 @@ export async function streamChatReply(input: {
       answerPreview: answer.length > 0 ? preview(answer, ANSWER_PREVIEW) : undefined,
       tools: toOptionalList(usedTools)?.join(','),
       sources: toOptionalList(usedSources)?.join(','),
+      // 上下文取舍：估算量与生效预算对照，可判断本轮是否触发裁剪、裁掉了多少条。
+      // 字段名避开 token 子串：日志脱敏按字段名子串匹配，含 token 会被整段打成 ***
+      estimatedContextSize: governed.estimatedTokens,
+      trimmedMessages: governed.trimmedMessages,
+      windowBudget: governed.windowBudget,
+      // 本轮是否产出新的滚动摘要：与上两项对照，判断治理走的是摘要还是丢弃
+      summarized: governed.summarized,
     });
     send({
       type: 'done',

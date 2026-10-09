@@ -1,5 +1,6 @@
 import { tool } from 'langchain';
 import { z } from 'zod';
+import { withLabel } from './label.js';
 
 /** 白名单校验后计算算术表达式，避免执行任意代码 */
 function evaluateExpression(expression: string): number {
@@ -41,5 +42,5 @@ export function createUtilityTools() {
     },
   );
 
-  return [getCurrentTime, calculator];
+  return [withLabel(getCurrentTime, '获取当前时间'), withLabel(calculator, '计算')];
 }

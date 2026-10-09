@@ -225,6 +225,7 @@ export class KnowledgeStore {
     // 低于相似度下限的片段属于噪声，直接丢弃；过滤后条数可能少于 topK
     return rows
       .map((row) => ({
+        documentId: String(row.document_id),
         title: String(row.title),
         content: String(row.content),
         score: 1 - Number(row._distance),

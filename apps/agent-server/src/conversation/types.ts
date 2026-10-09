@@ -1,6 +1,8 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 export interface StoredMessage {
+  /** 自增序号：与写入顺序一致，也是滚动摘要截断点的比较依据 */
+  seq: number;
   id: string;
   role: MessageRole;
   content: string;
@@ -26,6 +28,10 @@ export interface MessageMeta {
 export interface Conversation {
   id: string;
   title: string;
+  /** 滚动摘要：更早对话的压缩结果；尚无摘要时不带该字段 */
+  summary?: string;
+  /** 摘要已覆盖到的最后一条消息 seq；尚无摘要时不带该字段 */
+  summaryUptoSeq?: number;
   createdAt: string;
   updatedAt: string;
   messages: StoredMessage[];

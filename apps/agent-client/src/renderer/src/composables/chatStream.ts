@@ -41,11 +41,18 @@ export async function consumeChatStream(
   for await (const event of stream) {
     if (event.type === 'token') {
       message.content += event.content;
+    } else if (event.type === 'thinking') {
+      // 推理链增量累加到消息上：只作过程展示，不落库、也不进正文
+      message.thinking = (message.thinking ?? '') + event.content;
     } else if (event.type === 'tool') {
       const steps = message.steps ?? [];
       if (event.status === 'start') {
-        // 先落一条进行中的标签：读文件这类慢工具要立刻给出可见反馈
-        message.steps = [...steps, { name: event.name, running: true }];
+        // 先落一条进行中的标签：读文件这类慢工具要立刻给出可见反馈。
+        // detail 是后端攒齐参数后下发的阶段描述；缺省时（历史回看）界面退回只显示工具名
+        message.steps = [
+          ...steps,
+          { name: event.name, running: true, ...(event.detail ? { detail: event.detail } : {}) },
+        ];
       } else {
         // 执行结束，把进行中的标签就地定格；后端对同名工具的 start 只推一次，
         // 配不上时补一条已完成记录，这次调用才不会从前端凭空消失
@@ -65,6 +72,13 @@ export async function consumeChatStream(
       // 检索来源挂在助手消息上：同一份文档被多次命中时只留一个标签
       const sources = message.sources ?? [];
       if (!sources.includes(event.name)) message.sources = [...sources, event.name];
+    } else if (event.type === 'context') {
+      // 治理痕迹挂在消息上：界面据此提示「这轮回答没看到完整历史」，
+      // 与 thinking 一样只作过程展示，不落库、不进正文
+      message.context = {
+        trimmedMessages: event.trimmedMessages,
+        summarized: event.summarized,
+      };
     } else if (event.type === 'conversation') {
       handlers.onConversation(event.conversationId);
     } else if (event.type === 'done') {

@@ -11,10 +11,15 @@
  * `file` 承载工具生成的导出文件：客户端据此提供下载入口，文件内容本身不进对话流。
  * `source` 承载知识库检索命中的文档名：服务端从检索结果里直接取，不依赖模型在正文中标注
  * （提示词层面早就要求「引用知识库内容必须标注来源」，但小模型遵循率撑不起主链路）。
+ * `tool` 的 `detail` 是人类可读的阶段描述（如「检索知识库：人工智能」）：入参攒到能解析时
+ * 才随 start 下发，客户端据此把「调用工具 x」换成人话；它不落库，历史回看时缺省并降级为工具名。
+ * `thinking` 承载模型推理链的增量：仅在开启 thinking 的模型上出现，体积大且含模型噪声，
+ * 因此不落库、不进历史、不计入上下文预算，客户端只把它当作可折叠的过程展示。
  */
 export type AgentStreamEvent =
   | { type: 'token'; content: string }
-  | { type: 'tool'; name: string; status: 'start' | 'end' }
+  | { type: 'thinking'; content: string }
+  | { type: 'tool'; name: string; status: 'start' | 'end'; detail?: string }
   | { type: 'file'; fileId: string; name: string; size: number }
   | { type: 'source'; name: string };
 
@@ -22,9 +27,13 @@ export type AgentStreamEvent =
  * 一轮对话可能推送的全部事件。
  * `conversation` 在首个 token / tool 之前补推：新建会话只有在本轮有产出时才会保留，
  * 客户端因此在同一时刻拿到会话 ID，不会记住一个随后会被回滚删除的会话。
+ * `context` 承载本轮上下文治理的痕迹：服务端只在真的裁掉历史时才下发，
+ * 让用户知道这轮回答并未看到完整历史（那段历史是被压成摘要还是被直接丢弃，由 `summarized` 区分）；
+ * 它同样不落库，历史回看时不还原，客户端以「无此信息」的形态自然降级。
  */
 export type ChatStreamEvent =
   | AgentStreamEvent
   | { type: 'conversation'; conversationId: string }
+  | { type: 'context'; trimmedMessages: number; summarized: boolean }
   | { type: 'done'; conversationId: string; title: string }
   | { type: 'error'; message: string };

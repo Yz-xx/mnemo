@@ -8,6 +8,16 @@ export interface ChatMessage {
   content: string;
   createdAt: string;
   /**
+   * 模型推理链（thinking）：流式对话中由 SSE thinking 事件累积，仅作过程展示。
+   * 服务端不落库，历史回看时该字段缺省，折叠面板整块不渲染。
+   */
+  thinking?: string;
+  /**
+   * 本轮上下文治理痕迹：服务端在真的裁掉历史时经 SSE context 事件下发，仅作过程展示。
+   * 服务端不落库，历史回看时该字段缺省，提示整块不渲染。
+   */
+  context?: ChatContext;
+  /**
    * 仅前端展示：本轮回复过程中触发的工具调用轨迹。
    * 流式对话中由 SSE tool 事件累积（带 running 状态）；
    * 切换历史会话时由服务端返回的 tools 字段还原为已完成状态。
@@ -34,10 +44,23 @@ export interface ChatMessage {
   files?: GeneratedFileInfo[];
 }
 
+/** 本轮上下文治理痕迹：仅在服务端真的裁掉历史时才有值 */
+export interface ChatContext {
+  /** 被挤出保留窗口、未注入模型的历史消息条数 */
+  trimmedMessages: number;
+  /** 本轮是否生成并落库了滚动摘要：为假表示那段历史被直接丢弃，未留摘要 */
+  summarized: boolean;
+}
+
 /** 助手回复过程中的一次工具调用：执行中与已完成共用同一条记录 */
 export interface ChatStep {
   /** 工具名，与后端 tool 事件的 name 一致 */
   name: string;
+  /**
+   * 人类可读的阶段描述（如「检索知识库：人工智能」）：后端在参数攒齐后随 start 事件下发。
+   * 服务端不落库，历史回看时缺省，界面据此降级为只显示工具名。
+   */
+  detail?: string;
   /** 是否仍在执行：为真时标签渲染加载指示 */
   running: boolean;
 }

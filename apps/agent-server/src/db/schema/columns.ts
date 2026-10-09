@@ -25,6 +25,18 @@ const COLUMN_MIGRATIONS: Record<string, ColumnMigration[]> = {
         COMMENT '账号状态：banned 禁止登录' AFTER role`,
     },
   ],
+  conversations: [
+    {
+      name: 'summary',
+      definition: `summary TEXT NULL COMMENT '滚动摘要：保留窗口之前的对话压缩结果'
+        AFTER title`,
+    },
+    {
+      name: 'summary_upto_seq',
+      definition: `summary_upto_seq BIGINT UNSIGNED NULL
+        COMMENT '摘要已覆盖到的消息自增序号，即截断点' AFTER summary`,
+    },
+  ],
   messages: [
     {
       name: 'tools',

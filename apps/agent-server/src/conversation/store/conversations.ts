@@ -1,25 +1,20 @@
-import type {
-  Conversation,
-  ConversationSummary,
-  MessageMeta,
-  MessageRole,
-  StoredMessage,
-} from '../types.js';
+import type { Conversation, ConversationSummary, MessageMeta, MessageRole } from '../types.js';
 import type {
   AdminConversation,
   AdminConversationPage,
   AdminConversationQuery,
   AdminConversationRow,
+  ConversationDetailRow,
   ConversationRow,
   ConversationStats,
   CountRow,
 } from './mapper.js';
-import type { MessageRow } from './messages.js';
 import type { Pool, ResultSetHeader } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
 import { buildTitle, DEFAULT_TITLE } from './mapper.js';
-import { toStoredMessage } from './messages.js';
+import { readMessages } from './messages.js';
 import { readStats } from './stats.js';
+import { saveConversationSummary } from './summary.js';
 
 /** 会话持久化（MySQL）：所有读写都按 user_id 隔离，实现多账号数据互不可见 */
 export class ConversationStore {
@@ -45,25 +40,31 @@ export class ConversationStore {
 
   /** 读取单个会话及其全部消息；不属于该用户时返回 null */
   async get(userId: number, id: string): Promise<Conversation | null> {
-    const [rows] = await this.pool.execute<ConversationRow[]>(
-      'SELECT id, title, created_at, updated_at FROM conversations WHERE id = ? AND user_id = ? LIMIT 1',
+    const [rows] = await this.pool.execute<ConversationDetailRow[]>(
+      `SELECT id, title, created_at, updated_at, summary, summary_upto_seq
+         FROM conversations WHERE id = ? AND user_id = ? LIMIT 1`,
       [id, userId],
     );
     const row = rows[0];
     if (!row) return null;
 
-    // seq 为自增列，保证消息顺序与写入顺序一致
-    const [messageRows] = await this.pool.execute<MessageRow[]>(
-      'SELECT id, role, content, tools, attachments, sources, created_at FROM messages WHERE conversation_id = ? ORDER BY seq',
-      [id],
-    );
+    // 消息按 seq 升序读出，与写入顺序一致；滚动摘要的截断点也按它比较
+    const messages = await readMessages(this.pool, id);
     return {
       id: row.id,
       title: row.title,
+      // 空列不带字段：调用方以「有没有值」判断是否已有摘要，无需再比对 null
+      ...(row.summary ? { summary: row.summary } : {}),
+      ...(row.summary_upto_seq === null ? {} : { summaryUptoSeq: Number(row.summary_upto_seq) }),
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
-      messages: messageRows.map(toStoredMessage),
+      messages,
     };
+  }
+
+  /** 保存滚动摘要并推进截断点：实现在 summary.ts，条件更新保证截断点只增不减 */
+  saveSummary(userId: number, id: string, summary: string, uptoSeq: number): Promise<boolean> {
+    return saveConversationSummary(this.pool, userId, id, summary, uptoSeq);
   }
 
   async create(userId: number): Promise<Conversation> {
@@ -97,42 +98,46 @@ export class ConversationStore {
     const { tools, attachments, sources } = meta;
     let conversation = id ? await this.get(userId, id) : null;
     if (!conversation) conversation = await this.create(userId);
-    const message: StoredMessage = {
-      id: randomUUID(),
-      role,
-      content,
-      tools,
-      attachments,
-      sources,
-      createdAt: new Date().toISOString(),
-    };
-    conversation.messages.push(message);
-
-    // 首条用户消息用于生成会话标题
-    const title =
-      conversation.title === DEFAULT_TITLE && role === 'user'
-        ? buildTitle(content)
-        : conversation.title;
+    const messageId = randomUUID();
     const now = new Date();
-    conversation.title = title;
-    conversation.updatedAt = now.toISOString();
 
     // 空数组写 null，避免没有元数据的消息也存一个空数组占位
     const toJson = (value: string[] | undefined): string | null =>
       value && value.length > 0 ? JSON.stringify(value) : null;
-    await this.pool.execute(
+
+    // 先入库再回填自增 seq：滚动摘要按 seq 定位截断点，缺了它未摘要段会被整段过滤掉
+    const [result] = await this.pool.execute<ResultSetHeader>(
       'INSERT INTO messages (id, conversation_id, role, content, tools, attachments, sources, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
-        message.id,
+        messageId,
         conversation.id,
         role,
         content,
         toJson(tools),
         toJson(attachments),
         toJson(sources),
-        new Date(message.createdAt),
+        now,
       ],
     );
+
+    // 首条用户消息用于生成会话标题
+    const title =
+      conversation.title === DEFAULT_TITLE && role === 'user'
+        ? buildTitle(content)
+        : conversation.title;
+    conversation.title = title;
+    conversation.updatedAt = now.toISOString();
+    conversation.messages.push({
+      seq: Number(result.insertId),
+      id: messageId,
+      role,
+      content,
+      tools,
+      attachments,
+      sources,
+      createdAt: now.toISOString(),
+    });
+
     await this.pool.execute('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?', [
       title,
       now,
@@ -206,17 +211,14 @@ export class ConversationStore {
     const row = rows[0];
     if (!row) return null;
 
-    const [messageRows] = await this.pool.execute<MessageRow[]>(
-      'SELECT id, role, content, tools, attachments, sources, created_at FROM messages WHERE conversation_id = ? ORDER BY seq',
-      [id],
-    );
+    const messages = await readMessages(this.pool, id);
     return {
       id: row.id,
       userId: Number(row.user_id),
       title: row.title,
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
-      messages: messageRows.map(toStoredMessage),
+      messages,
     };
   }
 

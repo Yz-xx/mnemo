@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # 上下文用「保留窗口 + 持久化滚动摘要」治理
@@ -24,7 +24,7 @@ agent-server 此前把整段会话历史原样喂给对话模型，长会话必�
 ## 决策
 
 1. **治理分三阶段落地**：阶段 1 确定性裁剪 + 观测，阶段 2 单轮内工具结果治理，阶段 3 持久化滚动摘要。各阶段可独立上线，本文锁阶段 3。
-2. **摘要落库**：`conversations` 增加 `summary TEXT NULL` 与 `summary_upto_seq INT NULL` 两列，经 `ensureColumns` 的条件迁移补出，整段幂等。
+2. **摘要落库**：`conversations` 增加 `summary TEXT NULL` 与 `summary_upto_seq BIGINT UNSIGNED NULL` 两列（与 `messages.seq` 同型，截断点不会溢出），经 `ensureColumns` 的条件迁移补出，整段幂等。
 3. **截断点用自增 `seq`**：给 `StoredMessage` 增补 `seq` 字段，未摘要段直接用 `WHERE seq > ?` 取。不用消息 UUID（无序、比较需额外查表），也不用「已摘要条数」（任何删除都会漂移）。
 4. **摘要优先于丢弃**：触发时先把「保留窗口起点之前」的**全部未摘要段**交给模型做摘要；只有在摘要失败时才退化为丢弃最老。
 5. **边界紧贴保留窗口，无 gap 无重叠**：摘要恰好覆盖到保留窗口起点之前的那一条，`summary_upto_seq` 推进到该条的 `seq`。于是下一轮的未摘要段 = 保留窗口 + 新增消息，既不漏段也不重复占位。

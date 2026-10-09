@@ -5,7 +5,7 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 - 运行环境：Node ≥ 20（`type: module`，配置走 Node 原生 `--env-file` 加载）
 - 技术栈：Express 5 + LangChain 1.x（`@langchain/ollama` / `@langchain/openai`）+ zod + mysql2
 - 存储：MySQL 保存用户、登录会话与对话记录；知识库为本地 LanceDB 向量库
-- 模型：默认本地 Ollama（`qwen2.5:7b` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
+- 模型：默认本地 Ollama（`qwen3` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
 仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；通用工具库见 [@repo/shared](../../packages/shared/README.md)，业务可复用库见 [@repo/reusable](../../packages/reusable/README.md)，日志库见 [@repo/logger](../../packages/logger/README.md)。
 
@@ -162,16 +162,29 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 > 约束 2 是必需的：本地小模型在无强制要求时倾向于直接作答而不检索，这条规则把它拉回“先查后答”的链路。
 
+### 上下文治理
+
+历史此前是**全量**注入模型，长会话必然溢出窗口。现在每轮由 `src/llm/context/` 组装：先按字符构成估算整段历史的 token（非 ASCII 约每字符 1 个、ASCII 约每 4 字符 1 个），超过窗口 `CONTEXT_TRIGGER_RATIO` 才把保留窗口收窄到 `CONTEXT_KEEP_RATIO`，并**从新到旧整轮丢弃**——保证 `user` / `assistant` 成对，最新一轮（本轮提问）无条件保留；未触发时行为与治理前完全一致。本轮注入的估算量、丢弃条数、生效预算与是否产出新摘要记在「本轮对话完成」日志的 `estimatedContextSize` / `trimmedMessages` / `windowBudget` / `summarized` 四个字段里。
+
+阶段 3 起，「丢弃」不再是超限时的第一选择：触发治理时先把**保留窗口起点之前的全部未摘要段**交给对话模型，与已有摘要合并成一段新摘要后落库（`conversations.summary` / `summary_upto_seq`），再以一条 `SystemMessage` 注入到历史之前。截断点用消息自增列 `seq` 记录，恰好推进到被挤出段的末条，与保留窗口紧贴衔接，既不漏段也不重复占位。摘要请求复用对话模型实例单次 `invoke`（不走 agent、不带工具），输出限长后计入窗口估算，防止误差随轮次累积；摘要失败或产出为空时**不推进截断点**，本轮退化为上面的确定性丢弃，下轮重新尝试。写入用条件更新（`summary_upto_seq < ?`）保证截断点只增不减，并发下先落库的一次生效。摘要是锦上添花，任何时候都不阻断对话，整体取舍见 [ADR 0008](../../docs/adr/0008-context-window-and-summary.md)。裁剪**真正发生**时，服务端会在首个 token 之前补推一条 `context` 事件（`trimmedMessages` + `summarized`），客户端据此提示「这轮回答没看到完整历史」；未触发裁剪就不推，避免每轮都挂一条无意义提示。该事件不落库，历史回看时不还原。
+
+历史之外，一轮之内的**工具结果**与**附件预读**同样会挤占窗口：模型可能反复检索、反复读同一批文件，一份超长附件也能把窗口挤爆。阶段 2 给单轮注入的这些产物加了一道额度（`CONTEXT_TOOL_RATIO`，占窗口的比例），由 `src/llm/context/budget.ts` 的 `createToolBudget()` 承载，附件预读、检索与读取共用同一份额度、跨同轮多次调用累计。规则有两条：
+
+- **按文档去重**：同一份知识库文档在本轮只回填一次，后续检索再次命中时不再重复注入片段，只提示「已在此前给出」；
+- **超额度即截断**：额度用尽后不再注入新内容，被截断的结果会附一句「已达上下文预算上限」的说明，让模型知道自己没看到全部内容；附件预读超出额度时保留「【文件名｜ID】」抬头行，只是正文不再注入。
+
+额度按 `windowTokens × toolRatio` 折算，因此本地与线上模型各有合适的档位，不必分别配绝对数。本轮注入产物的用量由 `AgentService` 在流结束时记一条 debug 日志（`usedBudget` / `budgetLimit` / `deliveredDocuments`），可据此判断本轮是否被检索或读取挤占。
+
 ## 七、工具层
 
-| 工具                    | 参数                                                               | 说明                                                                             |
-| ----------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `search_knowledge_base` | `query: string`                                                    | 按当前用户可见性检索知识库，命中后以「【片段 n】来源《标题》」格式回填           |
-| `list_files`            | 无                                                                 | 列出本轮附件的 `ID｜文件名｜扩展名｜大小`                                        |
-| `read_file`             | `fileId: string`                                                   | 复核附件原文（优先用预读内容）：docx / xlsx / pdf 走解析器，图片交给视觉模型转述 |
-| `write_file`            | `name: string` / `format: docx \| xlsx \| pdf` / `content: string` | 按指定格式生成导出文件，登记到本轮导出收集器                                     |
-| `get_current_time`      | 无                                                                 | 返回 `Asia/Shanghai` 时区的当前时间                                              |
-| `calculator`            | `expression: string`                                               | 计算 `+ - * / ( )` 算术表达式                                                    |
+| 工具                    | 参数                                                               | 说明                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `search_knowledge_base` | `query: string`                                                    | 按当前用户可见性检索知识库，命中后以「【片段 n】来源《标题》」格式回填；同轮已回填过的文档不再重复注入 |
+| `list_files`            | 无                                                                 | 列出本轮附件的 `ID｜文件名｜扩展名｜大小`                                                              |
+| `read_file`             | `fileId: string`                                                   | 复核附件原文（优先用预读内容）：docx / xlsx / pdf 走解析器，图片交给视觉模型转述                       |
+| `write_file`            | `name: string` / `format: docx \| xlsx \| pdf` / `content: string` | 按指定格式生成导出文件，登记到本轮导出收集器                                                           |
+| `get_current_time`      | 无                                                                 | 返回 `Asia/Shanghai` 时区的当前时间                                                                    |
+| `calculator`            | `expression: string`                                               | 计算 `+ - * / ( )` 算术表达式                                                                          |
 
 工具参数全部用 **zod schema** 声明，由框架负责校验与描述注入。
 
@@ -233,12 +246,18 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                                               |
 | `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                                                 |
 | `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                                               |
+| `LLM_THINKING`                                                 | `false`                     | 是否输出推理链（thinking）：仅对 Ollama 生效，且需模型自身支持         |
 | `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址                                                            |
-| `OLLAMA_CHAT_MODEL`                                            | `qwen2.5:7b`                | 本地对话模型                                                           |
+| `OLLAMA_CHAT_MODEL`                                            | `qwen3`                     | 本地对话模型                                                           |
 | `OLLAMA_EMBEDDING_MODEL`                                       | `nomic-embed-text`          | 本地向量模型                                                           |
 | `DEEPSEEK_API_KEY`                                             | 空                          | 线上对话服务的密钥                                                     |
 | `DEEPSEEK_BASE_URL`                                            | `https://api.deepseek.com`  | DeepSeek 兼容 OpenAI 协议                                              |
 | `DEEPSEEK_CHAT_MODEL`                                          | `deepseek-chat`             | 线上对话模型                                                           |
+| `OLLAMA_CONTEXT_WINDOW_TOKENS`                                 | `8192`                      | 本地对话模型的窗口预算（token），需与 Ollama 的 `num_ctx` 对齐         |
+| `DEEPSEEK_CONTEXT_WINDOW_TOKENS`                               | `65536`                     | 线上对话模型的窗口预算（token）                                        |
+| `CONTEXT_TRIGGER_RATIO`                                        | `0.7`                       | 上下文占用超过窗口该比例时触发裁剪                                     |
+| `CONTEXT_KEEP_RATIO`                                           | `0.4`                       | 触发裁剪后保留的窗口占比                                               |
+| `CONTEXT_TOOL_RATIO`                                           | `0.3`                       | 单轮附件预读、检索、读取结果合计可注入的窗口占比，超出即截断           |
 | `EMBEDDING_PROVIDER`                                           | `ollama`                    | `ollama` 或 `openai`                                                   |
 | `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | `text-embedding-3-small` 等 | 线上向量服务配置                                                       |
 | `KNOWLEDGE_CHUNK_SIZE`                                         | `500`                       | 切片长度                                                               |
@@ -275,13 +294,13 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 ```bash
 mysql -h 127.0.0.1 -P 3306 -u root -p   # 验证 MySQL 可连接（库表会在后端启动时自动创建）
 
-ollama pull qwen2.5:7b          # 对话模型（必须支持工具调用）
+ollama pull qwen3          # 对话模型（必须支持工具调用）
 ollama pull nomic-embed-text    # 向量模型
 ollama pull qwen3-vl:8b         # 图片理解（可选；把 OLLAMA_VISION_MODEL 留空即关闭）
 ollama serve
 ```
 
-> 对话模型必须选择**支持 Function Calling** 的版本。例如 `deepseek-r1:7b` 不支持 Ollama 的函数调用，会导致模型不调用工具、直接编造答案；`qwen2.5:7b` 可正常使用。
+> 对话模型必须选择**支持 Function Calling** 的版本。例如 `deepseek-r1:7b` 不支持 Ollama 的函数调用，会导致模型不调用工具、直接编造答案；`qwen3` 可正常使用。
 
 首次部署还需先在 `.env.production`（或系统环境变量）里配好 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD`，顺序是**先配变量、再上代码**：代码先上而变量缺失时，空库启动会因无凭据跳过超管自举（仅告警），后台将无人可登。
 

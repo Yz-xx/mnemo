@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { describeConnectionError } from '../configuration/errors.js';
 
 describe('连接类错误翻译', () => {
-  const target = 'ollama（http://127.0.0.1:11434，模型 qwen2.5:7b）';
+  const target = 'ollama（http://127.0.0.1:11434，模型 qwen3）';
 
   it('fetch failed 翻译为带服务名与目标地址的提示', () => {
     const result = describeConnectionError(new TypeError('fetch failed'), target, '对话模型服务');

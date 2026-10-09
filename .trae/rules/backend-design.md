@@ -75,7 +75,7 @@ apps/agent-server/src/
 - 编排集中在 `services/chatStream.ts` 的 `streamChatReply()`：落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话；`routes/chat.ts` 只负责参数校验（400）与会话归属校验（404）。
 - 落库提问必须在 `flushHeaders()` 之前完成，落库失败才能按普通请求返回 500。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
-- 事件格式 `data: {...}\n\n`，`type` 取 `conversation` / `token` / `tool` / `source` / `file` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`。
+- 事件格式 `data: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `file` / `context` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
 - `conversation` 事件必须在首个 token / tool 之前补推，使「有产出才保留」与「客户端已知晓会话 ID」严格对齐。
 - 中断必须监听 `res.on('close')`（`req` 的 `close` 会误中断），并用 `res.writableEnded` 排除正常结束；中断时通过 `AbortController` 停止模型推理。客户端主动中断不再回推 `error`；`finally` 中统一 `res.end()`。
 - 仅在答复正文非空时落库；中断与失败路径同样要把已产出的部分回复落库（用「本轮是否已落库」标志防重复写入，落库失败只 warn）。

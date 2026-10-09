@@ -1,3 +1,4 @@
+import type { AppConfig } from '../configuration/config/index.js';
 import type { ConversationStore } from '../conversation/store/index.js';
 import type {
   Conversation,
@@ -11,6 +12,7 @@ import type { Logger } from '@repo/logger';
 import type { AgentStreamEvent, ChatStreamEvent } from '@repo/reusable';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
+import { SystemMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '@repo/logger';
 import { HTTP_STATUS } from '@repo/reusable';
@@ -53,6 +55,8 @@ class FakeConversations {
           messages: [],
         };
     conversation.messages.push({
+      // seq 与真实存储一致：自增序号，滚动摘要的截断点按它比较
+      seq: conversation.messages.length + 1,
       id: `m-${conversation.messages.length + 1}`,
       role,
       content,
@@ -71,6 +75,24 @@ class FakeConversations {
 
   async remove(_userId: number, id: string): Promise<boolean> {
     return this.records.delete(id);
+  }
+
+  /** 滚动摘要落库记录：供用例断言摘要内容与截断点推进到了哪一条 */
+  readonly summaries: { id: string; summary: string; uptoSeq: number }[] = [];
+
+  async saveSummary(
+    _userId: number,
+    id: string,
+    summary: string,
+    uptoSeq: number,
+  ): Promise<boolean> {
+    const conversation = this.records.get(id);
+    // 与真实存储的条件更新同义：截断点只增不减，旧摘要无法覆盖更靠后的截断点
+    if (!conversation || (conversation.summaryUptoSeq ?? 0) >= uptoSeq) return false;
+    conversation.summary = summary;
+    conversation.summaryUptoSeq = uptoSeq;
+    this.summaries.push({ id, summary, uptoSeq });
+    return true;
   }
 }
 
@@ -155,6 +177,11 @@ class FakeFiles {
   }
 }
 
+/** 路由层只读 config.llm.context，其余配置与本组用例无关，用断言占位即可 */
+const CONFIG = {
+  llm: { context: { windowTokens: 8192, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 } },
+} as unknown as AppConfig;
+
 /** 假依赖集合：会话存储、文件存储与智能体均为替身，用于隔离数据库与模型服务 */
 function fakeDeps(
   conversations: FakeConversations,
@@ -165,6 +192,7 @@ function fakeDeps(
     agent,
     conversations: conversations as unknown as ConversationStore,
     files: files as unknown as FileStore,
+    config: CONFIG,
   };
 }
 
@@ -328,6 +356,34 @@ describe('handleChatMessage', () => {
     expect(saved?.messages.at(-1)?.sources).toEqual(['公共手册']);
   });
 
+  it('推理链事件原样推给客户端，但不落库：历史只留正文，推理不进上下文预算', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      fakeDeps(
+        conversations,
+        fakeAgent([
+          { type: 'thinking', content: '先判断用户问的是定义还是用法。' },
+          { type: 'token', content: '人工智能是……' },
+          { type: 'thinking', content: '再补一句注意点。' },
+        ]),
+      ),
+      fakeRequest({ message: '什么是人工智能' }),
+      res as unknown as Response,
+    );
+
+    // 推理链原样转发，界面据此渲染可折叠的「思考过程」面板
+    expect(res.events).toContainEqual({
+      type: 'thinking',
+      content: '先判断用户问的是定义还是用法。',
+    });
+    const [summary] = await conversations.list();
+    const saved = await conversations.get(USER_ID, summary.id);
+    // 落库的助手消息只含正文：推理链不落库、不进历史，也就不会计入下一轮的窗口预算
+    expect(saved?.messages.at(-1)?.content).toBe('人工智能是……');
+  });
+
   it('既有会话续发失败时保留原有记录', async () => {
     const conversations = new FakeConversations();
     // 先造一轮完整对话，模拟用户已有历史记录
@@ -375,5 +431,80 @@ describe('handleChatMessage', () => {
     );
 
     expect(received).toEqual(['f-1']);
+  });
+
+  it('历史超出窗口时生成滚动摘要，落库并把摘要注入本轮消息', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+    // 捕获「本轮对话完成」埋点：核对日志里的取舍指标与下发的 context 事件、摘要落库三处一致
+    const records: { message: string; fields?: Record<string, unknown> }[] = [];
+    const push = (message: string, fields?: Record<string, unknown>) => {
+      records.push({ message, fields });
+    };
+    const log = {
+      // 业务层用 logger.child 派生请求级子日志，这里让它照旧往同一份记录里写
+      child: () => ({ debug: push, info: push, warn: () => undefined, error: () => undefined }),
+      debug: push,
+      info: push,
+      warn: () => undefined,
+      error: () => undefined,
+    } as unknown as Logger;
+    res.locals.log = log;
+    // 先造一轮超窗口的历史：非 ASCII 每字符 1 token，两轮合计 800 已超过触发阈值 700
+    const { id } = await conversations.append(USER_ID, undefined, 'user', '中'.repeat(400));
+    await conversations.append(USER_ID, id, 'assistant', '中'.repeat(400));
+
+    const summary = '用户此前问过苹果的价格。';
+    let injected: unknown[] = [];
+    const agent = {
+      summarize: async () => summary,
+      async *stream(messages: unknown[]) {
+        injected = messages;
+        yield { type: 'token', content: '好的' };
+      },
+    } as unknown as AgentService;
+
+    await handleChatMessage(
+      {
+        ...fakeDeps(conversations, agent),
+        // 窗口取 1000：触发阈值 700、保留预算 400，只装得下最新一轮提问
+        config: {
+          llm: {
+            context: { windowTokens: 1000, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 },
+          },
+        } as unknown as AppConfig,
+      },
+      fakeRequest({ message: '再问', conversationId: id }),
+      res as unknown as Response,
+    );
+
+    // 被挤出的前两轮独立成段交给模型压缩，截断点推进到该段末条（seq 2）
+    expect(conversations.summaries).toEqual([{ id, summary, uptoSeq: 2 }]);
+    // 摘要拼成一条 SystemMessage 插在历史之前：模型据此知道更早的对话，而不是只看到最新一轮
+    expect(injected[0]).toBeInstanceOf(SystemMessage);
+    expect(String((injected[0] as SystemMessage).content)).toContain(summary);
+    expect(injected).toHaveLength(2);
+    // 裁剪痕迹推给客户端：提示这轮回答只看到最新一轮，被挤出的两条已压成摘要
+    expect(res.events).toContainEqual({ type: 'context', trimmedMessages: 2, summarized: true });
+    // 埋点与事件同源：完成日志里的取舍指标须与 context 事件、摘要落库三处对得上，
+    // 否则事后按日志复盘会与实际推给前端的判读不一致
+    expect(records.find((record) => record.message === '本轮对话完成')?.fields).toMatchObject({
+      trimmedMessages: 2,
+      summarized: true,
+    });
+  });
+
+  it('历史未超窗口时不下发 context 事件，避免每轮都挂一条无意义提示', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      fakeDeps(conversations, fakeAgent([{ type: 'token', content: '好的' }])),
+      fakeRequest({ message: '在吗' }),
+      res as unknown as Response,
+    );
+
+    // 只有 conversation / token / done：没裁历史就不该有治理提示
+    expect(res.events.map((event) => event.type)).toEqual(['conversation', 'token', 'done']);
   });
 });
