@@ -26,6 +26,12 @@ import { AgentService } from './llm/agent.js';
 import { createEmbeddings } from './llm/model.js';
 import { ApiLogStore } from './logging/store.js';
 import { createConcurrencyGuard } from './middleware/concurrencyGuard.js';
+import {
+  createMetrics,
+  METRIC,
+  monitorPool,
+  startEventLoopSampler,
+} from './observability/index.js';
 import { KnowledgeStore } from './rag/index.js';
 
 // 配置与日志先于其它依赖建立：建库、连接池等启动环节失败时也能留下可排查的记录
@@ -36,6 +42,18 @@ const logger = createLogger({
   level: config.log.level,
   dir: config.log.dir,
   retentionDays: config.log.retentionDays,
+});
+
+// 指标注册表：埋点方写入，就绪检查读取快照（见 docs/adr/0010 决策 17）
+const metrics = createMetrics({ histogramSize: config.observability.histogramSize });
+// 事件循环延迟按间隔采样写入注册表：定时器 unref，不阻止进程退出，停机时显式停采
+const stopEventLoopSampler = startEventLoopSampler({
+  intervalMs: config.observability.eventLoopSampleIntervalMs,
+  onSample: (sample) => {
+    metrics.gauge(METRIC.EVENT_LOOP_P50, sample.p50Ms);
+    metrics.gauge(METRIC.EVENT_LOOP_P99, sample.p99Ms);
+    metrics.gauge(METRIC.EVENT_LOOP_MAX, sample.maxMs);
+  },
 });
 
 /**
@@ -65,13 +83,14 @@ async function bootstrapSuperAdmin(
  * 运行期兜底与优雅停机。
  * - 崩溃：未捕获的异常与拒绝记一条日志后退出，交由进程守护重启，不让进程带着未知状态继续对外服务；
  * - 停机：先停止接单、断开空闲 keep-alive 连接，等在途请求收尾（超过宽限即强制断开），
- *   最后关闭数据库连接池与向量库连接。停机因此比现在慢，等待上限由 SHUTDOWN_GRACE_MS 约定。
+ *   最后关闭数据库连接池、向量库连接并停止指标采样。停机因此比现在慢，等待上限由 SHUTDOWN_GRACE_MS 约定。
  */
 function installShutdownHandlers(
   server: http.Server,
   pool: Pool,
   knowledge: KnowledgeStore,
   apiLogs: ApiLogStore,
+  stopSampling: () => void,
 ): void {
   let stopping = false;
 
@@ -90,9 +109,10 @@ function installShutdownHandlers(
     clearTimeout(forceTimer);
     // 在途响应已收尾、finish 回调也已入队：此时刷空缓冲，确保停机前日志落尽
     await apiLogs.flush();
-    // 再关掉对外连接
+    // 再关掉对外连接并停止指标采样
     await pool.end();
     await knowledge.close();
+    stopSampling();
     logger.info('已停机', { reason });
   };
 
@@ -113,6 +133,8 @@ async function bootstrap(): Promise<void> {
   // 首次启动时自动建库建表，随后复用同一个连接池
   await ensureSchema(config.mysql);
   const pool = createMysqlPool(config.mysql);
+  // 观测连接池排队与等待：池不足时先体现在等待时长与超时计数上
+  monitorPool(pool, { metrics, connectTimeoutMs: config.mysql.connectTimeoutMs });
 
   // 接口日志改批量刷写：攒批 + 定时，替掉每请求一条 INSERT；失败告警收在 onError
   const apiLogs = new ApiLogStore(pool, {
@@ -128,7 +150,7 @@ async function bootstrap(): Promise<void> {
   const passwordCipher = createPasswordCipher();
   // 启动清理：清掉过期会话，并把历史遗留的同账号重复会话收敛为单端登录
   const prunedSessions = await sessions.prune();
-  const conversations = new ConversationStore(pool);
+  const conversations = new ConversationStore(pool, metrics);
   const files = new FileStore(pool, config.upload.dir);
   // 知识库检索与向量化治理（见 docs/adr/0010 决策 11、16）：
   // 读路径过独立闸门并套超时、失败降级为空结果；向量服务连续失败即熔断，读写共用一份计数
@@ -155,11 +177,12 @@ async function bootstrap(): Promise<void> {
         logger,
       }),
       timeoutMs: config.concurrency.retrievalTimeoutMs,
+      metrics,
       logger,
     },
   );
-  // 视觉读取器用默认实现（第 4 参传 undefined 走默认值），日志作为第 5 参注入模型闸门与熔断
-  const agent = new AgentService(config, knowledge, files, undefined, logger);
+  // 视觉读取器用默认实现（第 4 参传 undefined 走默认值），日志与指标作为第 5、6 参注入
+  const agent = new AgentService(config, knowledge, files, undefined, logger, metrics);
   // 并发治理：分档闸门与会话级串行锁都是进程内状态，重启即清零（见 docs/adr/0010）
   const guard = createConcurrencyGuard(config.concurrency, logger);
   const chatLock = createConversationLock(config.concurrency.chat.queueTimeoutMs);
@@ -170,6 +193,8 @@ async function bootstrap(): Promise<void> {
   const app = createApp({
     config,
     logger,
+    metrics,
+    pool,
     agent,
     guard,
     chatLock,
@@ -205,7 +230,7 @@ async function bootstrap(): Promise<void> {
     if (prunedSessions > 0) logger.info('已清理历史登录会话', { count: prunedSessions });
   });
 
-  installShutdownHandlers(server, pool, knowledge, apiLogs);
+  installShutdownHandlers(server, pool, knowledge, apiLogs, stopEventLoopSampler);
 }
 
 bootstrap().catch((error: unknown) => {

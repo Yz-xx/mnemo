@@ -1,5 +1,3 @@
-export { UserStore } from './store.js';
-export { ADMIN_ROLES, isAdminRole } from './types.js';
 export type {
   SuperAdminBootstrap,
   UserListScope,
@@ -11,3 +9,5 @@ export type {
   UserStats,
   UserStatus,
 } from './types.js';
+export { UserStore } from './store.js';
+export { ADMIN_ROLES, isAdminRole } from './types.js';

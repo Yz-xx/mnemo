@@ -7,8 +7,8 @@ import PageBar from './components/PageBar';
 import SearchBar from './components/SearchBar';
 import './styles/tokens.less';
 
-export { BatchBar, DataTable, ModalDialog, PageBar, SearchBar };
 export type { ColumnSpec } from './components/DataTable';
+export { BatchBar, DataTable, ModalDialog, PageBar, SearchBar };
 
 export default {
   install(app: App): void {

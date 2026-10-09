@@ -4,10 +4,10 @@ import { formatRecord } from './format.js';
 import { redactFields } from './redact.js';
 
 // 统一出口：业务方只从 '@repo/logger' 引入
+export type { LogFields, LogLevel, LogRecord, LogSink, Logger } from './types.js';
 export { formatDay, formatRecord } from './format.js';
 export { preview } from './preview.js';
 export { redactFields, redactValue } from './redact.js';
-export type { LogFields, LogLevel, LogRecord, LogSink, Logger } from './types.js';
 
 /** 级别权重：低于当前阈值的记录直接丢弃，避免日志文件被 debug 噪声淹没 */
 const WEIGHT: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };

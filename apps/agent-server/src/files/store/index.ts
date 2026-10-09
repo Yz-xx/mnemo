@@ -1,4 +1,3 @@
-export { FileStore } from './fileStore.js';
 export type {
   AdminFilePage,
   AdminFileQuery,
@@ -8,3 +7,4 @@ export type {
   StreamedUpload,
   UploadedFile,
 } from './types.js';
+export { FileStore } from './fileStore.js';

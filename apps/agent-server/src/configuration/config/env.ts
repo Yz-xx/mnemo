@@ -117,6 +117,19 @@ export interface AuthConfig {
   sessionCacheTtlMs: number;
 }
 
+/**
+ * 可观测与就绪检查（见 docs/adr/0010 决策 17）：采样口径与探测超时。
+ * 这些值只影响观测的分辨率与开销，不参与放行判定，可随时调整。
+ */
+export interface ObservabilityConfig {
+  /** 事件循环延迟采样间隔（毫秒）：越短越能捕捉短时阻塞，开销也越大 */
+  eventLoopSampleIntervalMs: number;
+  /** 直方图保留的最近样本数：分位数基于该窗口计算，长跑下内存仍有上界 */
+  histogramSize: number;
+  /** 就绪检查探测单个依赖的超时（毫秒） */
+  readinessProbeTimeoutMs: number;
+}
+
 export interface AppConfig {
   port: number;
   dataDir: string;
@@ -130,6 +143,8 @@ export interface AppConfig {
   apiLog: ApiLogConfig;
   /** 鉴权会话缓存参数 */
   auth: AuthConfig;
+  /** 可观测：事件循环采样、直方图窗口与就绪探测超时 */
+  observability: ObservabilityConfig;
   llm: {
     provider: LlmProvider;
     temperature: number;
@@ -341,6 +356,15 @@ export function loadConfig(): AppConfig {
     // 鉴权会话缓存：短 TTL 压掉每请求一次 user_sessions 查询，登出等场景主动失效
     auth: {
       sessionCacheTtlMs: toNumber(process.env.AUTH_SESSION_CACHE_TTL_MS, 5000),
+    },
+    // 可观测与就绪检查（P4）：采样间隔与直方图窗口只影响观测分辨率，探测超时兜住就绪接口自身
+    observability: {
+      eventLoopSampleIntervalMs: toNumber(
+        process.env.OBSERVABILITY_EVENT_LOOP_SAMPLE_INTERVAL_MS,
+        10000,
+      ),
+      histogramSize: toNumber(process.env.OBSERVABILITY_HISTOGRAM_SIZE, 1024),
+      readinessProbeTimeoutMs: toNumber(process.env.READINESS_PROBE_TIMEOUT_MS, 3000),
     },
     llm: {
       provider,

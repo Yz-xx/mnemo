@@ -1,4 +1,3 @@
-export { ConversationStore } from './conversations.js';
 export type {
   AdminConversation,
   AdminConversationPage,
@@ -7,3 +6,4 @@ export type {
   ConversationStats,
   MessageTrendPoint,
 } from './mapper.js';
+export { ConversationStore } from './conversations.js';

@@ -1,3 +1,4 @@
+import type { MetricsRegistry } from '../../observability/index.js';
 import type {
   AppendResult,
   Conversation,
@@ -17,6 +18,7 @@ import type {
 } from './mapper.js';
 import type { Pool, ResultSetHeader } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
+import { METRIC } from '../../observability/index.js';
 import { findConversation, listAllConversations, removeConversationById } from './admin.js';
 import { buildTitle, DEFAULT_TITLE } from './mapper.js';
 import { readMessages } from './messages.js';
@@ -25,7 +27,11 @@ import { saveConversationSummary } from './summary.js';
 
 /** 会话持久化（MySQL）：所有读写都按 user_id 隔离，实现多账号数据互不可见 */
 export class ConversationStore {
-  constructor(private readonly pool: Pool) {}
+  /** metrics 可选：未注入时（如单测）埋点整体短路，不影响读写行为 */
+  constructor(
+    private readonly pool: Pool,
+    private readonly metrics?: MetricsRegistry,
+  ) {}
 
   /** 按最近更新时间倒序列出该用户的会话摘要 */
   async list(userId: number): Promise<ConversationSummary[]> {
@@ -126,6 +132,7 @@ export class ConversationStore {
     meta: MessageMeta = {},
     known?: ConversationHeader,
   ): Promise<AppendResult> {
+    const startedAt = Date.now();
     const { tools, attachments, sources } = meta;
     const header: ConversationHeader =
       known ?? (id ? await this.readHeader(userId, id) : null) ?? (await this.create(userId));
@@ -160,6 +167,9 @@ export class ConversationStore {
       now,
       header.id,
     ]);
+
+    // 单条消息落库耗时（含插入与更新会话时间）：与检索 / 模型分段区分，定位慢在哪一环
+    this.metrics?.observe(METRIC.DB_APPEND, Date.now() - startedAt);
 
     return {
       conversation: { ...header, title, updatedAt: now.toISOString() },

@@ -1,4 +1,5 @@
 import type { AppConfig } from '../configuration/config/index.js';
+import type { MetricsRegistry } from '../observability/index.js';
 import type { KnowledgeStore } from '../rag/index.js';
 import type { Summarizer } from './context/index.js';
 import type { AgentTool, FileSource, GeneratedFileRef, ToolDescriptor } from './tools/index.js';
@@ -11,6 +12,7 @@ import { createAgent } from 'langchain';
 import { describeChatEndpoint, describeChatModel } from '../configuration/config/index.js';
 import { describeConnectionError } from '../configuration/errors.js';
 import { ParseGovernance } from '../files/parseGovernance.js';
+import { METRIC } from '../observability/index.js';
 import { appendAttachmentHints } from './attachments.js';
 import { createToolBudget } from './context/index.js';
 import { extractReasoning, extractText } from './messageContent.js';
@@ -40,6 +42,8 @@ export class AgentService implements Summarizer {
   private readonly modelTarget: string;
   /** 单轮工具结果额度（token）：由窗口预算与 toolRatio 折算，检索与读取共用这一份 */
   private readonly toolBudgetTokens: number;
+  /** 指标注册表：记录单轮模型侧耗时；未注入时埋点短路 */
+  private readonly metrics?: MetricsRegistry;
 
   constructor(
     config: AppConfig,
@@ -47,9 +51,11 @@ export class AgentService implements Summarizer {
     files: FileSource,
     vision: VisionReader = createVisionReader(config),
     logger?: Logger,
+    metrics?: MetricsRegistry,
   ) {
     this.files = files;
     this.vision = vision;
+    this.metrics = metrics;
     // 解析闸门先建：工具与附件预读都要经它约束解析（解析发生在对话轮，不在上传请求内）
     this.parse = new ParseGovernance(config, logger);
     this.tools = createTools(knowledge, files, vision, this.parse);
@@ -103,6 +109,8 @@ export class AgentService implements Summarizer {
     options: { userId: number; fileIds: string[]; signal?: AbortSignal; logger?: Logger },
   ): AsyncGenerator<AgentStreamEvent> {
     await this.governance.enterRound(options.signal);
+    // 单轮模型侧耗时从入闸成功算起：排队等待另行观测，避免把过载等待算进生成耗时
+    const startedAt = Date.now();
 
     // 一次工具调用分散在多个分片中：参数攒到能解析时才推 start，
     // 「按调用去重」与「翻译成人话」都收在 ToolTrace 内，这里只负责把结果转发出去
@@ -202,6 +210,8 @@ export class AgentService implements Summarizer {
       this.governance.reportFailure(options.signal?.aborted === true);
       throw describeConnectionError(error, this.modelTarget, '对话模型服务');
     } finally {
+      // 单轮模型侧总耗时：从入闸成功算起（排除排队等待），便于区分慢在过载还是慢在生成
+      this.metrics?.observe(METRIC.LLM_ROUND, Date.now() - startedAt);
       this.governance.exitRound();
     }
   }

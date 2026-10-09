@@ -1,4 +1,3 @@
-export { SERVICE_NAME, loadConfig } from './env.js';
 export type {
   ApiLogConfig,
   AppConfig,
@@ -11,7 +10,10 @@ export type {
   LlmProvider,
   LogConfig,
   MysqlConfig,
+  ObservabilityConfig,
 } from './env.js';
+export type { AdminSystemConfig } from './systemView.js';
+export { SERVICE_NAME, loadConfig } from './env.js';
 export {
   describeChatEndpoint,
   describeChatModel,
@@ -19,4 +21,3 @@ export {
   describeEmbeddingModel,
   describeSystemConfig,
 } from './systemView.js';
-export type { AdminSystemConfig } from './systemView.js';

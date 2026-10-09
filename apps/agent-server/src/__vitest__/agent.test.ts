@@ -69,6 +69,11 @@ const CONFIG: AppConfig = {
   },
   apiLog: { batchSize: 50, flushIntervalMs: 1000 },
   auth: { sessionCacheTtlMs: 5000 },
+  observability: {
+    eventLoopSampleIntervalMs: 10000,
+    histogramSize: 1024,
+    readinessProbeTimeoutMs: 3000,
+  },
   llm: {
     provider: 'ollama',
     temperature: 0.3,

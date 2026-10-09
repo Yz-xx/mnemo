@@ -1,10 +1,12 @@
 import type { CircuitBreaker } from '../concurrency/circuitBreaker.js';
 import type { BoundedGate } from '../concurrency/gate.js';
+import type { MetricsRegistry } from '../observability/index.js';
 import type { KnowledgeSearchResult } from './search.js';
 import type { KnowledgeStorage, KnowledgeStoreOptions } from './storage.js';
 import type { Logger } from '@repo/logger';
 import { CircuitOpenError } from '../concurrency/circuitBreaker.js';
 import { withTimeout } from '../concurrency/timeout.js';
+import { METRIC } from '../observability/index.js';
 import { CHUNKS_TABLE } from './lance.js';
 import { visibilityFilter } from './search.js';
 
@@ -21,6 +23,8 @@ export interface RetrievalGovernance {
   breaker: CircuitBreaker;
   /** 单次检索（含向量化）超时（毫秒） */
   timeoutMs: number;
+  /** 指标注册表：记录检索耗时；未注入时埋点短路 */
+  metrics?: MetricsRegistry;
   logger?: Logger;
 }
 
@@ -55,18 +59,22 @@ export async function runRetrieval<T>(
   task: () => Promise<T>,
 ): Promise<T | null> {
   if (!governance) return task();
-  const { gate, timeoutMs, logger } = governance;
+  const { gate, timeoutMs, metrics, logger } = governance;
   const outcome = await gate.acquire();
   if (outcome !== 'admitted') {
     logger?.warn('检索被闸门挡下，本轮按无知识库结果处理', { outcome });
     return null;
   }
+  // 计时从入闸成功算起：闸门排队等待由闸门快照另行体现，避免把过载等待算进检索段
+  const startedAt = Date.now();
   try {
     return await withTimeout(task(), timeoutMs, '知识库检索');
   } catch (error) {
     logger?.warn('检索失败或超时，本轮按无知识库结果处理', { error });
     return null;
   } finally {
+    // 检索耗时含向量化与近邻查询，是「答案慢」与「知识库慢」的分界
+    metrics?.observe(METRIC.RETRIEVAL, Date.now() - startedAt);
     gate.release();
   }
 }

@@ -19,24 +19,25 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 
 ## 二、HTTP 接口与鉴权
 
-| 方法     | 路径                              | 鉴权   | 说明                                                                                                      |
-| -------- | --------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/api/health`                     | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态                                                            |
-| `GET`    | `/api/auth/public-key`            | 公开   | 取口令加密公钥（RSA-OAEP，JWK）；登录/注册/新建用户的 `password` 字段都须用它加密后提交，送明文一律 `400` |
-| `POST`   | `/api/auth/register`              | 公开   | 客户端注册并直接签发令牌，成功返回 `201`；角色固定为 `user`                                               |
-| `POST`   | `/api/auth/login`                 | 公开   | 客户端登录并签发令牌，凭证错误返回 `401`；后台侧账号一律 `401`（提示改用管理后台）                        |
-| `POST`   | `/api/auth/logout`                | 需登录 | 删除当前令牌对应的会话，返回 `204`                                                                        |
-| `GET`    | `/api/auth/me`                    | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`                                                            |
-| `POST`   | `/api/chat`                       | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`                                                      |
-| `GET`    | `/api/conversations`              | 需登录 | 当前账号的会话摘要列表（按更新时间倒序）                                                                  |
-| `GET`    | `/api/conversations/:id`          | 需登录 | 会话详情（含全部消息），非本人会话返回 `404`                                                              |
-| `DELETE` | `/api/conversations/:id`          | 需登录 | 删除会话（消息随外键级联删除）                                                                            |
-| `POST`   | `/api/files`                      | 需登录 | 上传附件（multipart，字段名 `file`），按 magic bytes 判定类型并落盘，成功返回 `201` 与文件元数据          |
-| `GET`    | `/api/files/:id/download`         | 需登录 | 按 ID 下载附件或智能体生成的导出文件，非本人文件返回 `404`                                                |
-| `GET`    | `/api/knowledge/documents`        | 需登录 | 可见文档列表（全局共享 + 本人私有）                                                                       |
-| `POST`   | `/api/knowledge/documents`        | 需登录 | 新增私有文档（同步完成切分与向量化）                                                                      |
-| `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌                                                           |
-| `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删                                                    |
+| 方法     | 路径                              | 鉴权   | 说明                                                                                                        |
+| -------- | --------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/health`                     | 公开   | 健康检查，返回提供方、当前对话模型、知识库状态                                                              |
+| `GET`    | `/api/health/ready`               | 公开   | 就绪检查：探测 MySQL / 模型 / 向量服务，附各档闸门水位与指标快照；任一依赖不可达返回 `degraded`（仍 `200`） |
+| `GET`    | `/api/auth/public-key`            | 公开   | 取口令加密公钥（RSA-OAEP，JWK）；登录/注册/新建用户的 `password` 字段都须用它加密后提交，送明文一律 `400`   |
+| `POST`   | `/api/auth/register`              | 公开   | 客户端注册并直接签发令牌，成功返回 `201`；角色固定为 `user`                                                 |
+| `POST`   | `/api/auth/login`                 | 公开   | 客户端登录并签发令牌，凭证错误返回 `401`；后台侧账号一律 `401`（提示改用管理后台）                          |
+| `POST`   | `/api/auth/logout`                | 需登录 | 删除当前令牌对应的会话，返回 `204`                                                                          |
+| `GET`    | `/api/auth/me`                    | 需登录 | 用本地令牌换取当前用户信息，令牌失效返回 `401`                                                              |
+| `POST`   | `/api/chat`                       | 需登录 | 流式对话（SSE），入参 `{ conversationId?, message }`                                                        |
+| `GET`    | `/api/conversations`              | 需登录 | 当前账号的会话摘要列表（按更新时间倒序）                                                                    |
+| `GET`    | `/api/conversations/:id`          | 需登录 | 会话详情（含全部消息），非本人会话返回 `404`                                                                |
+| `DELETE` | `/api/conversations/:id`          | 需登录 | 删除会话（消息随外键级联删除）                                                                              |
+| `POST`   | `/api/files`                      | 需登录 | 上传附件（multipart，字段名 `file`），按 magic bytes 判定类型并落盘，成功返回 `201` 与文件元数据            |
+| `GET`    | `/api/files/:id/download`         | 需登录 | 按 ID 下载附件或智能体生成的导出文件，非本人文件返回 `404`                                                  |
+| `GET`    | `/api/knowledge/documents`        | 需登录 | 可见文档列表（全局共享 + 本人私有）                                                                         |
+| `POST`   | `/api/knowledge/documents`        | 需登录 | 新增私有文档（同步完成切分与向量化）                                                                        |
+| `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌                                                             |
+| `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删                                                      |
 
 以上状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
 
@@ -232,89 +233,92 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 已存在的系统环境变量优先级高于文件，所以数据库密码与 API Key 在部署机上注入即可，不必写进仓库。
 
-| 变量                                                           | 默认值                      | 说明                                                                   |
-| -------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------- |
-| `PORT`                                                         | `3000`                      | 服务端口                                                               |
-| `DATA_DIR`                                                     | `<cwd>/data`                | 数据目录（知识库与日志的基准目录）                                     |
-| `LOG_LEVEL`                                                    | `info`                      | 日志级别：`debug` / `info` / `warn` / `error`                          |
-| `LOG_DIR`                                                      | `<数据目录>/logs`           | 日志目录（相对路径会随启动目录漂移，建议填绝对路径）                   |
-| `LOG_RETENTION_DAYS`                                           | `14`                        | 日志文件保留天数                                                       |
-| `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                                                             |
-| `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                                                             |
-| `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                                                           |
-| `MYSQL_PASSWORD`                                               | 空                          | MySQL 密码（默认留空，部署时注入，见第十一章）                         |
-| `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                                               |
-| `MYSQL_QUEUE_LIMIT`                                            | `32`                        | 池满后的等待队列长度上限（`0` 表示不排队，池满即失败）                 |
-| `MYSQL_CONNECT_TIMEOUT_MS`                                     | `10000`                     | 建连超时（毫秒），MySQL 不可达时尽快失败                               |
-| `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                                                 |
-| `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                                               |
-| `LLM_THINKING`                                                 | `false`                     | 是否输出推理链（thinking）：仅对 Ollama 生效，且需模型自身支持         |
-| `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址                                                            |
-| `OLLAMA_CHAT_MODEL`                                            | `qwen3`                     | 本地对话模型                                                           |
-| `OLLAMA_EMBEDDING_MODEL`                                       | `nomic-embed-text`          | 本地向量模型                                                           |
-| `DEEPSEEK_API_KEY`                                             | 空                          | 线上对话服务的密钥                                                     |
-| `DEEPSEEK_BASE_URL`                                            | `https://api.deepseek.com`  | DeepSeek 兼容 OpenAI 协议                                              |
-| `DEEPSEEK_CHAT_MODEL`                                          | `deepseek-chat`             | 线上对话模型                                                           |
-| `OLLAMA_CONTEXT_WINDOW_TOKENS`                                 | `8192`                      | 本地对话模型的窗口预算（token），需与 Ollama 的 `num_ctx` 对齐         |
-| `DEEPSEEK_CONTEXT_WINDOW_TOKENS`                               | `65536`                     | 线上对话模型的窗口预算（token）                                        |
-| `CONTEXT_TRIGGER_RATIO`                                        | `0.7`                       | 上下文占用超过窗口该比例时触发裁剪                                     |
-| `CONTEXT_KEEP_RATIO`                                           | `0.4`                       | 触发裁剪后保留的窗口占比                                               |
-| `CONTEXT_TOOL_RATIO`                                           | `0.3`                       | 单轮附件预读、检索、读取结果合计可注入的窗口占比，超出即截断           |
-| `EMBEDDING_PROVIDER`                                           | `ollama`                    | `ollama` 或 `openai`                                                   |
-| `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | `text-embedding-3-small` 等 | 线上向量服务配置                                                       |
-| `KNOWLEDGE_CHUNK_SIZE`                                         | `500`                       | 切片长度                                                               |
-| `KNOWLEDGE_CHUNK_OVERLAP`                                      | `80`                        | 切片重叠                                                               |
-| `KNOWLEDGE_TOP_K`                                              | `4`                         | 检索返回片段数                                                         |
-| `KNOWLEDGE_MIN_SCORE`                                          | `0.6`                       | 检索相似度下限（低于该分数的片段丢弃）                                 |
-| `KNOWLEDGE_ADMIN_TOKEN`                                        | 空                          | 全局知识库管理令牌（留空即关闭全局写入），权限等价超管                 |
-| `INITIAL_ADMIN_USERNAME`                                       | 空                          | 初始超管用户名，仅当库中不存在任何后台侧账号时用于启动自举（见第三章） |
-| `INITIAL_ADMIN_PASSWORD`                                       | 空                          | 初始超管密码，同上两个变量须成对配置；未配置凭据时启动告警             |
-| `OLLAMA_VISION_MODEL`                                          | `qwen3-vl:8b`               | 图片理解用的本地多模态模型（**留空即关闭图片理解**）                   |
-| `UPLOAD_MAX_BYTES`                                             | `20971520`                  | 上传单文件字节上限                                                     |
-| `UPLOAD_MAX_FILES`                                             | `1`                         | 单请求文件数上限                                                       |
-| `UPLOAD_ALLOWED_TYPES`                                         | `docx,xlsx,pdf,png,jpg`     | 允许的扩展名白名单，与 magic bytes 判定结果比对                        |
-| `UPLOAD_DIR`                                                   | `<数据目录>/uploads`        | 上传文件落盘根目录                                                     |
-| `HTTP_HEADERS_TIMEOUT_MS`                                      | `20000`                     | 请求头接收超时（毫秒）                                                 |
-| `HTTP_REQUEST_TIMEOUT_MS`                                      | `120000`                    | 整个请求（头 + 体）接收超时（毫秒），SSE 响应期不受它约束              |
-| `HTTP_KEEP_ALIVE_TIMEOUT_MS`                                   | `65000`                     | keep-alive 空闲连接保持时长（毫秒）                                    |
-| `HTTP_MAX_REQUESTS_PER_SOCKET`                                 | `1000`                      | 单条连接可复用的最大请求数（`0` 表示不限）                             |
-| `CONCURRENCY_CHAT_MAX_IN_FLIGHT`                               | `8`                         | 对话流档硬水位（在途上限），达到即拒绝                                 |
-| `CONCURRENCY_CHAT_SOFT_LIMIT`                                  | `6`                         | 对话流档软水位，超过即进入有界队列等待                                 |
-| `CONCURRENCY_CHAT_QUEUE_LIMIT`                                 | `32`                        | 对话流档排队长度上限                                                   |
-| `CONCURRENCY_CHAT_QUEUE_TIMEOUT_MS`                            | `20000`                     | 对话流档排队等待上限（毫秒），超时即拒绝                               |
-| `CONCURRENCY_UPLOAD_MAX_IN_FLIGHT`                             | `2`                         | 上传解析档硬水位（在途上限）                                           |
-| `CONCURRENCY_UPLOAD_SOFT_LIMIT`                                | `1`                         | 上传解析档软水位                                                       |
-| `CONCURRENCY_UPLOAD_QUEUE_LIMIT`                               | `8`                         | 上传解析档排队长度上限                                                 |
-| `CONCURRENCY_UPLOAD_QUEUE_TIMEOUT_MS`                          | `10000`                     | 上传解析档排队等待上限（毫秒）                                         |
-| `CONCURRENCY_CRUD_MAX_IN_FLIGHT`                               | `32`                        | 普通读写档硬水位（在途上限）                                           |
-| `CONCURRENCY_CRUD_SOFT_LIMIT`                                  | `24`                        | 普通读写档软水位                                                       |
-| `CONCURRENCY_CRUD_QUEUE_LIMIT`                                 | `64`                        | 普通读写档排队长度上限                                                 |
-| `CONCURRENCY_CRUD_QUEUE_TIMEOUT_MS`                            | `5000`                      | 普通读写档排队等待上限（毫秒）                                         |
-| `CHAT_MAX_DURATION_MS`                                         | `180000`                    | 单轮对话最长时长（毫秒），到点中断并按已产出收尾                       |
-| `SSE_DRAIN_TIMEOUT_MS`                                         | `30000`                     | SSE 背压：写缓冲满后等待 `drain` 的上限（毫秒），超时按慢客户端断开    |
-| `SHUTDOWN_GRACE_MS`                                            | `15000`                     | 优雅停机：停止接单后等待在途请求收尾的上限（毫秒）                     |
-| `API_LOG_BATCH_SIZE`                                           | `50`                        | 接口日志批量刷写：缓冲攒到该条数即落库                                 |
-| `API_LOG_FLUSH_INTERVAL_MS`                                    | `1000`                      | 接口日志批量刷写：未攒够一批时的定时刷写间隔（毫秒），停机时会落尽     |
-| `AUTH_SESSION_CACHE_TTL_MS`                                    | `5000`                      | 鉴权令牌校验结果的缓存有效期（毫秒），登出 / 重登 / 删号会主动失效     |
-| `CONCURRENCY_MODEL_MAX_IN_FLIGHT`                              | `8` / `2`                   | 模型闸门硬水位（在途上限），默认 DeepSeek `8`、Ollama `2`（决策 9）    |
-| `CONCURRENCY_MODEL_SOFT_LIMIT`                                 | `6` / `1`                   | 模型闸门软水位，超过即进入有界队列                                     |
-| `CONCURRENCY_MODEL_QUEUE_LIMIT`                                | `32` / `8`                  | 模型闸门排队长度上限                                                   |
-| `CONCURRENCY_MODEL_QUEUE_TIMEOUT_MS`                           | `20000`                     | 模型闸门排队等待上限（毫秒），超时按过载拒绝                           |
-| `CONCURRENCY_SUMMARY_MAX_IN_FLIGHT`                            | `1`                         | 滚动摘要闸门硬水位：独立低优先队列，不占对话额度（决策 10）            |
-| `CONCURRENCY_SUMMARY_SOFT_LIMIT`                               | `1`                         | 滚动摘要闸门软水位                                                     |
-| `CONCURRENCY_SUMMARY_QUEUE_LIMIT`                              | `0`                         | 滚动摘要闸门队列长度上限（`0` 表示不排队，满即拒绝后降级）             |
-| `CONCURRENCY_SUMMARY_QUEUE_TIMEOUT_MS`                         | `3000`                      | 滚动摘要闸门排队等待上限（毫秒）                                       |
-| `CONCURRENCY_RETRIEVAL_MAX_IN_FLIGHT`                          | `4`                         | 检索与向量化闸门硬水位：读路径过它，写入路径不占（决策 11）            |
-| `CONCURRENCY_RETRIEVAL_SOFT_LIMIT`                             | `2`                         | 检索闸门软水位                                                         |
-| `CONCURRENCY_RETRIEVAL_QUEUE_LIMIT`                            | `8`                         | 检索闸门排队长度上限                                                   |
-| `CONCURRENCY_RETRIEVAL_QUEUE_TIMEOUT_MS`                       | `3000`                      | 检索闸门排队等待上限（毫秒）                                           |
-| `RETRIEVAL_TIMEOUT_MS`                                         | `8000`                      | 单次检索（含向量化）超时（毫秒），超时降级为「本轮无知识库结果」       |
-| `CIRCUIT_FAILURE_THRESHOLD`                                    | `5`                         | 依赖熔断：连续失败达该值即快速失败（决策 16）                          |
-| `CIRCUIT_COOLDOWN_MS`                                          | `30000`                     | 依赖熔断：打开后冷却多久再放一个探测（毫秒）                           |
-| `CONCURRENCY_PARSE_MAX_IN_FLIGHT`                              | `2`                         | 附件解析闸门硬水位：解析是主线程 CPU 密集计算，独占小额度（决策 14）   |
-| `CONCURRENCY_PARSE_SOFT_LIMIT`                                 | `1`                         | 附件解析闸门软水位                                                     |
-| `CONCURRENCY_PARSE_QUEUE_LIMIT`                                | `8`                         | 附件解析闸门排队长度上限                                               |
-| `CONCURRENCY_PARSE_QUEUE_TIMEOUT_MS`                           | `5000`                      | 附件解析闸门排队等待上限（毫秒）                                       |
+| 变量                                                           | 默认值                      | 说明                                                                      |
+| -------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------- |
+| `PORT`                                                         | `3000`                      | 服务端口                                                                  |
+| `DATA_DIR`                                                     | `<cwd>/data`                | 数据目录（知识库与日志的基准目录）                                        |
+| `LOG_LEVEL`                                                    | `info`                      | 日志级别：`debug` / `info` / `warn` / `error`                             |
+| `LOG_DIR`                                                      | `<数据目录>/logs`           | 日志目录（相对路径会随启动目录漂移，建议填绝对路径）                      |
+| `LOG_RETENTION_DAYS`                                           | `14`                        | 日志文件保留天数                                                          |
+| `MYSQL_HOST`                                                   | `127.0.0.1`                 | MySQL 地址                                                                |
+| `MYSQL_PORT`                                                   | `3306`                      | MySQL 端口                                                                |
+| `MYSQL_USER`                                                   | `root`                      | MySQL 用户名                                                              |
+| `MYSQL_PASSWORD`                                               | 空                          | MySQL 密码（默认留空，部署时注入，见第十一章）                            |
+| `MYSQL_DATABASE`                                               | `agent_data`                | 库名（不存在时自动创建）                                                  |
+| `MYSQL_QUEUE_LIMIT`                                            | `32`                        | 池满后的等待队列长度上限（`0` 表示不排队，池满即失败）                    |
+| `MYSQL_CONNECT_TIMEOUT_MS`                                     | `10000`                     | 建连超时（毫秒），MySQL 不可达时尽快失败                                  |
+| `LLM_PROVIDER`                                                 | `ollama`                    | `ollama` 或 `deepseek`                                                    |
+| `LLM_TEMPERATURE`                                              | `0.3`                       | 采样温度                                                                  |
+| `LLM_THINKING`                                                 | `false`                     | 是否输出推理链（thinking）：仅对 Ollama 生效，且需模型自身支持            |
+| `OLLAMA_BASE_URL`                                              | `http://127.0.0.1:11434`    | Ollama 地址                                                               |
+| `OLLAMA_CHAT_MODEL`                                            | `qwen3`                     | 本地对话模型                                                              |
+| `OLLAMA_EMBEDDING_MODEL`                                       | `nomic-embed-text`          | 本地向量模型                                                              |
+| `DEEPSEEK_API_KEY`                                             | 空                          | 线上对话服务的密钥                                                        |
+| `DEEPSEEK_BASE_URL`                                            | `https://api.deepseek.com`  | DeepSeek 兼容 OpenAI 协议                                                 |
+| `DEEPSEEK_CHAT_MODEL`                                          | `deepseek-chat`             | 线上对话模型                                                              |
+| `OLLAMA_CONTEXT_WINDOW_TOKENS`                                 | `8192`                      | 本地对话模型的窗口预算（token），需与 Ollama 的 `num_ctx` 对齐            |
+| `DEEPSEEK_CONTEXT_WINDOW_TOKENS`                               | `65536`                     | 线上对话模型的窗口预算（token）                                           |
+| `CONTEXT_TRIGGER_RATIO`                                        | `0.7`                       | 上下文占用超过窗口该比例时触发裁剪                                        |
+| `CONTEXT_KEEP_RATIO`                                           | `0.4`                       | 触发裁剪后保留的窗口占比                                                  |
+| `CONTEXT_TOOL_RATIO`                                           | `0.3`                       | 单轮附件预读、检索、读取结果合计可注入的窗口占比，超出即截断              |
+| `EMBEDDING_PROVIDER`                                           | `ollama`                    | `ollama` 或 `openai`                                                      |
+| `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | `text-embedding-3-small` 等 | 线上向量服务配置                                                          |
+| `KNOWLEDGE_CHUNK_SIZE`                                         | `500`                       | 切片长度                                                                  |
+| `KNOWLEDGE_CHUNK_OVERLAP`                                      | `80`                        | 切片重叠                                                                  |
+| `KNOWLEDGE_TOP_K`                                              | `4`                         | 检索返回片段数                                                            |
+| `KNOWLEDGE_MIN_SCORE`                                          | `0.6`                       | 检索相似度下限（低于该分数的片段丢弃）                                    |
+| `KNOWLEDGE_ADMIN_TOKEN`                                        | 空                          | 全局知识库管理令牌（留空即关闭全局写入），权限等价超管                    |
+| `INITIAL_ADMIN_USERNAME`                                       | 空                          | 初始超管用户名，仅当库中不存在任何后台侧账号时用于启动自举（见第三章）    |
+| `INITIAL_ADMIN_PASSWORD`                                       | 空                          | 初始超管密码，同上两个变量须成对配置；未配置凭据时启动告警                |
+| `OLLAMA_VISION_MODEL`                                          | `qwen3-vl:8b`               | 图片理解用的本地多模态模型（**留空即关闭图片理解**）                      |
+| `UPLOAD_MAX_BYTES`                                             | `20971520`                  | 上传单文件字节上限                                                        |
+| `UPLOAD_MAX_FILES`                                             | `1`                         | 单请求文件数上限                                                          |
+| `UPLOAD_ALLOWED_TYPES`                                         | `docx,xlsx,pdf,png,jpg`     | 允许的扩展名白名单，与 magic bytes 判定结果比对                           |
+| `UPLOAD_DIR`                                                   | `<数据目录>/uploads`        | 上传文件落盘根目录                                                        |
+| `HTTP_HEADERS_TIMEOUT_MS`                                      | `20000`                     | 请求头接收超时（毫秒）                                                    |
+| `HTTP_REQUEST_TIMEOUT_MS`                                      | `120000`                    | 整个请求（头 + 体）接收超时（毫秒），SSE 响应期不受它约束                 |
+| `HTTP_KEEP_ALIVE_TIMEOUT_MS`                                   | `65000`                     | keep-alive 空闲连接保持时长（毫秒）                                       |
+| `HTTP_MAX_REQUESTS_PER_SOCKET`                                 | `1000`                      | 单条连接可复用的最大请求数（`0` 表示不限）                                |
+| `CONCURRENCY_CHAT_MAX_IN_FLIGHT`                               | `8`                         | 对话流档硬水位（在途上限），达到即拒绝                                    |
+| `CONCURRENCY_CHAT_SOFT_LIMIT`                                  | `6`                         | 对话流档软水位，超过即进入有界队列等待                                    |
+| `CONCURRENCY_CHAT_QUEUE_LIMIT`                                 | `32`                        | 对话流档排队长度上限                                                      |
+| `CONCURRENCY_CHAT_QUEUE_TIMEOUT_MS`                            | `20000`                     | 对话流档排队等待上限（毫秒），超时即拒绝                                  |
+| `CONCURRENCY_UPLOAD_MAX_IN_FLIGHT`                             | `2`                         | 上传解析档硬水位（在途上限）                                              |
+| `CONCURRENCY_UPLOAD_SOFT_LIMIT`                                | `1`                         | 上传解析档软水位                                                          |
+| `CONCURRENCY_UPLOAD_QUEUE_LIMIT`                               | `8`                         | 上传解析档排队长度上限                                                    |
+| `CONCURRENCY_UPLOAD_QUEUE_TIMEOUT_MS`                          | `10000`                     | 上传解析档排队等待上限（毫秒）                                            |
+| `CONCURRENCY_CRUD_MAX_IN_FLIGHT`                               | `32`                        | 普通读写档硬水位（在途上限）                                              |
+| `CONCURRENCY_CRUD_SOFT_LIMIT`                                  | `24`                        | 普通读写档软水位                                                          |
+| `CONCURRENCY_CRUD_QUEUE_LIMIT`                                 | `64`                        | 普通读写档排队长度上限                                                    |
+| `CONCURRENCY_CRUD_QUEUE_TIMEOUT_MS`                            | `5000`                      | 普通读写档排队等待上限（毫秒）                                            |
+| `CHAT_MAX_DURATION_MS`                                         | `180000`                    | 单轮对话最长时长（毫秒），到点中断并按已产出收尾                          |
+| `SSE_DRAIN_TIMEOUT_MS`                                         | `30000`                     | SSE 背压：写缓冲满后等待 `drain` 的上限（毫秒），超时按慢客户端断开       |
+| `SHUTDOWN_GRACE_MS`                                            | `15000`                     | 优雅停机：停止接单后等待在途请求收尾的上限（毫秒）                        |
+| `API_LOG_BATCH_SIZE`                                           | `50`                        | 接口日志批量刷写：缓冲攒到该条数即落库                                    |
+| `API_LOG_FLUSH_INTERVAL_MS`                                    | `1000`                      | 接口日志批量刷写：未攒够一批时的定时刷写间隔（毫秒），停机时会落尽        |
+| `AUTH_SESSION_CACHE_TTL_MS`                                    | `5000`                      | 鉴权令牌校验结果的缓存有效期（毫秒），登出 / 重登 / 删号会主动失效        |
+| `CONCURRENCY_MODEL_MAX_IN_FLIGHT`                              | `8` / `2`                   | 模型闸门硬水位（在途上限），默认 DeepSeek `8`、Ollama `2`（决策 9）       |
+| `CONCURRENCY_MODEL_SOFT_LIMIT`                                 | `6` / `1`                   | 模型闸门软水位，超过即进入有界队列                                        |
+| `CONCURRENCY_MODEL_QUEUE_LIMIT`                                | `32` / `8`                  | 模型闸门排队长度上限                                                      |
+| `CONCURRENCY_MODEL_QUEUE_TIMEOUT_MS`                           | `20000`                     | 模型闸门排队等待上限（毫秒），超时按过载拒绝                              |
+| `CONCURRENCY_SUMMARY_MAX_IN_FLIGHT`                            | `1`                         | 滚动摘要闸门硬水位：独立低优先队列，不占对话额度（决策 10）               |
+| `CONCURRENCY_SUMMARY_SOFT_LIMIT`                               | `1`                         | 滚动摘要闸门软水位                                                        |
+| `CONCURRENCY_SUMMARY_QUEUE_LIMIT`                              | `0`                         | 滚动摘要闸门队列长度上限（`0` 表示不排队，满即拒绝后降级）                |
+| `CONCURRENCY_SUMMARY_QUEUE_TIMEOUT_MS`                         | `3000`                      | 滚动摘要闸门排队等待上限（毫秒）                                          |
+| `CONCURRENCY_RETRIEVAL_MAX_IN_FLIGHT`                          | `4`                         | 检索与向量化闸门硬水位：读路径过它，写入路径不占（决策 11）               |
+| `CONCURRENCY_RETRIEVAL_SOFT_LIMIT`                             | `2`                         | 检索闸门软水位                                                            |
+| `CONCURRENCY_RETRIEVAL_QUEUE_LIMIT`                            | `8`                         | 检索闸门排队长度上限                                                      |
+| `CONCURRENCY_RETRIEVAL_QUEUE_TIMEOUT_MS`                       | `3000`                      | 检索闸门排队等待上限（毫秒）                                              |
+| `RETRIEVAL_TIMEOUT_MS`                                         | `8000`                      | 单次检索（含向量化）超时（毫秒），超时降级为「本轮无知识库结果」          |
+| `CIRCUIT_FAILURE_THRESHOLD`                                    | `5`                         | 依赖熔断：连续失败达该值即快速失败（决策 16）                             |
+| `CIRCUIT_COOLDOWN_MS`                                          | `30000`                     | 依赖熔断：打开后冷却多久再放一个探测（毫秒）                              |
+| `CONCURRENCY_PARSE_MAX_IN_FLIGHT`                              | `2`                         | 附件解析闸门硬水位：解析是主线程 CPU 密集计算，独占小额度（决策 14）      |
+| `CONCURRENCY_PARSE_SOFT_LIMIT`                                 | `1`                         | 附件解析闸门软水位                                                        |
+| `CONCURRENCY_PARSE_QUEUE_LIMIT`                                | `8`                         | 附件解析闸门排队长度上限                                                  |
+| `CONCURRENCY_PARSE_QUEUE_TIMEOUT_MS`                           | `5000`                      | 附件解析闸门排队等待上限（毫秒）                                          |
+| `OBSERVABILITY_EVENT_LOOP_SAMPLE_INTERVAL_MS`                  | `10000`                     | 事件循环延迟采样间隔（毫秒），越短越能捕捉短时阻塞（决策 17）             |
+| `OBSERVABILITY_HISTOGRAM_SIZE`                                 | `1024`                      | 指标直方图保留的最近样本数，分位数基于该窗口计算                          |
+| `READINESS_PROBE_TIMEOUT_MS`                                   | `3000`                      | `/api/health/ready` 探测单个依赖（MySQL / 模型 / 向量服务）的超时（毫秒） |
 
 并发闸门是**进程内状态**：进程重启即清零，多实例下各算各的，不能当作全局配额（见 [ADR 0010](../../docs/adr/0010-concurrency-governance.md)）。过载时返回 `503` 并附 `Retry-After`；健康检查与登录接口不挂闸门，过载时仍可观测、仍能进后台。默认阈值只保证不雪崩，吞吐基线须按容量模型压测后校准。
 
@@ -331,6 +335,32 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 知识库检索的命中片段数与最高相似度记在 `debug` 级别，排查"答非所问 / 未命中"时把 `LOG_LEVEL` 调为 `debug` 即可看到。
 
 请求级日志同时记录**入参**（查询串、请求体）与**出参**（JSON 响应体）：两者都先脱敏再截断到 500 字符，长度超过 100 字符的字段会折叠成缩进块单独成行，因此首行的「时间 + 接口路径 + 事件 + 短字段」始终便于扫读。流式接口 `/api/chat` 不走 JSON 响应，其出参以 `answerLength` 与 `answerPreview`（回复开头 200 字符）记录，另有 `tools` 与 `sources` 分别列出本轮用到的工具与检索命中的知识库文档。
+
+### 容量基线与 SLO
+
+并发闸门的默认水位「只保证不雪崩」，真实容量由压测校准（见 [ADR 0010](../../docs/adr/0010-concurrency-governance.md) 决策 17）。两件套配合使用：
+
+```bash
+# 1) 起不调真实模型的 mock 服务（OpenAI 兼容），让压测聚焦服务端编排而非模型算力
+pnpm --filter @repo/agent-server run mock:model
+# 2) 让后端指向 mock（覆盖模型与向量两处配置），再按需启动后端
+LLM_PROVIDER=deepseek DEEPSEEK_BASE_URL=http://127.0.0.1:8901 DEEPSEEK_API_KEY=mock \
+EMBEDDING_PROVIDER=openai EMBEDDING_BASE_URL=http://127.0.0.1:8901 EMBEDDING_API_KEY=mock \
+pnpm --filter @repo/agent-server run dev
+# 3) 施压并判定 SLO（未给令牌时用 BENCH_USERNAME / BENCH_PASSWORD 换一枚）
+BENCH_TOKEN=<登录令牌> pnpm --filter @repo/agent-server run bench
+```
+
+压测在客户端侧采集四项口径：**首 token P95**（从发起到收首个 `token` 事件，贴近用户感知）、**整轮 P95**、**503 比例**（闸门硬水位拒绝），以及从 `/api/health/ready` 读回的**连接池等待 P95**（`pool.waitMs` 分位数）。四项各有默认目标值，任一未达标脚本以非零退出码收尾；目标可用 `SLO_FIRST_CHUNK_P95_MS` / `SLO_ROUND_P95_MS` / `SLO_MAX_503_RATIO` / `SLO_POOL_WAIT_P95_MS` 覆盖。
+
+| 口径         | 默认目标  | 说明                                           |
+| ------------ | --------- | ---------------------------------------------- |
+| 首 token P95 | `1500ms`  | mock 基线；接真实模型后需按实测重新标定        |
+| 整轮 P95     | `15000ms` | 含工具往返与全文产出                           |
+| 503 比例     | `1%`      | 硬水位拒绝占比，超出说明水位定得过紧或容量不足 |
+| 池等待 P95   | `50ms`    | `pool.waitMs`；偏高说明 MySQL 连接池偏小       |
+
+这些默认值是 **mock 基线**，不是生产承诺：mock 省去了模型与向量服务的真实耗时，因此接到真实模型、真实向量服务后，必须重跑压测把水位与目标一起重新标定。
 
 ## 十一、前置条件与启动
 
