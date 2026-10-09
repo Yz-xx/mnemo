@@ -25,16 +25,30 @@ export interface MessageMeta {
   sources?: string[];
 }
 
-export interface Conversation {
+/**
+ * 会话头：只有标识、标题与时间，不含消息与摘要。
+ * 追加消息时只需要这些字段（判断归属、是否首条提问、回传标题），
+ * 拿到它就不必回读整条会话历史（见 docs/adr/0010 决策 13）。
+ */
+export interface ConversationHeader {
   id: string;
   title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Conversation extends ConversationHeader {
   /** 滚动摘要：更早对话的压缩结果；尚无摘要时不带该字段 */
   summary?: string;
   /** 摘要已覆盖到的最后一条消息 seq；尚无摘要时不带该字段 */
   summaryUptoSeq?: number;
-  createdAt: string;
-  updatedAt: string;
   messages: StoredMessage[];
+}
+
+/** 追加消息的结果：会话头 + 刚写入的消息（含自增 seq）；历史由调用方一次性读入，不由这里回读 */
+export interface AppendResult {
+  conversation: ConversationHeader;
+  message: StoredMessage;
 }
 
 /** 会话列表项，剔除消息正文以减少传输量 */

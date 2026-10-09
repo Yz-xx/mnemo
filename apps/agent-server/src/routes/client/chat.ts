@@ -44,8 +44,10 @@ export async function handleChatMessage(
     res.status(HTTP_STATUS.BAD_REQUEST).json({ message: '消息内容不能为空' });
     return;
   }
-  // 指定了不存在（或不属于当前用户）的会话时直接报错，避免静默新建导致混淆
-  if (body.conversationId && !(await conversations.get(userId, body.conversationId))) {
+  // 指定了不存在（或不属于当前用户）的会话时直接报错，避免静默新建导致混淆。
+  // 这次读入的历史一并透传给编排层，本轮不再回读（见 docs/adr/0010 决策 13）
+  const history = body.conversationId ? await conversations.get(userId, body.conversationId) : null;
+  if (body.conversationId && !history) {
     res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.CONVERSATION_NOT_FOUND });
     return;
   }
@@ -65,6 +67,8 @@ export async function handleChatMessage(
       logger: requestLogger(res),
       userId,
       conversationId: body.conversationId,
+      // 路由层读入的会话历史：交给编排层一次性使用，服务层不再重复回读
+      history: history ?? undefined,
       content,
       fileIds,
       // 附件名随提问一起落库：历史回看时还原附件标签，否则切换会话后用户看不出回答基于哪些文件

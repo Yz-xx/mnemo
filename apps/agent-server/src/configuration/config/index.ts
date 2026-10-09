@@ -1,6 +1,8 @@
 export { SERVICE_NAME, loadConfig } from './env.js';
 export type {
+  ApiLogConfig,
   AppConfig,
+  AuthConfig,
   ConcurrencyConfig,
   ContextConfig,
   EmbeddingProvider,

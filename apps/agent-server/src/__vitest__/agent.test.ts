@@ -60,6 +60,8 @@ const CONFIG: AppConfig = {
     sseDrainTimeoutMs: 30000,
     shutdownGraceMs: 15000,
   },
+  apiLog: { batchSize: 50, flushIntervalMs: 1000 },
+  auth: { sessionCacheTtlMs: 5000 },
   llm: {
     provider: 'ollama',
     temperature: 0.3,

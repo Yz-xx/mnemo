@@ -1,10 +1,13 @@
 import type { AppConfig } from '../configuration/config/index.js';
 import type { ConversationStore } from '../conversation/store/index.js';
 import type {
+  AppendResult,
   Conversation,
+  ConversationHeader,
   ConversationSummary,
   MessageMeta,
   MessageRole,
+  StoredMessage,
 } from '../conversation/types.js';
 import type { FileStore, StoredFile } from '../files/store.js';
 import type { AgentService } from '../llm/agent.js';
@@ -34,8 +37,16 @@ class FakeConversations {
     }));
   }
 
+  /** 历史读取次数：供用例断言「一轮只读一次历史」 */
+  getCalls = 0;
+
   async get(_userId: number, id: string): Promise<Conversation | null> {
-    return this.records.get(id) ?? null;
+    this.getCalls += 1;
+    const stored = this.records.get(id);
+    if (!stored) return null;
+    // 返回副本：路由读入的历史与随后追加写入的存储对象须解耦，
+    // 否则 append 推入的新消息会同时出现在 history.messages 里，本轮上下文会重复一条
+    return { ...stored, messages: stored.messages.map((message) => ({ ...message })) };
   }
 
   async append(
@@ -44,7 +55,8 @@ class FakeConversations {
     role: MessageRole,
     content: string,
     meta: MessageMeta = {},
-  ): Promise<Conversation> {
+    _known?: ConversationHeader,
+  ): Promise<AppendResult> {
     const now = new Date().toISOString();
     const conversation: Conversation = id
       ? (this.records.get(id) as Conversation)
@@ -55,7 +67,7 @@ class FakeConversations {
           updatedAt: now,
           messages: [],
         };
-    conversation.messages.push({
+    const message: StoredMessage = {
       // seq 与真实存储一致：自增序号，滚动摘要的截断点按它比较
       seq: conversation.messages.length + 1,
       id: `m-${conversation.messages.length + 1}`,
@@ -66,12 +78,22 @@ class FakeConversations {
       ...(meta.attachments?.length ? { attachments: meta.attachments } : {}),
       ...(meta.sources?.length ? { sources: meta.sources } : {}),
       createdAt: now,
-    });
+    };
+    conversation.messages.push(message);
     // 首条用户消息即会话标题，与真实存储的 buildTitle 行为保持一致
     if (conversation.title === '新对话' && role === 'user') conversation.title = content;
     conversation.updatedAt = now;
     this.records.set(conversation.id, conversation);
-    return conversation;
+    // 与真实存储一致：只回会话头与刚写入的消息，历史由调用方一次性读入
+    return {
+      conversation: {
+        id: conversation.id,
+        title: conversation.title,
+        createdAt: conversation.createdAt,
+        updatedAt: conversation.updatedAt,
+      },
+      message,
+    };
   }
 
   async remove(_userId: number, id: string): Promise<boolean> {
@@ -422,7 +444,9 @@ describe('handleChatMessage', () => {
   it('既有会话续发失败时保留原有记录', async () => {
     const conversations = new FakeConversations();
     // 先造一轮完整对话，模拟用户已有历史记录
-    const { id } = await conversations.append(USER_ID, undefined, 'user', '先前的提问');
+    const {
+      conversation: { id },
+    } = await conversations.append(USER_ID, undefined, 'user', '先前的提问');
     await conversations.append(USER_ID, id, 'assistant', '先前的回复');
     const res = new FakeHttpResponse();
 
@@ -434,6 +458,25 @@ describe('handleChatMessage', () => {
 
     const saved = await conversations.get(USER_ID, id);
     expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
+  });
+
+  it('既有会话一轮只读一次历史，追加与回填都不再回读', async () => {
+    const conversations = new FakeConversations();
+    const {
+      conversation: { id },
+    } = await conversations.append(USER_ID, undefined, 'user', '先前的提问');
+    await conversations.append(USER_ID, id, 'assistant', '先前的回复');
+    const res = new FakeHttpResponse();
+    const before = conversations.getCalls;
+
+    await handleChatMessage(
+      fakeDeps(conversations, fakeAgent([{ type: 'token', content: '好的' }])),
+      fakeRequest({ message: '再问一句', conversationId: id }),
+      res as unknown as Response,
+    );
+
+    // 路由读一次历史后逐层透传，服务层追加与回填都不再回读（见 docs/adr/0010 决策 13）
+    expect(conversations.getCalls - before).toBe(1);
   });
 
   it('附件不属于当前用户时返回 404，且不进入流式响应', async () => {
@@ -486,7 +529,9 @@ describe('handleChatMessage', () => {
     } as unknown as Logger;
     res.locals.log = log;
     // 先造一轮超窗口的历史：非 ASCII 每字符 1 token，两轮合计 800 已超过触发阈值 700
-    const { id } = await conversations.append(USER_ID, undefined, 'user', '中'.repeat(400));
+    const {
+      conversation: { id },
+    } = await conversations.append(USER_ID, undefined, 'user', '中'.repeat(400));
     await conversations.append(USER_ID, id, 'assistant', '中'.repeat(400));
 
     const summary = '用户此前问过苹果的价格。';
@@ -546,7 +591,9 @@ describe('handleChatMessage', () => {
 
   it('同一会话的上一轮仍在途时，等待超时按可重试过载返回 503', async () => {
     const conversations = new FakeConversations();
-    const { id } = await conversations.append(USER_ID, undefined, 'user', '先到的一轮');
+    const {
+      conversation: { id },
+    } = await conversations.append(USER_ID, undefined, 'user', '先到的一轮');
     const res = new HeaderRecordingResponse();
     // 会话锁替身直接抛「忙」，等价于排队等待超过上限——真实的排队行为由会话锁单测覆盖
     const busyLock = {

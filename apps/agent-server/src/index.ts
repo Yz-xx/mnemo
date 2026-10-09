@@ -65,7 +65,12 @@ async function bootstrapSuperAdmin(
  * - 停机：先停止接单、断开空闲 keep-alive 连接，等在途请求收尾（超过宽限即强制断开），
  *   最后关闭数据库连接池与向量库连接。停机因此比现在慢，等待上限由 SHUTDOWN_GRACE_MS 约定。
  */
-function installShutdownHandlers(server: http.Server, pool: Pool, knowledge: KnowledgeStore): void {
+function installShutdownHandlers(
+  server: http.Server,
+  pool: Pool,
+  knowledge: KnowledgeStore,
+  apiLogs: ApiLogStore,
+): void {
   let stopping = false;
 
   const shutdown = async (reason: string): Promise<void> => {
@@ -81,7 +86,9 @@ function installShutdownHandlers(server: http.Server, pool: Pool, knowledge: Kno
     }, config.concurrency.shutdownGraceMs);
     await once(server, 'close');
     clearTimeout(forceTimer);
-    // 在途请求已收尾，再关掉对外连接
+    // 在途响应已收尾、finish 回调也已入队：此时刷空缓冲，确保停机前日志落尽
+    await apiLogs.flush();
+    // 再关掉对外连接
     await pool.end();
     await knowledge.close();
     logger.info('已停机', { reason });
@@ -105,10 +112,16 @@ async function bootstrap(): Promise<void> {
   await ensureSchema(config.mysql);
   const pool = createMysqlPool(config.mysql);
 
-  const apiLogs = new ApiLogStore(pool);
+  // 接口日志改批量刷写：攒批 + 定时，替掉每请求一条 INSERT；失败告警收在 onError
+  const apiLogs = new ApiLogStore(pool, {
+    batchSize: config.apiLog.batchSize,
+    flushIntervalMs: config.apiLog.flushIntervalMs,
+    onError: (error) => logger.warn('接口日志批量落库失败', { error }),
+  });
   const auditLogs = new AuditLogStore(pool);
   const users = new UserStore(pool);
-  const sessions = new SessionStore(pool);
+  // 鉴权校验结果做短 TTL 缓存，压掉每请求一次 user_sessions 查询
+  const sessions = new SessionStore(pool, config.auth.sessionCacheTtlMs);
   // 口令传输密钥对：进程内生成、随重启轮换，不落盘（见 auth/passwordCipher.ts）
   const passwordCipher = createPasswordCipher();
   // 启动清理：清掉过期会话，并把历史遗留的同账号重复会话收敛为单端登录
@@ -169,7 +182,7 @@ async function bootstrap(): Promise<void> {
     if (prunedSessions > 0) logger.info('已清理历史登录会话', { count: prunedSessions });
   });
 
-  installShutdownHandlers(server, pool, knowledge);
+  installShutdownHandlers(server, pool, knowledge, apiLogs);
 }
 
 bootstrap().catch((error: unknown) => {

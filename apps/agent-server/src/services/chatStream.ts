@@ -1,5 +1,6 @@
 import type { ConcurrencyConfig, ContextConfig } from '../configuration/config/index.js';
 import type { ConversationStore } from '../conversation/store/index.js';
+import type { Conversation } from '../conversation/types.js';
 import type { AgentService } from '../llm/agent.js';
 import type { Logger } from '@repo/logger';
 import type { ChatStreamEvent } from '@repo/reusable';
@@ -7,6 +8,7 @@ import type { Response } from 'express';
 import { preview } from '@repo/logger';
 import { toErrorMessage } from '@repo/shared';
 import { governContext } from './contextGovernance.js';
+import { createEventStream } from './eventStream.js';
 
 /** 出参摘要保留的回复开头长度：足以判断回答是否切题，又不至于把整篇回答写进日志 */
 const ANSWER_PREVIEW = 200;
@@ -14,14 +16,6 @@ const ANSWER_PREVIEW = 200;
 /** 集合转数组：空集合给 undefined 而非空数组（落库写 NULL、日志不出现空串） */
 const toOptionalList = (values: Set<string>): string[] | undefined =>
   values.size > 0 ? [...values] : undefined;
-
-/** SSE 响应头：禁用缓存与缓冲，保证增量内容即时到达客户端 */
-function openEventStream(res: Response): void {
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-}
 
 /**
  * 编排一整轮对话：落库提问 → 组装上下文 → 流式写回响应 → 落库回复，并回滚没有产出的新建会话。
@@ -36,6 +30,8 @@ export async function streamChatReply(input: {
   userId: number;
   /** 目标会话 ID；留空表示本轮新建会话 */
   conversationId: string | undefined;
+  /** 路由层已读入的会话历史（含摘要）；新建会话时为 undefined，本轮不再回读历史 */
+  history: Conversation | undefined;
   /** 本轮用户提问 */
   content: string;
   /** 本轮附带的文件 ID：已由路由校验归属，工具据此判断可读范围 */
@@ -54,6 +50,7 @@ export async function streamChatReply(input: {
     logger,
     userId,
     conversationId,
+    history,
     content,
     fileIds,
     attachmentNames,
@@ -62,13 +59,20 @@ export async function streamChatReply(input: {
   } = input;
 
   // 先落库提问：新会话在这里创建，本轮若没有产出才好整体回滚。
-  // 必须在开启 SSE 之前做，落库失败仍按普通请求返回 500，而不是已 flush 的事件流
-  const conversation = await conversations.append(userId, conversationId, 'user', content, {
-    attachments: attachmentNames.length > 0 ? attachmentNames : undefined,
-  });
+  // 必须在开启 SSE 之前做，落库失败仍按普通请求返回 500，而不是已 flush 的事件流。
+  // 会话头由路由层读入后经 history 传入，追加不再回读历史（见 docs/adr/0010 决策 13）
+  const { conversation, message: userMessage } = await conversations.append(
+    userId,
+    conversationId,
+    'user',
+    content,
+    { attachments: attachmentNames.length > 0 ? attachmentNames : undefined },
+    history,
+  );
   const log = logger.child({ userId, conversationId: conversation.id });
   const startedAt = Date.now();
-  openEventStream(res);
+  const stream = createEventStream(res, concurrencyConfig.sseDrainTimeoutMs);
+  stream.open();
 
   // 注意：req 的 close 在请求体读取完成后即会触发（会误中断流式响应），故监听 res；
   // 排除 res.writableEnded 以跳过正常结束时的回调。
@@ -86,30 +90,9 @@ export async function streamChatReply(input: {
   // 慢客户端：SSE 写缓冲满且等不到 drain，本轮已主动断开
   let slowClient = false;
 
-  /** 直写一帧：写缓冲满时等 drain，等不到则返回 false 交由调用方断开 */
-  const writeChunk = (chunk: string): Promise<boolean> => {
-    if (res.write(chunk)) return Promise.resolve(true);
-    return new Promise<boolean>((resolve) => {
-      let settled = false;
-      let settle: (ok: boolean) => void = () => undefined;
-      const onDrain = (): void => settle(true);
-      // 定时器先建好、settle 后赋值：既能在此处引用 settle，又不必用可变量持有句柄
-      const timer = setTimeout(() => settle(false), concurrencyConfig.sseDrainTimeoutMs);
-      settle = (ok: boolean): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        res.off('drain', onDrain);
-        resolve(ok);
-      };
-      res.once('drain', onDrain);
-    });
-  };
-
   /** 推送一个 SSE 事件；背压超时即按慢客户端断开并中断本轮，避免内存继续堆积 */
   const send = async (event: ChatStreamEvent): Promise<void> => {
-    if (res.writableEnded) return;
-    if (await writeChunk(`data: ${JSON.stringify(event)}\n\n`)) return;
+    if (await stream.send(event)) return;
     slowClient = true;
     controller.abort();
   };
@@ -128,10 +111,15 @@ export async function streamChatReply(input: {
   /** 仅在有正文时落库，避免保存空回复；工具轨迹与检索来源一并落库，历史回看时还原标签 */
   const persistAnswer = async (): Promise<void> => {
     if (answerSaved || !answer.trim()) return;
-    await conversations.append(userId, conversation.id, 'assistant', answer, {
-      tools: toOptionalList(usedTools),
-      sources: toOptionalList(usedSources),
-    });
+    await conversations.append(
+      userId,
+      conversation.id,
+      'assistant',
+      answer,
+      { tools: toOptionalList(usedTools), sources: toOptionalList(usedSources) },
+      // 透传已知会话头：助手消息不改标题，无需再读一次
+      conversation,
+    );
     answerSaved = true;
   };
 
@@ -139,12 +127,13 @@ export async function streamChatReply(input: {
     // 摘要落库：条件更新保证截断点单调，返回是否真正写入
     const persistSummary = (text: string, uptoSeq: number): Promise<boolean> =>
       conversations.saveSummary(userId, conversation.id, text, uptoSeq);
-    // 上下文组装：先把保留窗口之前的未摘要段交给模型摘要，摘要失败才退化为丢弃最老轮次。
+    // 上下文组装：本轮历史 = 路由层读入的旧消息 + 刚落库的提问（只读一次并逐层透传）。
+    // 先把保留窗口之前的未摘要段交给模型摘要，摘要失败才退化为丢弃最老轮次；
     // 模型调用与落库收在 contextGovernance 内，这层只消费结果并观测取舍
     const governed = await governContext({
-      history: conversation.messages,
-      summary: conversation.summary ?? null,
-      summaryUptoSeq: conversation.summaryUptoSeq ?? null,
+      history: history ? [...history.messages, userMessage] : [userMessage],
+      summary: history?.summary ?? null,
+      summaryUptoSeq: history?.summaryUptoSeq ?? null,
       config: contextConfig,
       summarizer: agent,
       persistSummary,
@@ -185,7 +174,6 @@ export async function streamChatReply(input: {
       await send(event);
     }
     await persistAnswer();
-    const latest = await conversations.get(userId, conversation.id);
     log.info('本轮对话完成', {
       durationMs: Date.now() - startedAt,
       answerLength: answer.length,
@@ -204,7 +192,7 @@ export async function streamChatReply(input: {
     await send({
       type: 'done',
       conversationId: conversation.id,
-      title: latest?.title ?? conversation.title,
+      title: conversation.title,
     });
     finished = true;
   } catch (error) {

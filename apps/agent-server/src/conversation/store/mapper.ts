@@ -61,6 +61,14 @@ interface ConversationDetailRow extends RowDataPacket {
   summary_upto_seq: number | string | null;
 }
 
+/** 会话头行：只取标识、标题与时间，供轻量追加路径使用（不读摘要列，故不复用详情行类型） */
+export interface ConversationHeaderRow extends RowDataPacket {
+  id: string;
+  title: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
 /** 管理端列表行：在客户端摘要列之上多取所属用户 */
 interface AdminConversationRow extends RowDataPacket {
   id: string;

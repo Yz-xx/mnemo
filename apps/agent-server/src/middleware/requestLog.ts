@@ -21,8 +21,8 @@ function summarizeError(error: Error): string {
  * 响应结束时汇总一条结果：入参（查询串、请求体）、出参（响应体）、状态码、耗时与用户，
  * 5xx 附带错误堆栈。SSE 接口不走 res.json，其出参由业务层自行记录。
  *
- * 同一份汇总同时写入 api_logs 表（即管理后台的「API 日志」页），落库是 fire-and-forget：
- * 失败只告警，不影响已经返回给客户端的响应。
+ * 同一份汇总同时交由 ApiLogStore 落库（即管理后台的「API 日志」页）：
+ * 只入内存缓冲、由 store 批量刷写，写入失败的告警收在 store 的 onError 里，不影响已返回的响应。
  */
 export function createRequestLog(logger: Logger, apiLogs: ApiLogStore): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -67,20 +67,19 @@ export function createRequestLog(logger: Logger, apiLogs: ApiLogStore): RequestH
       else log.info('请求完成', fields);
 
       if (SKIP_RECORD_PATHS.has(path)) return;
-      void apiLogs
-        .record({
-          requestId,
-          method: req.method,
-          path,
-          status,
-          durationMs,
-          userId: typeof userId === 'number' ? userId : null,
-          queryParams: queryParams ?? null,
-          requestBody: requestBody ?? null,
-          responseBody: responseBody ?? null,
-          error: error ? summarizeError(error) : null,
-        })
-        .catch((recordError: unknown) => log.warn('接口日志落库失败', { error: recordError }));
+      // 只入内存缓冲，由 ApiLogStore 批量刷写；写入失败的告警收在 store 的 onError 里
+      apiLogs.record({
+        requestId,
+        method: req.method,
+        path,
+        status,
+        durationMs,
+        userId: typeof userId === 'number' ? userId : null,
+        queryParams: queryParams ?? null,
+        requestBody: requestBody ?? null,
+        responseBody: responseBody ?? null,
+        error: error ? summarizeError(error) : null,
+      });
     });
 
     next();

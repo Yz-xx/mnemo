@@ -88,6 +88,20 @@ export interface HttpConfig {
   maxRequestsPerSocket: number;
 }
 
+/** 接口请求日志的批量刷写：攒批 + 定时，替掉「每请求一条 INSERT」 */
+export interface ApiLogConfig {
+  /** 缓冲达到该条数立即刷写 */
+  batchSize: number;
+  /** 未攒够该条数时的定时刷写间隔（毫秒） */
+  flushIntervalMs: number;
+}
+
+/** 鉴权会话缓存：短 TTL 缓存令牌校验结果，压掉每请求一次 user_sessions 查询 */
+export interface AuthConfig {
+  /** 缓存有效期（毫秒）：登出 / 重新登录 / 删号会主动失效，这里只兜住被动变化（如会话过期） */
+  sessionCacheTtlMs: number;
+}
+
 export interface AppConfig {
   port: number;
   dataDir: string;
@@ -97,6 +111,10 @@ export interface AppConfig {
   http: HttpConfig;
   /** 并发治理：分档闸门与过载兜底 */
   concurrency: ConcurrencyConfig;
+  /** 接口请求日志批量刷写参数 */
+  apiLog: ApiLogConfig;
+  /** 鉴权会话缓存参数 */
+  auth: AuthConfig;
   llm: {
     provider: LlmProvider;
     temperature: number;
@@ -264,6 +282,15 @@ export function loadConfig(): AppConfig {
       chatMaxDurationMs: toNumber(process.env.CHAT_MAX_DURATION_MS, 180000),
       sseDrainTimeoutMs: toNumber(process.env.SSE_DRAIN_TIMEOUT_MS, 30000),
       shutdownGraceMs: toNumber(process.env.SHUTDOWN_GRACE_MS, 15000),
+    },
+    // 接口请求日志：攒批刷写替掉「每请求一条 INSERT」，把单轮基线压下来（见 docs/adr/0010 决策 13）
+    apiLog: {
+      batchSize: toNumber(process.env.API_LOG_BATCH_SIZE, 50),
+      flushIntervalMs: toNumber(process.env.API_LOG_FLUSH_INTERVAL_MS, 1000),
+    },
+    // 鉴权会话缓存：短 TTL 压掉每请求一次 user_sessions 查询，登出等场景主动失效
+    auth: {
+      sessionCacheTtlMs: toNumber(process.env.AUTH_SESSION_CACHE_TTL_MS, 5000),
     },
     llm: {
       provider,

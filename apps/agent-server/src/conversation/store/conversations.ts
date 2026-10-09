@@ -1,16 +1,23 @@
-import type { Conversation, ConversationSummary, MessageMeta, MessageRole } from '../types.js';
+import type {
+  AppendResult,
+  Conversation,
+  ConversationHeader,
+  ConversationSummary,
+  MessageMeta,
+  MessageRole,
+} from '../types.js';
 import type {
   AdminConversation,
   AdminConversationPage,
   AdminConversationQuery,
-  AdminConversationRow,
   ConversationDetailRow,
+  ConversationHeaderRow,
   ConversationRow,
   ConversationStats,
-  CountRow,
 } from './mapper.js';
 import type { Pool, ResultSetHeader } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
+import { findConversation, listAllConversations, removeConversationById } from './admin.js';
 import { buildTitle, DEFAULT_TITLE } from './mapper.js';
 import { readMessages } from './messages.js';
 import { readStats } from './stats.js';
@@ -84,9 +91,32 @@ export class ConversationStore {
   }
 
   /**
-   * 追加一条消息；未指定会话或会话不存在时自动新建。
+   * 只读会话头（标识 / 标题 / 时间），不读消息。
+   * 追加消息只需据此判断归属与是否首条提问，避免为此拉回整条会话历史。
+   */
+  private async readHeader(userId: number, id: string): Promise<ConversationHeader | null> {
+    const [rows] = await this.pool.execute<ConversationHeaderRow[]>(
+      `SELECT id, title, created_at, updated_at
+         FROM conversations WHERE id = ? AND user_id = ? LIMIT 1`,
+      [id, userId],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      title: row.title,
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
+    };
+  }
+
+  /**
+   * 追加一条消息并同步会话标题与更新时间（轻量路径：不回读全量历史）。
+   * 调用方已读入的会话经 known 传入即零查询；未传时只读会话头（不读消息），
+   * 使单轮成本不再随会话消息数线性累加（见 docs/adr/0010 决策 13）。
    * 工具轨迹、附件名与检索来源统一经 meta 传入：三者都只有部分角色会用到，
    * 若继续按位置参数逐个追加，调用点迟早只能靠数位置才能对齐。
+   * 返回会话头与刚写入的消息；本轮历史由调用方一次性读入后自行拼接。
    */
   async append(
     userId: number,
@@ -94,10 +124,11 @@ export class ConversationStore {
     role: MessageRole,
     content: string,
     meta: MessageMeta = {},
-  ): Promise<Conversation> {
+    known?: ConversationHeader,
+  ): Promise<AppendResult> {
     const { tools, attachments, sources } = meta;
-    let conversation = id ? await this.get(userId, id) : null;
-    if (!conversation) conversation = await this.create(userId);
+    const header: ConversationHeader =
+      known ?? (id ? await this.readHeader(userId, id) : null) ?? (await this.create(userId));
     const messageId = randomUUID();
     const now = new Date();
 
@@ -110,7 +141,7 @@ export class ConversationStore {
       'INSERT INTO messages (id, conversation_id, role, content, tools, attachments, sources, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         messageId,
-        conversation.id,
+        header.id,
         role,
         content,
         toJson(tools),
@@ -122,29 +153,27 @@ export class ConversationStore {
 
     // 首条用户消息用于生成会话标题
     const title =
-      conversation.title === DEFAULT_TITLE && role === 'user'
-        ? buildTitle(content)
-        : conversation.title;
-    conversation.title = title;
-    conversation.updatedAt = now.toISOString();
-    conversation.messages.push({
-      seq: Number(result.insertId),
-      id: messageId,
-      role,
-      content,
-      tools,
-      attachments,
-      sources,
-      createdAt: now.toISOString(),
-    });
+      header.title === DEFAULT_TITLE && role === 'user' ? buildTitle(content) : header.title;
 
     await this.pool.execute('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?', [
       title,
       now,
-      conversation.id,
+      header.id,
     ]);
 
-    return conversation;
+    return {
+      conversation: { ...header, title, updatedAt: now.toISOString() },
+      message: {
+        seq: Number(result.insertId),
+        id: messageId,
+        role,
+        content,
+        tools,
+        attachments,
+        sources,
+        createdAt: now.toISOString(),
+      },
+    };
   }
 
   /** 删除会话；消息通过外键级联删除 */
@@ -170,64 +199,18 @@ export class ConversationStore {
     return readStats(this.pool, days);
   }
 
-  /**
-   * 管理端列表：不按用户过滤，返回全部会话及其所属用户。
-   * 账号名由路由层批量还原（findNamesByIds），这里只给 ID——同一条编排不在两层各写一次。
-   */
-  async listAll(query: AdminConversationQuery): Promise<AdminConversationPage> {
-    const { keyword, page, pageSize } = query;
-    const [countRows] = await this.pool.execute<CountRow[]>(
-      'SELECT COUNT(*) AS total FROM conversations WHERE LOCATE(?, title) > 0',
-      [keyword],
-    );
-    const [rows] = await this.pool.execute<AdminConversationRow[]>(
-      `SELECT c.id, c.user_id, c.title, c.created_at, c.updated_at,
-              (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
-         FROM conversations c
-        WHERE LOCATE(?, c.title) > 0
-        ORDER BY c.updated_at DESC
-        LIMIT ? OFFSET ?`,
-      [keyword, pageSize, (page - 1) * pageSize],
-    );
-    return {
-      items: rows.map((row) => ({
-        id: row.id,
-        userId: Number(row.user_id),
-        title: row.title,
-        createdAt: row.created_at.toISOString(),
-        updatedAt: row.updated_at.toISOString(),
-        messageCount: Number(row.message_count ?? 0),
-      })),
-      total: Number(countRows[0]?.total ?? 0),
-    };
+  /** 管理端列表：实现见 admin.ts；类上保留同名方法，维持路由依赖的单一入口形态 */
+  listAll(query: AdminConversationQuery): Promise<AdminConversationPage> {
+    return listAllConversations(this.pool, query);
   }
 
-  /** 管理端读取任意会话及其全部消息：不比对归属，仅后台使用；不存在时返回 null */
-  async find(id: string): Promise<AdminConversation | null> {
-    const [rows] = await this.pool.execute<AdminConversationRow[]>(
-      'SELECT id, user_id, title, created_at, updated_at FROM conversations WHERE id = ? LIMIT 1',
-      [id],
-    );
-    const row = rows[0];
-    if (!row) return null;
-
-    const messages = await readMessages(this.pool, id);
-    return {
-      id: row.id,
-      userId: Number(row.user_id),
-      title: row.title,
-      createdAt: row.created_at.toISOString(),
-      updatedAt: row.updated_at.toISOString(),
-      messages,
-    };
+  /** 管理端读取任意会话及其全部消息：实现见 admin.ts */
+  find(id: string): Promise<AdminConversation | null> {
+    return findConversation(this.pool, id);
   }
 
-  /** 管理端删除任意会话：不比对归属，消息由外键级联清理 */
-  async removeById(id: string): Promise<boolean> {
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      'DELETE FROM conversations WHERE id = ?',
-      [id],
-    );
-    return result.affectedRows > 0;
+  /** 管理端删除任意会话：实现见 admin.ts，消息由外键级联清理 */
+  removeById(id: string): Promise<boolean> {
+    return removeConversationById(this.pool, id);
   }
 }
