@@ -214,7 +214,7 @@ pnpm build          # 全仓构建
 
 - **口令加密传输 + 加盐哈希存储**：客户端用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后提交，明文不上网；服务端以 `scrypt` 加盐哈希入库（格式 `scrypt$盐hex$散列hex`）。存量账号的 DES 密文兼容已随迁移完成删除，取舍见 [docs/adr/0004-password-transport-and-storage.md](./docs/adr/0004-password-transport-and-storage.md)。
 - **令牌以明文流转**：登录令牌明文保存在桌面端 `settings.json` 中，并随请求以 Bearer 明文传输（后端只做校验与有效期管理），仅适用于本机/内网场景。
-- **HTTP 状态码契约收敛为 7 项**：前后端共用 `@repo/reusable` 的 `HTTP_STATUS`（200/201/204/400/401/404/500），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、知识库入库失败按 500 处理，取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md)。
+- **HTTP 状态码契约收敛为 8 项**：前后端共用 `@repo/reusable` 的 `HTTP_STATUS`（200/201/204/400/401/404/500/503），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、依赖失败按 500、过载拒绝按 503（附 `Retry-After`，只由并发闸门签发），取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md) 与 [docs/adr/0010-concurrency-governance.md](./docs/adr/0010-concurrency-governance.md)。
 - **账号与端绑定 + 后台权限分级**：一个账号只属于一端，**端由登录路径承载**（客户端 `/api/auth/login`、后台 `/api/admin/auth/login`），不让调用方传字段自证身份；角色分三级 `super_admin` / `admin` / `user`，后台登录只接受前两者。权限只在用户管理模块分级——普通 admin 的列表在 SQL 层就过滤掉后台账号，也动不了它们；运维超级令牌 `x-admin-token` 权限等价超管，保留为超管丢号时的结构性后路。取舍见 [docs/adr/0006-account-isolation-and-admin-hierarchy.md](./docs/adr/0006-account-isolation-and-admin-hierarchy.md)。
 
 各端自身的取舍（如后端的单端登录策略、桌面端的主题过渡范围、后台管理网站的固定亮色与自建 UI 组件）分别记在对应的子 README 中。

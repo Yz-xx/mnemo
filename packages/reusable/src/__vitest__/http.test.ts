@@ -11,6 +11,7 @@ describe('HTTP 状态码契约', () => {
       UNAUTHORIZED: 401,
       NOT_FOUND: 404,
       INTERNAL_SERVER_ERROR: 500,
+      SERVICE_UNAVAILABLE: 503,
     });
   });
 
@@ -24,8 +25,13 @@ describe('HTTP 状态码契约', () => {
     expect(toHttpStatusCode(401)).toBe(401);
   });
 
+  it('收窄：过载拒绝 503 属契约内，必须原样透传，客户端才能据此退避重试', () => {
+    expect(toHttpStatusCode(503)).toBe(HTTP_STATUS.SERVICE_UNAVAILABLE);
+  });
+
   it('收窄：契约外的状态码回落为 500，不把网关/代理的码漏给调用方', () => {
     expect(toHttpStatusCode(403)).toBe(500);
+    expect(toHttpStatusCode(502)).toBe(500);
     expect(toHttpStatusCode(0)).toBe(500);
   });
 });

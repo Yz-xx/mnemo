@@ -36,7 +36,7 @@ agent-server 目前对并发**没有任何显式治理**：请求无上限进入
 1. **治理顺序钉死为「先保命 → 再削基线 → 最后扩容量」**：P0 兜底（闸门、超时、背压、进程兜底）→ P1 削减单轮基线占用 → P2 模型与依赖侧治理 → P3 事件循环保护 → P4 观测与压测。理由：P0 不改业务逻辑即可上线，收益最大；P1 把基线降下来，否则 P0 的阈值只能定得极保守。
 2. **范围先锁单机单实例，多实例另立项**：当前部署就是单进程，进程内闸门零外部依赖。多实例的前置条件（LanceDB 本地化、限流外移、反代不缓冲 SSE）列在文末，不在本方案内解决。
 3. **过载口径：软排队 + 硬拒绝**。软水位之上进有界队列（**队列有长度上限，且有等待超时**），硬水位之上直接拒绝。理由：纯排队会在过载时让等待时间无界增长，是雪崩最快的路径；纯拒绝在突发流量下体感差。两者取长。
-4. **状态码契约增补 `503`**：新增 `HTTP_STATUS.SERVICE_UNAVAILABLE`，过载拒绝返回 503 并带 `Retry-After`。理由：过载是**可重试的临时态**，与 `500`（服务内部错误）混用会让客户端无法决定重试策略。这是对 [ADR 0001](0001-http-status-contract.md) 七项契约的**有意增补**，须先改 `.trae/rules/backend-design.md` 第 3 章再改 `packages/reusable/src/http.ts`（契约为单一真相来源）。除过载外，其余 5xx 仍一律 `500`。
+4. **状态码契约增补 `503`**：新增 `HTTP_STATUS.SERVICE_UNAVAILABLE`，过载拒绝返回 503 并带 `Retry-After`。理由：过载是**可重试的临时态**，与 `500`（服务内部错误）混用会让客户端无法决定重试策略。这是对 [ADR 0001](0001-http-status-contract.md) 七项契约的**有意增补**，已按「先改 `.trae/rules/backend-design.md` 第 3 章 → 再改 `packages/reusable/src/http.ts`」的顺序落地（追记见 ADR 0001「后续变更」），契约由七项变为八项。除过载外，其余 5xx 仍一律 `500`。
 5. **请求分四档，配额互不挤占**：① 健康检查——**不受闸门影响**，必须永远可答；② 对话流（`/api/chat`）——长占用、单独闸门；③ 上传与解析——CPU 密集、单独闸门；④ 普通读写 CRUD（会话 / 文件 / 知识库 / 管理端）——较宽上限。理由：对话流占满时不得让健康检查与后台操作一起失联。
 6. **HTTP 层显式设超时与连接回收**：改用 `http.createServer(app)`，设置 `headersTimeout` / `requestTimeout` / `keepAliveTimeout` / `maxRequestsPerSocket`；SSE 路径豁免响应期超时，改由「单轮最长时长」兜底 `controller.abort()`。理由：SSE 的响应期本来就不受 `requestTimeout` 约束，半死连接会永久占住一个在途额度与一份内存。
 7. **连接池：`queueLimit` 有界 + `connectTimeout`，池满快速失败**。理由：`waitForConnections: true` + 缺省 `queueLimit` 等于无限排队，等待时间无上限，会出现「排到队时客户端早已离开」。池满即失败比排到超时更省资源。
@@ -81,5 +81,5 @@ agent-server 目前对并发**没有任何显式治理**：请求无上限进入
 - **P2 模型与依赖**：模型闸门 + 有界队列 + 等待超时（套在 [agent.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/llm/agent.ts#L136-L178) 的 `stream` 外层）；摘要独立队列（[contextGovernance.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/services/contextGovernance.ts)）；检索超时与降级、写入路径不降级（[rag/storage.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/rag/storage.ts#L118-L135)）；熔断半开。
 - **P3 事件循环与上传**：[upload.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/middleware/upload.ts) 解析并发闸门 + 大文件落临时文件；评估 [parser.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/files/parser.ts) 是否移入 `worker_threads`。
 - **P4 观测与验收**：指标埋点（含事件循环延迟监控）、`/api/health/ready` 分级健康检查、`scripts/` 下压测脚本（mock 模型打 `/api/chat` 与非流式接口）、容量基线与 SLO（首 token P95、整轮 P95、503 比例、池等待 P95）。
-- **跨阶段**：503 契约增补（`backend-design.md` 第 3 章 → `packages/reusable/src/http.ts` → ADR 0001 追记）；新增环境变量四件套同步；桌面端等待态与过载文案（`messages.ts` 集中管理）。
+- **跨阶段**：503 契约增补**已落地**（`.trae/rules/backend-design.md` 第 3 章 → `packages/reusable/src/http.ts` → ADR 0001 追记）；其余待办：新增环境变量四件套同步、桌面端等待态与过载文案（`messages.ts` 集中管理）。
 - **多实例（另立项，不在本文范围）**：LanceDB 由本地目录改为共享存储或收敛到单实例、限流外移至网关、反代对 SSE 关闭响应缓冲（`proxy_buffering off`）、确认单端登录在共享 `user_sessions` 下的行为不变。

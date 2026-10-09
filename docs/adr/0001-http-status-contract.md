@@ -22,3 +22,5 @@
 后续做了包拆分：`@repo/shared` 收敛为只放**与业务无关的通用工具**（strings / common / crypto），与业务约定绑定的可复用代码另建 `@repo/reusable` 承载。`HTTP_STATUS` / `toHttpStatusCode` / `HttpStatusCode` 因此从 `@repo/shared` 迁到 `@repo/reusable`（其测试也迁至 `packages/reusable/src/__vitest__/http.test.ts`）。
 
 本文记录的决策内容本身不变——契约仍收敛为这七项、仍放在一个跨端共享包里——仅承载位置从 `@repo/shared` 变为 `@repo/reusable`；上文出现的 `shared/src/http.ts` 与 `import { HTTP_STATUS } from '@repo/shared'` 等表述按此理解。
+
+契约随后**由七项增补为八项**：新增 `HTTP_STATUS.SERVICE_UNAVAILABLE`（`503`），依据与完整方案见 [ADR 0010](0010-concurrency-governance.md)。增补的理由正是与本篇取舍正面冲突的那一点——「5xx 对外只有一个」把**可重试的临时态**（过载）与**真错误**压成了同一个码，客户端无从决定是否退避重试，因此为过载单开一项，并约定它**只由并发闸门在硬水位处签发**、响应固定附 `Retry-After`。本篇其余结论仍然有效：依赖失败（含知识库入库失败）依旧 `500`，权限不足依旧 `404`，用户名冲突依旧 `400`；标题中的「七项」指增补前的规模。

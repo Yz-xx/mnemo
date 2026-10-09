@@ -10,14 +10,14 @@
 
 包为单入口 `src/index.ts`，业务方从 `@repo/reusable` 引入即可按需取用。按模块分为四组：
 
-| 模块       | 导出                                  | 说明                                                                   |
-| ---------- | ------------------------------------- | ---------------------------------------------------------------------- |
-| `http`     | `HTTP_STATUS`                         | HTTP 状态码常量表（`as const` 对象），前后端共用的协议契约（七项取值） |
-|            | `HttpStatusCode`                      | 由 `HTTP_STATUS` 派生的取值联合类型                                    |
-|            | `toHttpStatusCode(v)`                 | 边界收窄：契约外的状态码回落为 500，供调用方安全地按码分支             |
-| `chat`     | `AgentStreamEvent`、`ChatStreamEvent` | SSE 对话流的事件类型（纯类型，不产生运行时代码）                       |
-| `messages` | `SESSION_EXPIRED_MESSAGE`             | 登录失效固定文案：服务端 401 与桌面端登录页共用同一句话                |
-| `password` | `encryptPassword(api, plain)`         | 取服务端公钥（RSA-OAEP）加密口令并返回 Base64 密文                     |
+| 模块       | 导出                                  | 说明                                                                                   |
+| ---------- | ------------------------------------- | -------------------------------------------------------------------------------------- |
+| `http`     | `HTTP_STATUS`                         | HTTP 状态码常量表（`as const` 对象），前后端共用的协议契约（八项取值，含过载拒绝 503） |
+|            | `HttpStatusCode`                      | 由 `HTTP_STATUS` 派生的取值联合类型                                                    |
+|            | `toHttpStatusCode(v)`                 | 边界收窄：契约外的状态码回落为 500，供调用方安全地按码分支                             |
+| `chat`     | `AgentStreamEvent`、`ChatStreamEvent` | SSE 对话流的事件类型（纯类型，不产生运行时代码）                                       |
+| `messages` | `SESSION_EXPIRED_MESSAGE`             | 登录失效固定文案：服务端 401 与桌面端登录页共用同一句话                                |
+| `password` | `encryptPassword(api, plain)`         | 取服务端公钥（RSA-OAEP）加密口令并返回 Base64 密文                                     |
 
 当前使用方：后端各路由与中间件统一取 `HTTP_STATUS`，`auth/middleware.ts` 与 `messages.ts` 取 `SESSION_EXPIRED_MESSAGE`，`ChatStreamEvent` 是后端 SSE 推送与桌面端事件消费共用的声明；桌面端的渲染进程由 `api/client.ts` 统一引入 `HTTP_STATUS` / `toHttpStatusCode` / `HttpStatusCode` / `ChatStreamEvent` / `SESSION_EXPIRED_MESSAGE` / `encryptPassword` 并转发给其余模块，它是渲染进程**唯一同时依赖本包与 `@repo/shared` 的模块**；`encryptPassword` 另被管理网站的两处（登录、新建用户）取用。契约说明见 [ADR 0001](../../docs/adr/0001-http-status-contract.md)，口令传输与存储见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)。`createApiClient` 工厂另被管理网站与桌面端共同取用，其 `baseURL` 除裸值外也接受取值器（与该工厂一贯的 `getToken` 一样在请求发起时才求值），实例因此可长期持有，地址或令牌变化都无需重建。
 
