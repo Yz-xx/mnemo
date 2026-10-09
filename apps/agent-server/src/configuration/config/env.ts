@@ -47,8 +47,8 @@ export interface ContextConfig {
 
 /**
  * 单档闸门的水位与队列：软水位之上开始排队，硬水位之上直接拒绝。
- * 入口的对话流 / 上传解析 / 普通读写三档，以及模型、摘要、检索三道内部闸门，
- * 各持一份配置，配额互不挤占（见 docs/adr/0010 决策 3、5、9、10、11）。
+ * 入口的对话流 / 上传 / 普通读写三档，以及模型、摘要、检索、附件解析四道内部闸门，
+ * 各持一份配置，配额互不挤占（见 docs/adr/0010 决策 3、5、9、10、11、14）。
  */
 export interface GateConfig {
   /** 硬水位（在途上限）：达到即拒绝，同时是放行的并发上限 */
@@ -83,6 +83,8 @@ export interface ConcurrencyConfig {
   retrieval: GateConfig;
   /** 单次检索（含向量化）超时（毫秒）：超时降级为「本轮无知识库结果」（决策 11） */
   retrievalTimeoutMs: number;
+  /** 附件解析闸门：docx / xlsx / pdf 解析是主线程 CPU 密集计算，独占小额度（决策 14） */
+  parse: GateConfig;
   /** 依赖熔断：连续失败达该值即快速失败（决策 16） */
   circuitFailureThreshold: number;
   /** 依赖熔断：打开后冷却多久再放一个探测（毫秒） */
@@ -201,8 +203,8 @@ function toCount(value: string | undefined, fallback: number): number {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-/** 可按档读取水位的闸门前缀：入口三档 + 模型 / 摘要 / 检索三道内部闸门 */
-type GatePrefix = 'CHAT' | 'UPLOAD' | 'CRUD' | 'MODEL' | 'SUMMARY' | 'RETRIEVAL';
+/** 可按档读取水位的闸门前缀：入口三档 + 模型 / 摘要 / 检索 / 附件解析四道内部闸门 */
+type GatePrefix = 'CHAT' | 'UPLOAD' | 'CRUD' | 'MODEL' | 'SUMMARY' | 'RETRIEVAL' | 'PARSE';
 
 /** 按档组装闸门：四项水位成套读取，缺省或非法时回落到该档默认值 */
 function readGate(prefix: GatePrefix, fallback: GateConfig): GateConfig {
@@ -318,6 +320,13 @@ export function loadConfig(): AppConfig {
         softLimit: 2,
         queueLimit: 8,
         queueTimeoutMs: 3000,
+      }),
+      // 附件解析闸门：解析是主线程 CPU 密集计算，并发收到最小，排队只为削峰（决策 14）
+      parse: readGate('PARSE', {
+        maxInFlight: 2,
+        softLimit: 1,
+        queueLimit: 8,
+        queueTimeoutMs: 5000,
       }),
       retrievalTimeoutMs: toNumber(process.env.RETRIEVAL_TIMEOUT_MS, 8000),
       // 熔断默认值：连续 5 次失败即快速失败 30 秒，之后放一个探测（决策 16）

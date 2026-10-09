@@ -1,4 +1,5 @@
-import type { FileStore } from '../../files/store.js';
+import type { ParseRunner } from '../../files/parseGovernance.js';
+import type { FileStore } from '../../files/store/index.js';
 import type { VisionReader } from '../vision.js';
 import type { Logger } from '@repo/logger';
 import path from 'node:path';
@@ -8,7 +9,6 @@ import { formatBytes, toErrorMessage } from '@repo/shared';
 import { buildDocument, EXPORT_FORMATS } from '../../files/generate.js';
 import { extractText } from '../../files/parser.js';
 import { BUDGET_EXHAUSTED_NOTE } from '../context/index.js';
-import { DISABLED_VISION } from '../vision.js';
 import { withLabel } from './label.js';
 import { readExports, readFileIds, readLogger, readToolBudget, readUserId } from './runtime.js';
 
@@ -46,10 +46,12 @@ function clampContent(text: string): string {
  * 把附件读成给模型看的文本：图片交给视觉模型转述，其余按格式抽取正文，超长统一截断。
  * 工具与「本轮附件预读」共用同一实现——两处若各自判断文件类型，新增格式时必然走偏。
  * 元数据存在但字节取不到时返回 null，由调用方决定提示方式；其余异常原样抛出。
+ * 文本解析走独立闸门（parse）：CPU 密集，过载时抛错，由调用方降级为「读取失败」（决策 14）。
  */
 export async function readAttachmentText(
   files: FileSource,
   vision: VisionReader,
+  parse: ParseRunner,
   userId: number,
   fileId: string,
   logger?: Logger,
@@ -60,7 +62,9 @@ export async function readAttachmentText(
   const isImage = IMAGE_EXTS.includes(loaded.file.ext);
   const text = isImage
     ? await vision.describe({ bytes: loaded.bytes, mime: loaded.file.mime })
-    : await extractText({ ext: loaded.file.ext, name: loaded.file.name, bytes: loaded.bytes });
+    : await parse.run(() =>
+        extractText({ ext: loaded.file.ext, name: loaded.file.name, bytes: loaded.bytes }),
+      );
 
   // 读取量与是否截断是排查「模型说文件是空的」这类问题的关键现场
   logger?.debug(isImage ? '理解图片' : '读取附件', {
@@ -77,7 +81,7 @@ export async function readAttachmentText(
  * 三个工具都只认本轮附件（ID 由路由层校验后经 configurable.fileIds 注入），
  * 图片理解能力经 vision 注入：未配视觉模型的环境传 DISABLED_VISION，工具会给出可读提示。
  */
-export function createFileTools(files: FileSource, vision: VisionReader = DISABLED_VISION) {
+export function createFileTools(files: FileSource, vision: VisionReader, parse: ParseRunner) {
   const listFiles = tool(
     async (_input, config) => {
       const ids = readFileIds(config);
@@ -105,6 +109,7 @@ export function createFileTools(files: FileSource, vision: VisionReader = DISABL
         const text = await readAttachmentText(
           files,
           vision,
+          parse,
           readUserId(config),
           fileId,
           readLogger(config),

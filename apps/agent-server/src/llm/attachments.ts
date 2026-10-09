@@ -1,3 +1,4 @@
+import type { ParseRunner } from '../files/parseGovernance.js';
 import type { ToolBudget } from './context/index.js';
 import type { FileSource } from './tools/index.js';
 import type { VisionReader } from './vision.js';
@@ -22,12 +23,13 @@ export async function appendAttachmentHints(input: {
   messages: BaseMessage[];
   files: FileSource;
   vision: VisionReader;
+  parse: ParseRunner;
   userId: number;
   fileIds: string[];
   budget: ToolBudget;
   logger?: Logger;
 }): Promise<void> {
-  const { messages, files, vision, userId, fileIds, budget, logger } = input;
+  const { messages, files, vision, parse, userId, fileIds, budget, logger } = input;
   if (fileIds.length === 0) return;
   const attachments = await files.list(userId, fileIds);
   if (attachments.length === 0) return;
@@ -37,7 +39,7 @@ export async function appendAttachmentHints(input: {
   for (const file of attachments) {
     const heading = `【${file.name}｜${file.id}】`;
     try {
-      const text = await readAttachmentText(files, vision, userId, file.id, logger);
+      const text = await readAttachmentText(files, vision, parse, userId, file.id, logger);
       // 读不到要让模型知道原因并如实转达，不因此中断整轮对话
       if (text === null) {
         sections.push(`${heading}读取失败：文件不存在或已失效，请如实告知用户。`);

@@ -45,6 +45,7 @@ const BASE: ConcurrencyConfig = {
   model: { maxInFlight: 2, softLimit: 1, queueLimit: 1, queueTimeoutMs: 50 },
   summary: { maxInFlight: 1, softLimit: 1, queueLimit: 0, queueTimeoutMs: 50 },
   retrieval: { maxInFlight: 4, softLimit: 2, queueLimit: 1, queueTimeoutMs: 50 },
+  parse: { maxInFlight: 2, softLimit: 1, queueLimit: 1, queueTimeoutMs: 50 },
   retrievalTimeoutMs: 1000,
   circuitFailureThreshold: 5,
   circuitCooldownMs: 30000,

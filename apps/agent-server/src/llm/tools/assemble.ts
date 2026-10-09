@@ -1,23 +1,25 @@
+import type { ParseRunner } from '../../files/parseGovernance.js';
 import type { KnowledgeStore } from '../../rag/index.js';
 import type { VisionReader } from '../vision.js';
 import type { FileSource } from './files.js';
-import { DISABLED_VISION } from '../vision.js';
 import { createFileTools } from './files.js';
 import { createKnowledgeTool } from './knowledge.js';
 import { createUtilityTools } from './utility.js';
 
 /**
  * 组装 Agent 工具集：知识库检索、附件清单与读取、文件导出、当前时间、算术计算。
- * 图片理解能力经 vision 注入：未配视觉模型的环境传 DISABLED_VISION，工具会给出可读提示。
+ * 图片理解能力经 vision 注入：未配视觉模型的环境传 DISABLED_VISION，工具会给出可读提示；
+ * 附件解析能力经 parse 注入：解析受独立闸门约束，过载时读路径降级（见 docs/adr/0010 决策 14）。
  */
 export function createTools(
   knowledge: KnowledgeStore,
   files: FileSource,
-  vision: VisionReader = DISABLED_VISION,
+  vision: VisionReader,
+  parse: ParseRunner,
 ) {
   return [
     createKnowledgeTool(knowledge),
-    ...createFileTools(files, vision),
+    ...createFileTools(files, vision, parse),
     ...createUtilityTools(),
   ];
 }

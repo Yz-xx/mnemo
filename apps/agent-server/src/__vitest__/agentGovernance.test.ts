@@ -1,5 +1,5 @@
 import type { AppConfig, GateConfig } from '../configuration/config/index.js';
-import type { FileStore } from '../files/store.js';
+import type { FileStore } from '../files/store/index.js';
 import type { KnowledgeStore } from '../rag/index.js';
 import { HumanMessage } from '@langchain/core/messages';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

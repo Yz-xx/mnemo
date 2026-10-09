@@ -1,4 +1,5 @@
-import type { FileStore, StoredFile } from '../files/store.js';
+import type { ParseRunner } from '../files/parseGovernance.js';
+import type { FileStore, StoredFile } from '../files/store/index.js';
 import type { GeneratedFileRef } from '../llm/tools/index.js';
 import type { VisionReader } from '../llm/vision.js';
 import type { BaseMessage } from '@langchain/core/messages';
@@ -11,11 +12,14 @@ import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { createAgent } from 'langchain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createLogger } from '@repo/logger';
+import { ERROR_MESSAGE } from '../configuration/messages.js';
+import { ParseOverloadedError } from '../files/parseGovernance.js';
 import { createToolBudget } from '../llm/context/index.js';
 import { createTools } from '../llm/tools/index.js';
 import { DISABLED_VISION, VISION_DISABLED_MESSAGE } from '../llm/vision.js';
 import { KnowledgeStore } from '../rag/index.js';
 import { FakeEmbeddings, TEST_ROOT } from './fakeEmbeddings.js';
+import { PASSTHROUGH_PARSE } from './fakeParse.js';
 
 const OPTIONS = {
   chunkSize: 60,
@@ -63,6 +67,7 @@ function buildAgent(files: FakeFiles = new FakeFiles()) {
       store,
       files as unknown as Pick<FileStore, 'list' | 'read' | 'save'>,
       DISABLED_VISION,
+      PASSTHROUGH_PARSE,
     ),
     systemPrompt: '测试用智能体',
     name: 'agent',
@@ -160,6 +165,7 @@ function buildSearchAgent(model: ReturnType<typeof fakeModel>) {
       store,
       new FakeFiles() as unknown as Pick<FileStore, 'list' | 'read' | 'save'>,
       DISABLED_VISION,
+      PASSTHROUGH_PARSE,
     ),
     systemPrompt: '测试用智能体',
     name: 'agent',
@@ -219,12 +225,14 @@ async function docxRecord(id: string, name: string, text: string) {
 
 /**
  * 组装调用指定工具的智能体，并把工具输出回显为最终回答，便于断言工具返回了什么。
- * 视觉能力默认关闭：只有图片理解相关的用例才需要传入替身。
+ * 视觉能力默认关闭：只有图片理解相关的用例才需要传入替身；
+ * 解析走直通闸门：只有验证解析过载降级的用例才需要传入会拒绝的替身。
  */
 function buildFileAgent(
   files: FakeFiles,
   call: { name: string; args: Record<string, unknown> },
   vision: VisionReader = DISABLED_VISION,
+  parse: ParseRunner = PASSTHROUGH_PARSE,
 ) {
   const model = fakeModel()
     .respondWithTools([call])
@@ -236,6 +244,7 @@ function buildFileAgent(
       store,
       files as unknown as Pick<FileStore, 'list' | 'read' | 'save'>,
       vision,
+      parse,
     ),
     systemPrompt: '测试用智能体',
     name: 'agent',
@@ -370,6 +379,27 @@ describe('文件工具', () => {
 
     const toolMessage = result.messages.find((message) => message instanceof ToolMessage);
     expect(String(toolMessage?.content)).toContain('上下文预算上限');
+  });
+
+  it('解析过载时 read_file 如实回注过载提示，不打断整轮', async () => {
+    const record = await docxRecord('f-1', '季度报告.docx', '营收增长 12%');
+    const files = new FakeFiles({ 'f-1': record });
+    // 解析闸门拒绝：模拟 CPU 密集的解析被小额度挡下
+    const overloaded: ParseRunner = { run: () => Promise.reject(new ParseOverloadedError()) };
+
+    const result = await buildFileAgent(
+      files,
+      { name: 'read_file', args: { fileId: 'f-1' } },
+      DISABLED_VISION,
+      overloaded,
+    ).invoke(
+      { messages: [{ role: 'user', content: '看看我传的文件' }] },
+      { configurable: { userId: 7, fileIds: ['f-1'] } },
+    );
+
+    const toolMessage = result.messages.find((message) => message instanceof ToolMessage);
+    // 过载属可重试的临时状态：如实把文案交回模型转达，而不是抛错打断整轮
+    expect(String(toolMessage?.content)).toContain(ERROR_MESSAGE.OVERLOADED);
   });
 
   it('write_file 生成文件并登记到导出收集器，供客户端下载', async () => {

@@ -1,10 +1,11 @@
 import type { AppDependencies } from '../../configuration/dependencies.js';
 import type { Request, Response } from 'express';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Router } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { currentUserId } from '../../auth/middleware.js';
-import { detectUploadType } from '../../files/type.js';
+import { detectUploadTypeFromFile } from '../../files/type.js';
 import { createUploadMiddleware } from '../../middleware/upload.js';
 
 /** 展示用文件名的保留长度：只存数据库、不参与拼路径，截断是为免超出列宽与界面排版 */
@@ -65,7 +66,7 @@ export async function handleDownloadFile(
   res.send(loaded.bytes);
 }
 
-/** 上传入口：magic bytes 判定类型 → 白名单校验 → 落盘并写元数据 */
+/** 上传入口：读文件头判定类型 → 白名单校验 → 临时文件改名入库 */
 export async function handleUploadFile(
   { files, config }: FilesDependencies,
   req: Request,
@@ -77,18 +78,24 @@ export async function handleUploadFile(
     return;
   }
 
-  // 类型一律按文件头判定：扩展名与 MIME 由客户端提交，不可信
-  const detected = await detectUploadType(upload.buffer);
-  if (!detected || !config.upload.allowedTypes.includes(detected.ext)) {
-    res.status(HTTP_STATUS.BAD_REQUEST).json({ message: '不支持该文件类型' });
-    return;
-  }
+  try {
+    // 类型一律按文件头判定：扩展名与 MIME 由客户端提交，不可信；只读回文件头，不把整份文件读入内存
+    const detected = await detectUploadTypeFromFile(upload.path);
+    if (!detected || !config.upload.allowedTypes.includes(detected.ext)) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ message: '不支持该文件类型' });
+      return;
+    }
 
-  const stored = await files.save(currentUserId(res), {
-    name: normalizeFileName(upload.originalname),
-    ext: detected.ext,
-    mime: detected.mime,
-    bytes: upload.buffer,
-  });
-  res.status(HTTP_STATUS.CREATED).json(stored);
+    const stored = await files.saveFromPath(currentUserId(res), {
+      name: normalizeFileName(upload.originalname),
+      ext: detected.ext,
+      mime: detected.mime,
+      size: upload.size,
+      tempPath: upload.path,
+    });
+    res.status(HTTP_STATUS.CREATED).json(stored);
+  } finally {
+    // 临时文件无论放行与否都不该留下：入库成功时已被 rename 搬走，此处 rm 是空操作
+    await fs.rm(upload.path, { force: true });
+  }
 }

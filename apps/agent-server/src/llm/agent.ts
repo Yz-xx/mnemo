@@ -10,6 +10,7 @@ import { AIMessageChunk, ToolMessage } from '@langchain/core/messages';
 import { createAgent } from 'langchain';
 import { describeChatEndpoint, describeChatModel } from '../configuration/config/index.js';
 import { describeConnectionError } from '../configuration/errors.js';
+import { ParseGovernance } from '../files/parseGovernance.js';
 import { appendAttachmentHints } from './attachments.js';
 import { createToolBudget } from './context/index.js';
 import { extractReasoning, extractText } from './messageContent.js';
@@ -33,6 +34,8 @@ export class AgentService implements Summarizer {
   private readonly vision: VisionReader;
   /** 模型侧治理：闸门与熔断的申请 / 归还 / 回报口径都收在它内部（见 docs/adr/0010 决策 9、10、16） */
   private readonly governance: ModelGovernance;
+  /** 附件解析治理：解析走独立闸门，过载时读路径降级（见 docs/adr/0010 决策 14） */
+  private readonly parse: ParseGovernance;
   /** 对话模型服务描述，用于把底层连接错误翻译成用户能看懂的提示 */
   private readonly modelTarget: string;
   /** 单轮工具结果额度（token）：由窗口预算与 toolRatio 折算，检索与读取共用这一份 */
@@ -47,7 +50,9 @@ export class AgentService implements Summarizer {
   ) {
     this.files = files;
     this.vision = vision;
-    this.tools = createTools(knowledge, files, vision);
+    // 解析闸门先建：工具与附件预读都要经它约束解析（解析发生在对话轮，不在上传请求内）
+    this.parse = new ParseGovernance(config, logger);
+    this.tools = createTools(knowledge, files, vision, this.parse);
     this.model = createChatModel(config);
     this.agent = createAgent({
       model: this.model,
@@ -118,6 +123,7 @@ export class AgentService implements Summarizer {
         messages: injected,
         files: this.files,
         vision: this.vision,
+        parse: this.parse,
         userId: options.userId,
         fileIds: options.fileIds,
         budget: toolBudget,

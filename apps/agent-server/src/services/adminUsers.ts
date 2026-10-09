@@ -2,7 +2,7 @@ import type { AdminActor } from '../auth/actor.js';
 import type { SessionStore } from '../auth/sessionStore.js';
 import type { UserPatch, UserRecord, UserStatus, UserStore } from '../auth/userStore/index.js';
 import type { ConversationStore } from '../conversation/store/index.js';
-import type { FileStore } from '../files/store.js';
+import type { FileStore } from '../files/store/index.js';
 import { isSuperAdmin } from '../auth/actor.js';
 import { isAdminRole } from '../auth/userStore/index.js';
 import { ERROR_MESSAGE } from '../configuration/messages.js';

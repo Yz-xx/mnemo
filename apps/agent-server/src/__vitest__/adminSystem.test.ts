@@ -5,9 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { describeSystemConfig } from '../configuration/config/index.js';
 import { createTools, describeTools } from '../llm/tools/index.js';
 import { DISABLED_VISION } from '../llm/vision.js';
+import { PASSTHROUGH_PARSE } from './fakeParse.js';
 
 /** 组装工具只读这些依赖的构造参数，不调用它们：给空替身即可 */
-const tools = createTools({} as KnowledgeStore, {} as FileSource, DISABLED_VISION);
+const tools = createTools(
+  {} as KnowledgeStore,
+  {} as FileSource,
+  DISABLED_VISION,
+  PASSTHROUGH_PARSE,
+);
 
 /** 基准配置：密钥类字段一律填上可识别的明文，用于验证它们不会出现在响应里 */
 function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
@@ -40,6 +46,7 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       model: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 20000 },
       summary: { maxInFlight: 1, softLimit: 1, queueLimit: 0, queueTimeoutMs: 3000 },
       retrieval: { maxInFlight: 4, softLimit: 2, queueLimit: 8, queueTimeoutMs: 3000 },
+      parse: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 5000 },
       retrievalTimeoutMs: 8000,
       circuitFailureThreshold: 5,
       circuitCooldownMs: 30000,

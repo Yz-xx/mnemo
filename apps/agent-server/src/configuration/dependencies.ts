@@ -4,7 +4,7 @@ import type { SessionStore } from '../auth/sessionStore.js';
 import type { UserStore } from '../auth/userStore/index.js';
 import type { ConversationLock } from '../conversation/lock.js';
 import type { ConversationStore } from '../conversation/store/index.js';
-import type { FileStore } from '../files/store.js';
+import type { FileStore } from '../files/store/index.js';
 import type { AgentService } from '../llm/agent.js';
 import type { ApiLogStore } from '../logging/store.js';
 import type { ConcurrencyGuard } from '../middleware/concurrencyGuard.js';

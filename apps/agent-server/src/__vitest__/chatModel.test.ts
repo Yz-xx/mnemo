@@ -33,6 +33,7 @@ const CONFIG: AppConfig = {
     model: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 20000 },
     summary: { maxInFlight: 1, softLimit: 1, queueLimit: 0, queueTimeoutMs: 3000 },
     retrieval: { maxInFlight: 4, softLimit: 2, queueLimit: 8, queueTimeoutMs: 3000 },
+    parse: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 5000 },
     retrievalTimeoutMs: 8000,
     circuitFailureThreshold: 5,
     circuitCooldownMs: 30000,

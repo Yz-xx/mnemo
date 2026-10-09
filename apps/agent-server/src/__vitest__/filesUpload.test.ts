@@ -1,11 +1,14 @@
 import type { AppConfig } from '../configuration/config/index.js';
-import type { FileStore, UploadedFile } from '../files/store.js';
+import type { FileStore, StreamedUpload } from '../files/store/index.js';
 import type { Request, Response } from 'express';
 import { Buffer } from 'node:buffer';
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HTTP_STATUS } from '@repo/reusable';
-import { detectUploadType } from '../files/type.js';
+import { detectUploadType, detectUploadTypeFromFile } from '../files/type.js';
 import { handleUploadFile } from '../routes/client/files.js';
+import { TEST_ROOT } from './fakeEmbeddings.js';
 
 /** 最小 PNG 文件头：magic bytes 前 8 字节 + IHDR 块标识，足以判定为图片 */
 const PNG_HEADER = Buffer.concat([
@@ -16,18 +19,39 @@ const PNG_HEADER = Buffer.concat([
 
 const PDF_BODY = Buffer.from('%PDF-1.7\n1 0 obj\n');
 
+/** 临时文件目录：模拟 multer 落盘位置；用例结束后整目录删除，连带清掉未被搬走的临时文件 */
+let tmpDir: string;
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(TEST_ROOT, 'upload-'));
+});
+
+afterEach(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+/** 把字节写成临时文件，返回路径——等价于 multer 落盘后 req.file.path 指向的文件 */
+function writeTempFile(name: string, content: Buffer): string {
+  const filePath = path.join(tmpDir, name);
+  fs.writeFileSync(filePath, content);
+  return filePath;
+}
+
 /** 内存版文件存储：替代真实落盘与 MySQL，只实现上传链路会调用的方法 */
 class FakeFiles {
-  readonly saved: UploadedFile[] = [];
+  readonly saved: (StreamedUpload & { bytes: Buffer })[] = [];
 
-  async save(_userId: number, upload: UploadedFile) {
-    this.saved.push(upload);
+  async saveFromPath(_userId: number, upload: StreamedUpload) {
+    // 读回字节后删除，模拟 rename 把临时文件搬到正式路径
+    const bytes = fs.readFileSync(upload.tempPath);
+    fs.rmSync(upload.tempPath, { force: true });
+    this.saved.push({ ...upload, bytes });
     return {
       id: 'f-1',
       name: upload.name,
       ext: upload.ext,
       mime: upload.mime,
-      size: upload.bytes.length,
+      size: upload.size,
       createdAt: '2026-09-27T00:00:00.000Z',
     };
   }
@@ -98,6 +122,24 @@ describe('detectUploadType', () => {
   });
 });
 
+describe('detectUploadTypeFromFile', () => {
+  it('读文件头判定类型，与缓冲区判定同口径', async () => {
+    const filePath = writeTempFile('report.pdf', PDF_BODY);
+    await expect(detectUploadTypeFromFile(filePath)).resolves.toEqual({
+      ext: 'pdf',
+      mime: 'application/pdf',
+    });
+  });
+
+  it('无法识别的文件头返回 undefined，不按扩展名猜测', async () => {
+    const filePath = writeTempFile(
+      'note.bin',
+      Buffer.from('这只是一个纯文本文件，没有可辨认的文件头'),
+    );
+    await expect(detectUploadTypeFromFile(filePath)).resolves.toBeUndefined();
+  });
+});
+
 describe('handleUploadFile', () => {
   it('未携带文件时返回 400', async () => {
     const files = new FakeFiles();
@@ -110,29 +152,33 @@ describe('handleUploadFile', () => {
     expect(files.saved).toEqual([]);
   });
 
-  it('类型不在白名单内时返回 400 且不落库', async () => {
+  it('类型不在白名单内时返回 400、不落库且清掉临时文件', async () => {
     const files = new FakeFiles();
     const res = new FakeHttpResponse();
+    const filePath = writeTempFile('shot.png', PNG_HEADER);
 
     await handleUploadFile(
       fakeDeps(files, ['pdf']),
-      fakeRequest({ buffer: PNG_HEADER, originalname: 'shot.png', size: PNG_HEADER.length }),
+      fakeRequest({ path: filePath, originalname: 'shot.png', size: PNG_HEADER.length }),
       res as unknown as Response,
     );
 
     expect(res.statusCode).toBe(HTTP_STATUS.BAD_REQUEST);
     expect(res.body).toEqual({ message: '不支持该文件类型' });
     expect(files.saved).toEqual([]);
+    // 类型不符时临时文件同样要清掉，避免临时目录堆积脏文件
+    expect(fs.existsSync(filePath)).toBe(false);
   });
 
-  it('合法文件按 magic bytes 判定类型后落库并返回 201', async () => {
+  it('合法文件读文件头判定类型后落库并返回 201', async () => {
     const files = new FakeFiles();
     const res = new FakeHttpResponse();
+    const filePath = writeTempFile('fake.png', PDF_BODY);
 
     await handleUploadFile(
       fakeDeps(files, ['pdf']),
       // 扩展名伪装成图片，仍应按内容判定为 PDF 并放行
-      fakeRequest({ buffer: PDF_BODY, originalname: 'fake.png', size: PDF_BODY.length }),
+      fakeRequest({ path: filePath, originalname: 'fake.png', size: PDF_BODY.length }),
       res as unknown as Response,
     );
 
@@ -141,16 +187,19 @@ describe('handleUploadFile', () => {
     expect(files.saved[0].ext).toBe('pdf');
     expect(files.saved[0].bytes).toEqual(PDF_BODY);
     expect(res.body).toMatchObject({ id: 'f-1', ext: 'pdf', size: PDF_BODY.length });
+    // 入库成功的临时文件已被 rename 搬走，原路径不再存在
+    expect(fs.existsSync(filePath)).toBe(false);
   });
 
   it('中文文件名按 UTF-8 还原后保存', async () => {
     const files = new FakeFiles();
     const res = new FakeHttpResponse();
+    const filePath = writeTempFile('report.pdf', PDF_BODY);
 
     await handleUploadFile(
       fakeDeps(files, ['pdf']),
       fakeRequest({
-        buffer: PDF_BODY,
+        path: filePath,
         originalname: latin1Name('季度报告.pdf'),
         size: PDF_BODY.length,
       }),

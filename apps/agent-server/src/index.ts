@@ -21,7 +21,7 @@ import { createConversationLock } from './conversation/lock.js';
 import { ConversationStore } from './conversation/store/index.js';
 import { createMysqlPool } from './db/pool.js';
 import { ensureSchema } from './db/schema/index.js';
-import { FileStore } from './files/store.js';
+import { FileStore } from './files/store/index.js';
 import { AgentService } from './llm/agent.js';
 import { createEmbeddings } from './llm/model.js';
 import { ApiLogStore } from './logging/store.js';

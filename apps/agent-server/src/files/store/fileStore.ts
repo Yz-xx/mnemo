@@ -1,79 +1,17 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { AdminFileRow, FileRow, TotalRow } from './mapper.js';
+import type {
+  AdminFilePage,
+  AdminFileQuery,
+  LoadedFile,
+  StoredFile,
+  StreamedUpload,
+  UploadedFile,
+} from './types.js';
+import type { Pool } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-
-/** 待入库的上传内容：类型已由 magic bytes 判定，name 仅作展示 */
-export interface UploadedFile {
-  name: string;
-  ext: string;
-  mime: string;
-  bytes: Buffer;
-}
-
-/** 已入库的文件元数据：客户端与工具层都只看这份信息 */
-export interface StoredFile {
-  id: string;
-  name: string;
-  ext: string;
-  mime: string;
-  size: number;
-  createdAt: string;
-}
-
-/** 取出的原始字节所在位置：路径由元数据推导，因此两者必须成对返回，不能只给其一 */
-export interface LoadedFile {
-  file: StoredFile;
-  bytes: Buffer;
-}
-
-/** 管理端文件记录：在文件元数据之上补上传者 ID，前端据此显示归属 */
-export interface AdminFileRecord extends StoredFile {
-  userId: number;
-}
-
-/** 管理端列表查询条件：keyword 按文件名包含匹配，分页已在路由层收敛 */
-export interface AdminFileQuery {
-  keyword: string;
-  page: number;
-  pageSize: number;
-}
-
-/** 管理端分页结果：total 为满足条件的总数 */
-export interface AdminFilePage {
-  items: AdminFileRecord[];
-  total: number;
-}
-
-/** 管理端列表行：列集合比客户端多一个 user_id */
-interface AdminFileRow extends FileRow {
-  user_id: number;
-}
-
-interface TotalRow extends RowDataPacket {
-  total: number;
-}
-
-interface FileRow extends RowDataPacket {
-  id: string;
-  name: string;
-  ext: string;
-  mime: string;
-  size: number;
-  created_at: Date;
-}
-
-/** 行转领域对象：日期与数值在这里统一归一，避免各调用方各自转换 */
-function toStoredFile(row: FileRow): StoredFile {
-  return {
-    id: row.id,
-    name: row.name,
-    ext: row.ext,
-    mime: row.mime,
-    size: Number(row.size),
-    createdAt: row.created_at.toISOString(),
-  };
-}
+import { toStoredFile } from './mapper.js';
 
 /**
  * 上传文件存储：磁盘放原始字节，MySQL 放元数据。
@@ -92,6 +30,23 @@ export class FileStore {
     return path.join(this.baseDir, String(userId));
   }
 
+  /** 写入元数据行：内存字节与临时文件改名的落盘方式不同，但入库列完全一致，故收在一处 */
+  private async insertRow(userId: number, record: StoredFile): Promise<void> {
+    await this.pool.execute(
+      `INSERT INTO files (id, user_id, name, ext, mime, size, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        record.id,
+        userId,
+        record.name,
+        record.ext,
+        record.mime,
+        record.size,
+        new Date(record.createdAt),
+      ],
+    );
+  }
+
   /** 落盘并写入元数据；元数据写失败时回删文件，避免留下无人引用的孤儿文件 */
   async save(userId: number, upload: UploadedFile): Promise<StoredFile> {
     const record: StoredFile = {
@@ -108,19 +63,35 @@ export class FileStore {
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(target, upload.bytes);
     try {
-      await this.pool.execute(
-        `INSERT INTO files (id, user_id, name, ext, mime, size, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          record.id,
-          userId,
-          record.name,
-          record.ext,
-          record.mime,
-          record.size,
-          new Date(record.createdAt),
-        ],
-      );
+      await this.insertRow(userId, record);
+    } catch (error) {
+      await fs.rm(target, { force: true });
+      throw error;
+    }
+    return record;
+  }
+
+  /**
+   * 从临时文件入库：以改名（rename）代替复制，字节不再过一遍内存（见 docs/adr/0010 决策 14）。
+   * 临时文件由上传中间件写在同一个上传根目录下，与正式目录同卷，改名不产生拷贝开销；
+   * 元数据写失败时回删目标文件，避免留下无人引用的孤儿文件。
+   */
+  async saveFromPath(userId: number, upload: StreamedUpload): Promise<StoredFile> {
+    const record: StoredFile = {
+      id: randomUUID(),
+      name: upload.name,
+      ext: upload.ext,
+      mime: upload.mime,
+      size: upload.size,
+      createdAt: new Date().toISOString(),
+    };
+    const dir = this.userDir(userId);
+    const target = path.join(dir, `${record.id}.${record.ext}`);
+
+    await fs.mkdir(dir, { recursive: true });
+    await fs.rename(upload.tempPath, target);
+    try {
+      await this.insertRow(userId, record);
     } catch (error) {
       await fs.rm(target, { force: true });
       throw error;

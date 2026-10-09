@@ -9,7 +9,7 @@ import type {
   MessageRole,
   StoredMessage,
 } from '../conversation/types.js';
-import type { FileStore, StoredFile } from '../files/store.js';
+import type { FileStore, StoredFile } from '../files/store/index.js';
 import type { AgentService } from '../llm/agent.js';
 import type { Logger } from '@repo/logger';
 import type { AgentStreamEvent, ChatStreamEvent } from '@repo/reusable';

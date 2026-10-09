@@ -311,6 +311,10 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `RETRIEVAL_TIMEOUT_MS`                                         | `8000`                      | 单次检索（含向量化）超时（毫秒），超时降级为「本轮无知识库结果」       |
 | `CIRCUIT_FAILURE_THRESHOLD`                                    | `5`                         | 依赖熔断：连续失败达该值即快速失败（决策 16）                          |
 | `CIRCUIT_COOLDOWN_MS`                                          | `30000`                     | 依赖熔断：打开后冷却多久再放一个探测（毫秒）                           |
+| `CONCURRENCY_PARSE_MAX_IN_FLIGHT`                              | `2`                         | 附件解析闸门硬水位：解析是主线程 CPU 密集计算，独占小额度（决策 14）   |
+| `CONCURRENCY_PARSE_SOFT_LIMIT`                                 | `1`                         | 附件解析闸门软水位                                                     |
+| `CONCURRENCY_PARSE_QUEUE_LIMIT`                                | `8`                         | 附件解析闸门排队长度上限                                               |
+| `CONCURRENCY_PARSE_QUEUE_TIMEOUT_MS`                           | `5000`                      | 附件解析闸门排队等待上限（毫秒）                                       |
 
 并发闸门是**进程内状态**：进程重启即清零，多实例下各算各的，不能当作全局配额（见 [ADR 0010](../../docs/adr/0010-concurrency-governance.md)）。过载时返回 `503` 并附 `Retry-After`；健康检查与登录接口不挂闸门，过载时仍可观测、仍能进后台。默认阈值只保证不雪崩，吞吐基线须按容量模型压测后校准。
 
