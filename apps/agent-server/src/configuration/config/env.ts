@@ -47,7 +47,8 @@ export interface ContextConfig {
 
 /**
  * 单档闸门的水位与队列：软水位之上开始排队，硬水位之上直接拒绝。
- * 对话流 / 上传解析 / 普通读写三档各持一份，配额互不挤占（见 docs/adr/0010 决策 5）。
+ * 入口的对话流 / 上传解析 / 普通读写三档，以及模型、摘要、检索三道内部闸门，
+ * 各持一份配置，配额互不挤占（见 docs/adr/0010 决策 3、5、9、10、11）。
  */
 export interface GateConfig {
   /** 硬水位（在途上限）：达到即拒绝，同时是放行的并发上限 */
@@ -74,6 +75,18 @@ export interface ConcurrencyConfig {
   sseDrainTimeoutMs: number;
   /** 优雅停机：停止接单后等待在途请求收尾的上限（毫秒） */
   shutdownGraceMs: number;
+  /** 对话模型闸门：真实瓶颈在模型算力，与入口的 HTTP 档闸门分开计量（见 docs/adr/0010 决策 9） */
+  model: GateConfig;
+  /** 滚动摘要闸门：独立低优先队列，不占对话额度；满即拒绝，由治理层降级（决策 10） */
+  summary: GateConfig;
+  /** 检索与向量化闸门：读路径过它，写入路径不占（决策 11） */
+  retrieval: GateConfig;
+  /** 单次检索（含向量化）超时（毫秒）：超时降级为「本轮无知识库结果」（决策 11） */
+  retrievalTimeoutMs: number;
+  /** 依赖熔断：连续失败达该值即快速失败（决策 16） */
+  circuitFailureThreshold: number;
+  /** 依赖熔断：打开后冷却多久再放一个探测（毫秒） */
+  circuitCooldownMs: number;
 }
 
 /** HTTP 层超时与连接回收：防止半死连接永久占用连接与额度 */
@@ -188,8 +201,11 @@ function toCount(value: string | undefined, fallback: number): number {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+/** 可按档读取水位的闸门前缀：入口三档 + 模型 / 摘要 / 检索三道内部闸门 */
+type GatePrefix = 'CHAT' | 'UPLOAD' | 'CRUD' | 'MODEL' | 'SUMMARY' | 'RETRIEVAL';
+
 /** 按档组装闸门：四项水位成套读取，缺省或非法时回落到该档默认值 */
-function readGate(prefix: 'CHAT' | 'UPLOAD' | 'CRUD', fallback: GateConfig): GateConfig {
+function readGate(prefix: GatePrefix, fallback: GateConfig): GateConfig {
   const maxInFlight = toNumber(
     process.env[`CONCURRENCY_${prefix}_MAX_IN_FLIGHT`],
     fallback.maxInFlight,
@@ -222,7 +238,7 @@ function toLogLevel(value: string | undefined): LogLevel {
 export function loadConfig(): AppConfig {
   // 数据目录先解析出来，供知识库与日志目录共用同一基准
   const dataDir = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
-  // 对话模型提供方先解析出来：上下文窗口预算的默认值按它区分
+  // 对话模型提供方先解析出来：上下文窗口预算与模型闸门水位都按它区分
   const provider: LlmProvider = process.env.LLM_PROVIDER === 'deepseek' ? 'deepseek' : 'ollama';
   // 上下文比例先解析出来：保留比例要与触发比例比对，须在同一处算好
   const triggerRatio = toRatio(process.env.CONTEXT_TRIGGER_RATIO, 0.7);
@@ -282,6 +298,31 @@ export function loadConfig(): AppConfig {
       chatMaxDurationMs: toNumber(process.env.CHAT_MAX_DURATION_MS, 180000),
       sseDrainTimeoutMs: toNumber(process.env.SSE_DRAIN_TIMEOUT_MS, 30000),
       shutdownGraceMs: toNumber(process.env.SHUTDOWN_GRACE_MS, 15000),
+      // 模型闸门按 provider 分档：本地 Ollama 算力紧只放 1~2，线上 DeepSeek 可放宽（决策 9）
+      model: readGate(
+        'MODEL',
+        provider === 'deepseek'
+          ? { maxInFlight: 8, softLimit: 6, queueLimit: 32, queueTimeoutMs: 20000 }
+          : { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 20000 },
+      ),
+      // 摘要闸门并发 1 且不排队：满即拒绝，由治理层退化为丢弃最老历史，不拖慢首 token（决策 10）
+      summary: readGate('SUMMARY', {
+        maxInFlight: 1,
+        softLimit: 1,
+        queueLimit: 0,
+        queueTimeoutMs: 3000,
+      }),
+      // 检索闸门独立小并发：检索缺失只影响本轮答案质量，不阻断对话（决策 11）
+      retrieval: readGate('RETRIEVAL', {
+        maxInFlight: 4,
+        softLimit: 2,
+        queueLimit: 8,
+        queueTimeoutMs: 3000,
+      }),
+      retrievalTimeoutMs: toNumber(process.env.RETRIEVAL_TIMEOUT_MS, 8000),
+      // 熔断默认值：连续 5 次失败即快速失败 30 秒，之后放一个探测（决策 16）
+      circuitFailureThreshold: toNumber(process.env.CIRCUIT_FAILURE_THRESHOLD, 5),
+      circuitCooldownMs: toNumber(process.env.CIRCUIT_COOLDOWN_MS, 30000),
     },
     // 接口请求日志：攒批刷写替掉「每请求一条 INSERT」，把单轮基线压下来（见 docs/adr/0010 决策 13）
     apiLog: {

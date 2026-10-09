@@ -8,6 +8,8 @@ import { AuditLogStore } from './audit/store.js';
 import { createPasswordCipher } from './auth/passwordCipher.js';
 import { SessionStore } from './auth/sessionStore.js';
 import { UserStore } from './auth/userStore/index.js';
+import { createCircuitBreaker } from './concurrency/circuitBreaker.js';
+import { createBoundedGate } from './concurrency/gate.js';
 import {
   describeChatModel,
   describeEmbeddingEndpoint,
@@ -128,15 +130,36 @@ async function bootstrap(): Promise<void> {
   const prunedSessions = await sessions.prune();
   const conversations = new ConversationStore(pool);
   const files = new FileStore(pool, config.upload.dir);
-  const knowledge = new KnowledgeStore(config.dataDir, createEmbeddings(config), {
-    chunkSize: config.knowledge.chunkSize,
-    chunkOverlap: config.knowledge.chunkOverlap,
-    topK: config.knowledge.topK,
-    minScore: config.knowledge.minScore,
-    embeddingModel: describeEmbeddingModel(config),
-    embeddingEndpoint: describeEmbeddingEndpoint(config),
-  });
-  const agent = new AgentService(config, knowledge, files);
+  // 知识库检索与向量化治理（见 docs/adr/0010 决策 11、16）：
+  // 读路径过独立闸门并套超时、失败降级为空结果；向量服务连续失败即熔断，读写共用一份计数
+  const knowledge = new KnowledgeStore(
+    config.dataDir,
+    createEmbeddings(config),
+    {
+      chunkSize: config.knowledge.chunkSize,
+      chunkOverlap: config.knowledge.chunkOverlap,
+      topK: config.knowledge.topK,
+      minScore: config.knowledge.minScore,
+      embeddingModel: describeEmbeddingModel(config),
+      embeddingEndpoint: describeEmbeddingEndpoint(config),
+    },
+    {
+      gate: createBoundedGate(config.concurrency.retrieval, {
+        logger,
+        logContext: { gate: 'retrieval' },
+      }),
+      breaker: createCircuitBreaker({
+        failureThreshold: config.concurrency.circuitFailureThreshold,
+        cooldownMs: config.concurrency.circuitCooldownMs,
+        label: '向量化服务',
+        logger,
+      }),
+      timeoutMs: config.concurrency.retrievalTimeoutMs,
+      logger,
+    },
+  );
+  // 视觉读取器用默认实现（第 4 参传 undefined 走默认值），日志作为第 5 参注入模型闸门与熔断
+  const agent = new AgentService(config, knowledge, files, undefined, logger);
   // 并发治理：分档闸门与会话级串行锁都是进程内状态，重启即清零（见 docs/adr/0010）
   const guard = createConcurrencyGuard(config.concurrency, logger);
   const chatLock = createConversationLock(config.concurrency.chat.queueTimeoutMs);

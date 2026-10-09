@@ -1,7 +1,9 @@
-import type { ConcurrencyConfig, GateConfig } from '../configuration/config/index.js';
+import type { BoundedGate } from '../concurrency/gate.js';
+import type { ConcurrencyConfig } from '../configuration/config/index.js';
 import type { Logger } from '@repo/logger';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
+import { createBoundedGate, retryAfterSeconds } from '../concurrency/gate.js';
 import { ERROR_MESSAGE } from '../configuration/messages.js';
 
 /**
@@ -32,134 +34,22 @@ export interface ConcurrencyGuard {
   snapshot(): GateSnapshot[];
 }
 
-/** 排队中的一次申请：被放行或撤销时二选一收尾 */
-interface Waiting {
-  admit: () => void;
-  drop: () => void;
-}
-
-/** 申请结果：放行 / 过载拒绝 / 客户端在排队期间离开 */
-type Outcome = 'admitted' | 'rejected' | 'aborted';
-
-/** 单档闸门：在途计数 + 有界等待队列，释放时优先补位排队者 */
-interface Gate {
-  acquire(signal: AbortSignal): Promise<Outcome>;
-  /** 归还一个在途额度，并补位排队者 */
-  release(): void;
-  snapshot(): GateSnapshot;
-}
-
-/** 退避建议：按该档排队上限折算成秒并向上取整，至少 1 秒 */
-export function retryAfterSeconds(cfg: GateConfig): number {
-  return Math.max(1, Math.ceil(cfg.queueTimeoutMs / 1000));
-}
-
-/**
- * 建一档闸门。放行规则（见 docs/adr/0010 决策 3）：
- * - 队列为空且未到软水位 → 直达，不让轻微负载开始排队；
- * - 队列非空，或已介于软硬水位之间 → 排队（队列满则拒绝）；
- * - 已达硬水位 → 直接拒绝。
- * 队列非空时一律排队而不插队，先到先得，等待时间才可预期。
- */
-function createGate(tier: GuardTier, cfg: GateConfig, logger: Logger): Gate {
-  let inFlight = 0;
-  let rejected = 0;
-  const waiting: Waiting[] = [];
-
-  /** 逐个放行排队者，直到在途数回到硬水位 */
-  const drain = (): void => {
-    while (waiting.length > 0 && inFlight < cfg.maxInFlight) {
-      inFlight += 1;
-      waiting.shift()?.admit();
-    }
-  };
-
-  const release = (): void => {
-    inFlight -= 1;
-    drain();
-  };
-
-  const acquire = (signal: AbortSignal): Promise<Outcome> =>
-    new Promise<Outcome>((resolve) => {
-      if (waiting.length === 0 && inFlight < cfg.softLimit) {
-        inFlight += 1;
-        resolve('admitted');
-        return;
-      }
-      if (inFlight >= cfg.maxInFlight || waiting.length >= cfg.queueLimit) {
-        rejected += 1;
-        logger.warn('并发闸门拒绝请求', {
-          tier,
-          reason: inFlight >= cfg.maxInFlight ? 'hard-watermark' : 'queue-full',
-          inFlight,
-          queued: waiting.length,
-        });
-        resolve('rejected');
-        return;
-      }
-
-      let settled = false;
-      let finish: (outcome: Outcome) => void = () => undefined;
-      const entry: Waiting = {
-        admit: () => finish('admitted'),
-        drop: () => finish('aborted'),
-      };
-      const removeFromQueue = (): void => {
-        const index = waiting.indexOf(entry);
-        if (index >= 0) waiting.splice(index, 1);
-      };
-      const onAbort = (): void => finish('aborted');
-      // 定时器先建好、finish 后赋值：既能在此处引用 finish，又不必用可变量持有句柄
-      const timer = setTimeout(() => {
-        // 已放行或已撤销的申请不再计入拒绝，避免超时口径虚高
-        if (settled) return;
-        rejected += 1;
-        logger.warn('并发闸门等待超时', {
-          tier,
-          queued: waiting.length,
-          timeoutMs: cfg.queueTimeoutMs,
-        });
-        finish('rejected');
-      }, cfg.queueTimeoutMs);
-      finish = (outcome: Outcome): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        signal.removeEventListener('abort', onAbort);
-        removeFromQueue();
-        resolve(outcome);
-      };
-      // 排队期间客户端离开就撤销申请，不占着队列位置空等到超时
-      signal.addEventListener('abort', onAbort, { once: true });
-      waiting.push(entry);
-    });
-
-  return {
-    acquire,
-    release,
-    snapshot: () => ({
-      tier,
-      inFlight,
-      queued: waiting.length,
-      rejected,
-      maxInFlight: cfg.maxInFlight,
-      queueLimit: cfg.queueLimit,
-    }),
-  };
-}
+/** 挂闸门的三个档位：顺序同时决定快照顺序 */
+const TIERS: GuardTier[] = ['chat', 'upload', 'crud'];
 
 /**
  * 并发闸门组合根：一次建好三档，路由层按档取中间件挂载。
- * 是有状态的内存设施，进程重启即清零、多实例下各算各的，不能当作全局配额（见 docs/adr/0010）。
+ * 有状态的内存设施，进程重启即清零、多实例下各算各的，不能当作全局配额（见 docs/adr/0010）。
+ * 放行规则与水位语义由通用闸门承担（见 concurrency/gate.ts），这里只负责按档组装与 HTTP 收尾。
  */
 export function createConcurrencyGuard(
   config: ConcurrencyConfig,
   logger: Logger,
 ): ConcurrencyGuard {
-  const gates: Record<GuardTier, Gate> = {
-    chat: createGate('chat', config.chat, logger),
-    upload: createGate('upload', config.upload, logger),
-    crud: createGate('crud', config.crud, logger),
+  const gates: Record<GuardTier, BoundedGate> = {
+    chat: createBoundedGate(config.chat, { logger, logContext: { tier: 'chat' } }),
+    upload: createBoundedGate(config.upload, { logger, logContext: { tier: 'upload' } }),
+    crud: createBoundedGate(config.crud, { logger, logContext: { tier: 'crud' } }),
   };
 
   return {
@@ -201,6 +91,6 @@ export function createConcurrencyGuard(
         });
       };
     },
-    snapshot: () => [gates.chat, gates.upload, gates.crud].map((gate) => gate.snapshot()),
+    snapshot: () => TIERS.map((tier) => ({ tier, ...gates[tier].snapshot() })),
   };
 }

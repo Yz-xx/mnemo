@@ -4,6 +4,7 @@ import type {
   KnowledgeDocument,
   KnowledgeUpload,
 } from './documents.js';
+import type { RetrievalGovernance } from './retrieval.js';
 import type { KnowledgeSearchResult } from './search.js';
 import type { KnowledgeStoreOptions } from './storage.js';
 import type { Embeddings } from '@langchain/core/embeddings';
@@ -17,13 +18,15 @@ import {
   DOCUMENTS_TABLE,
   documentsSchema,
 } from './lance.js';
+import { callEmbedding, retrieveChunks } from './retrieval.js';
 import { visibilityFilter } from './search.js';
 import { KnowledgeStorage } from './storage.js';
 
 /**
  * 知识库（LanceDB）：文档切分向量化后落在本地库目录中，
  * 检索走向量近邻 + 可见性过滤，实现全局共享与用户私有两级隔离。
- * 连接、建表与旧表补列、向量基准校验由 KnowledgeStorage 承担，这里只保留文档业务语义。
+ * 连接、建表与旧表补列、向量基准校验由 KnowledgeStorage 承担；
+ * 检索的闸门 / 超时 / 降级与向量服务熔断由 rag/retrieval.ts 承担，这里只保留文档业务语义。
  */
 export class KnowledgeStore {
   private readonly storage: KnowledgeStorage;
@@ -32,6 +35,8 @@ export class KnowledgeStore {
     dataDir: string,
     embeddings: Embeddings,
     private readonly options: KnowledgeStoreOptions,
+    /** 检索与向量化治理：不传即不治理（本地脚本与单测），生产由组合根注入 */
+    private readonly governance?: RetrievalGovernance,
   ) {
     this.storage = new KnowledgeStorage(dataDir, embeddings, options);
   }
@@ -39,7 +44,8 @@ export class KnowledgeStore {
   /**
    * 切分并批量向量化：空内容与空结果直接抛错，基准校验失败原样抛出。
    * 入库与编辑共用，且始终在动库之前完成——最易失败的步骤前置，
-   * 失败时库内数据保持原样，重试即可恢复
+   * 失败时库内数据保持原样，重试即可恢复。
+   * 这是写入路径：向量服务失败或熔断打开都直接抛出，不做降级（见 docs/adr/0010 决策 11）
    */
   private async embedPieces(
     content: string,
@@ -51,7 +57,7 @@ export class KnowledgeStore {
     const pieces = await splitter.splitText(content);
     if (pieces.length === 0) throw new Error('文档内容为空，无法切分');
 
-    const vectors = await this.storage.embedDocuments(pieces);
+    const vectors = await callEmbedding(this.governance, () => this.storage.embedDocuments(pieces));
     const dim = vectors[0]?.length ?? 0;
     if (dim === 0) throw new Error('文档向量化结果为空');
     await this.storage.assertCompatible(dim);
@@ -203,34 +209,22 @@ export class KnowledgeStore {
     return document;
   }
 
-  /** 检索：先按可见性过滤，再按余弦距离取前 topK 条 */
+  /**
+   * 检索：先按可见性过滤，再按余弦距离取前 topK 条。
+   * 读路径的闸门、超时与降级都在 rag/retrieval.ts 内完成，失败即返回空数组
+   */
   async search(
     query: string,
     options: { userId: number; topK?: number },
   ): Promise<KnowledgeSearchResult[]> {
-    const table = await this.storage.openExisting(CHUNKS_TABLE);
-    if (!table || (await table.countRows()) === 0) return [];
-
-    const vector = await this.storage.embedQuery(query);
-    await this.storage.assertCompatible(vector.length);
-
-    const rows = await table
-      .query()
-      .nearestTo(vector)
-      .distanceType('cosine')
-      .where(visibilityFilter(options.userId))
-      .limit(options.topK ?? this.options.topK)
-      .toArray();
-
-    // 低于相似度下限的片段属于噪声，直接丢弃；过滤后条数可能少于 topK
-    return rows
-      .map((row) => ({
-        documentId: String(row.document_id),
-        title: String(row.title),
-        content: String(row.content),
-        score: 1 - Number(row._distance),
-      }))
-      .filter((item) => item.score >= this.options.minScore);
+    return retrieveChunks({
+      storage: this.storage,
+      options: this.options,
+      governance: this.governance,
+      query,
+      userId: options.userId,
+      topK: options.topK,
+    });
   }
 
   /** 关闭连接并释放文件句柄，供停机与测试清理使用 */

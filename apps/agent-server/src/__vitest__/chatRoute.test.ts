@@ -230,6 +230,12 @@ const CONFIG = {
     chatMaxDurationMs: 180000,
     sseDrainTimeoutMs: 30000,
     shutdownGraceMs: 15000,
+    model: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 20000 },
+    summary: { maxInFlight: 1, softLimit: 1, queueLimit: 0, queueTimeoutMs: 3000 },
+    retrieval: { maxInFlight: 4, softLimit: 2, queueLimit: 8, queueTimeoutMs: 3000 },
+    retrievalTimeoutMs: 8000,
+    circuitFailureThreshold: 5,
+    circuitCooldownMs: 30000,
   },
 } as unknown as AppConfig;
 

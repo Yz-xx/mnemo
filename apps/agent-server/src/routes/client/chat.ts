@@ -3,9 +3,9 @@ import type { Request, Response } from 'express';
 import { Router } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { currentUserId } from '../../auth/middleware.js';
+import { retryAfterSeconds } from '../../concurrency/gate.js';
 import { ERROR_MESSAGE } from '../../configuration/messages.js';
 import { ConversationBusyError } from '../../conversation/lock.js';
-import { retryAfterSeconds } from '../../middleware/concurrencyGuard.js';
 import { requestLogger } from '../../middleware/requestLog.js';
 import { streamChatReply } from '../../services/chatStream.js';
 

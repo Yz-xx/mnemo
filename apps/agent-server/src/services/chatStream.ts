@@ -7,6 +7,7 @@ import type { ChatStreamEvent } from '@repo/reusable';
 import type { Response } from 'express';
 import { preview } from '@repo/logger';
 import { toErrorMessage } from '@repo/shared';
+import { ModelOverloadedError } from '../llm/modelGovernance.js';
 import { governContext } from './contextGovernance.js';
 import { createEventStream } from './eventStream.js';
 
@@ -217,6 +218,10 @@ export async function streamChatReply(input: {
         durationMs: Date.now() - startedAt,
         answerLength: answer.length,
       });
+    } else if (error instanceof ModelOverloadedError) {
+      // 过载拒绝是可重试的临时态：按警告记录，不混进错误率口径（见 docs/adr/0010 决策 17）
+      log.warn('模型闸门过载，本轮被拒绝', { durationMs: Date.now() - startedAt });
+      await send({ type: 'error', message: toErrorMessage(error) });
     } else {
       log.error('本轮对话失败', { durationMs: Date.now() - startedAt, error });
       await send({ type: 'error', message: toErrorMessage(error) });

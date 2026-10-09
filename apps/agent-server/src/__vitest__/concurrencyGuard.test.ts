@@ -5,7 +5,8 @@ import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import { HTTP_STATUS } from '@repo/reusable';
-import { createConcurrencyGuard, retryAfterSeconds } from '../middleware/concurrencyGuard.js';
+import { retryAfterSeconds } from '../concurrency/gate.js';
+import { createConcurrencyGuard } from '../middleware/concurrencyGuard.js';
 
 /** 假响应：闸门只用到 close/finish 事件与几个写出方法，这里给最小实现 */
 class FakeResponse extends EventEmitter {
@@ -41,6 +42,12 @@ const BASE: ConcurrencyConfig = {
   chatMaxDurationMs: 1000,
   sseDrainTimeoutMs: 1000,
   shutdownGraceMs: 1000,
+  model: { maxInFlight: 2, softLimit: 1, queueLimit: 1, queueTimeoutMs: 50 },
+  summary: { maxInFlight: 1, softLimit: 1, queueLimit: 0, queueTimeoutMs: 50 },
+  retrieval: { maxInFlight: 4, softLimit: 2, queueLimit: 1, queueTimeoutMs: 50 },
+  retrievalTimeoutMs: 1000,
+  circuitFailureThreshold: 5,
+  circuitCooldownMs: 30000,
 };
 
 /** 建一份 chat 档水位被覆盖的闸门 */

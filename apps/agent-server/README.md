@@ -296,6 +296,21 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `API_LOG_BATCH_SIZE`                                           | `50`                        | 接口日志批量刷写：缓冲攒到该条数即落库                                 |
 | `API_LOG_FLUSH_INTERVAL_MS`                                    | `1000`                      | 接口日志批量刷写：未攒够一批时的定时刷写间隔（毫秒），停机时会落尽     |
 | `AUTH_SESSION_CACHE_TTL_MS`                                    | `5000`                      | 鉴权令牌校验结果的缓存有效期（毫秒），登出 / 重登 / 删号会主动失效     |
+| `CONCURRENCY_MODEL_MAX_IN_FLIGHT`                              | `8` / `2`                   | 模型闸门硬水位（在途上限），默认 DeepSeek `8`、Ollama `2`（决策 9）    |
+| `CONCURRENCY_MODEL_SOFT_LIMIT`                                 | `6` / `1`                   | 模型闸门软水位，超过即进入有界队列                                     |
+| `CONCURRENCY_MODEL_QUEUE_LIMIT`                                | `32` / `8`                  | 模型闸门排队长度上限                                                   |
+| `CONCURRENCY_MODEL_QUEUE_TIMEOUT_MS`                           | `20000`                     | 模型闸门排队等待上限（毫秒），超时按过载拒绝                           |
+| `CONCURRENCY_SUMMARY_MAX_IN_FLIGHT`                            | `1`                         | 滚动摘要闸门硬水位：独立低优先队列，不占对话额度（决策 10）            |
+| `CONCURRENCY_SUMMARY_SOFT_LIMIT`                               | `1`                         | 滚动摘要闸门软水位                                                     |
+| `CONCURRENCY_SUMMARY_QUEUE_LIMIT`                              | `0`                         | 滚动摘要闸门队列长度上限（`0` 表示不排队，满即拒绝后降级）             |
+| `CONCURRENCY_SUMMARY_QUEUE_TIMEOUT_MS`                         | `3000`                      | 滚动摘要闸门排队等待上限（毫秒）                                       |
+| `CONCURRENCY_RETRIEVAL_MAX_IN_FLIGHT`                          | `4`                         | 检索与向量化闸门硬水位：读路径过它，写入路径不占（决策 11）            |
+| `CONCURRENCY_RETRIEVAL_SOFT_LIMIT`                             | `2`                         | 检索闸门软水位                                                         |
+| `CONCURRENCY_RETRIEVAL_QUEUE_LIMIT`                            | `8`                         | 检索闸门排队长度上限                                                   |
+| `CONCURRENCY_RETRIEVAL_QUEUE_TIMEOUT_MS`                       | `3000`                      | 检索闸门排队等待上限（毫秒）                                           |
+| `RETRIEVAL_TIMEOUT_MS`                                         | `8000`                      | 单次检索（含向量化）超时（毫秒），超时降级为「本轮无知识库结果」       |
+| `CIRCUIT_FAILURE_THRESHOLD`                                    | `5`                         | 依赖熔断：连续失败达该值即快速失败（决策 16）                          |
+| `CIRCUIT_COOLDOWN_MS`                                          | `30000`                     | 依赖熔断：打开后冷却多久再放一个探测（毫秒）                           |
 
 并发闸门是**进程内状态**：进程重启即清零，多实例下各算各的，不能当作全局配额（见 [ADR 0010](../../docs/adr/0010-concurrency-governance.md)）。过载时返回 `503` 并附 `Retry-After`；健康检查与登录接口不挂闸门，过载时仍可观测、仍能进后台。默认阈值只保证不雪崩，吞吐基线须按容量模型压测后校准。
 
