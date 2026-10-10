@@ -63,6 +63,54 @@ describe('ToolTrace 工具调用轨迹', () => {
     expect(second?.detail).toBe('检索知识库：乙');
   });
 
+  it('后续分片只带序号、不带调用 ID 与工具名时，仍归并到同一次调用', () => {
+    const trace = new ToolTrace(LABELED_TOOLS);
+    // openai 兼容协议的实测分片形态：首片带 name 与 id，次片只剩 index 与参数残片
+    expect(
+      trace.push({ id: 'call_mock_1', name: 'search_knowledge_base', index: 0, args: '' }),
+    ).toBeNull();
+
+    const start = trace.push({ index: 0, args: '{"query":"浏览器的渲染原理"}' });
+
+    // 次片若被认成新调用，这里会得到一个 name 为 tool、摘要为「tool：浏览器的渲染原理」的事件
+    expect(start).toEqual({
+      name: 'search_knowledge_base',
+      detail: '检索知识库：浏览器的渲染原理',
+    });
+  });
+
+  it('同名工具多次调用时，只带序号的分片各自归并到对应调用', () => {
+    const trace = new ToolTrace(LABELED_TOOLS);
+    // 两次调用的分片交错下发，且尾片都只剩序号：序号是它们唯一还能区分的依据
+    expect(
+      trace.push({ id: 'c1', name: 'search_knowledge_base', index: 0, args: '{"que' }),
+    ).toBeNull();
+    expect(
+      trace.push({ id: 'c2', name: 'search_knowledge_base', index: 1, args: '{"que' }),
+    ).toBeNull();
+
+    expect(trace.push({ index: 1, args: 'ry":"预算"}' })).toEqual({
+      name: 'search_knowledge_base',
+      detail: '检索知识库：预算',
+    });
+    expect(trace.push({ index: 0, args: 'ry":"年报"}' })).toEqual({
+      name: 'search_knowledge_base',
+      detail: '检索知识库：年报',
+    });
+  });
+
+  it('分片不带序号时退回调用 ID，Ollama 式「一片即一次完整调用」不会被合并', () => {
+    const trace = new ToolTrace(LABELED_TOOLS);
+
+    // Ollama 每片都带完整参数、id 每片重取：两片就是两次调用，各自产出一条
+    expect(trace.push({ id: 'o1', name: 'search_knowledge_base', args: '{"query":"甲"}' })).toEqual(
+      { name: 'search_knowledge_base', detail: '检索知识库：甲' },
+    );
+    expect(trace.push({ id: 'o2', name: 'search_knowledge_base', args: '{"query":"乙"}' })).toEqual(
+      { name: 'search_knowledge_base', detail: '检索知识库：乙' },
+    );
+  });
+
   it('工具结束时兜底补发始终没能解析出参数的调用，且只补发一次', () => {
     const trace = new ToolTrace(LABELED_TOOLS);
     expect(trace.push({ id: 'c1', name: 'read_file', args: '{"fileId":' })).toBeNull();

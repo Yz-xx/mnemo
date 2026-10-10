@@ -48,7 +48,9 @@ async function streamCompletion(res: http.ServerResponse): Promise<void> {
       choices: [
         {
           index: 0,
-          delta: { content: i === 0 ? '压测回答：' : `片段${i} ` },
+          // 首帧 delta 必须带 role：OpenAI 流式规范如此，缺失时 langchain 会退化成
+          // ChatMessageChunk（而非 AIMessageChunk），被服务端的类型判断整段跳过，SSE 只剩 done
+          delta: i === 0 ? { role: 'assistant', content: '压测回答：' } : { content: `片段${i} ` },
           finish_reason: null,
         },
       ],

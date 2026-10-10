@@ -79,10 +79,13 @@ export class ToolTrace {
 
   /** 消费一个参数分片：能解析出完整参数且该调用尚未开始时给出开始事件，否则返回 null */
   push(chunk: ToolCallChunkLike): ToolStart | null {
-    // 调用 ID 是首选键：OpenAI 式分片会复用同一个 id 逐片补齐参数；
-    // 无 ID 时用「工具名 # 序号」兜底，让同名工具的多次调用各占一条。
-    // Ollama 每片都带完整参数、id 每片重取，一次调用恰好落在一个分片，同样各占一条。
-    const key = chunk.id ?? `${chunk.name ?? 'tool'}#${chunk.index ?? 0}`;
+    // 序号是首选键：同一消息内多个工具调用按它区分，且它沿该调用的每一片复用，
+    // 是唯一能跨分片聚合的键。调用 ID 只在首个分片出现（openai 兼容协议实测如此），
+    // 拿 ID 当键会把只带序号的后续分片认成新调用——重复下发 start，且首片的空参数
+    // 让用户看不出「在检索什么」。
+    // 缺序号时退回调用 ID：Ollama 每片都带完整参数、id 每片重取，一次调用恰好落在一个分片。
+    // 两者都缺才退回工具名，同名工具此时无从区分，只能合并成一条。
+    const key = chunk.index != null ? `#${chunk.index}` : (chunk.id ?? `#${chunk.name ?? 'tool'}`);
     const call = this.calls.get(key) ?? { name: chunk.name ?? 'tool', args: '', started: false };
     if (chunk.name) call.name = chunk.name;
     if (chunk.args) call.args += chunk.args;
