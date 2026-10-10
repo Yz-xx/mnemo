@@ -79,6 +79,8 @@ export function createRequestLog(logger: Logger, apiLogs: ApiLogStore): RequestH
         requestBody: requestBody ?? null,
         responseBody: responseBody ?? null,
         error: error ? summarizeError(error) : null,
+        // 调用时刻取请求到达时间（startedAt）；批量刷写会延后落库，不能取刷写时刻
+        createdAt: new Date(startedAt),
       });
     });
 

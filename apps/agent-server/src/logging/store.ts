@@ -19,10 +19,16 @@ export interface ApiLogEntry {
   responseBody: string | null;
   /** 错误摘要，仅 5xx 有值 */
   error: string | null;
+  /** API 调用时刻（请求到达时间）：刷写是批量延迟写，落库时不能改取当前时间 */
+  createdAt: Date;
 }
 
-/** 列表项：多一个自增序号，前端据此做行标识，排序也复用它 */
-export interface ApiLogRecord extends ApiLogEntry {
+/**
+ * 列表项：多一个自增序号，前端据此做行标识，排序也复用它。
+ * createdAt 在这里是落库读回的 ISO 字符串（列表展示口径），与条目里的 Date 版本
+ * 同名不同型，故先把条目上的同名属性 Omit 掉再自行声明。
+ */
+export interface ApiLogRecord extends Omit<ApiLogEntry, 'createdAt'> {
   id: number;
   createdAt: string;
 }
@@ -145,7 +151,8 @@ function toRowParams(entry: ApiLogEntry): (string | number | Date | null)[] {
     entry.requestBody,
     entry.responseBody,
     entry.error,
-    new Date(),
+    // 用条目自带的调用时刻：刷写是批量延迟写，此刻的 new Date() 是写入时间而非调用时间
+    entry.createdAt,
   ];
 }
 

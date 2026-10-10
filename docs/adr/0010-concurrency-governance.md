@@ -82,4 +82,4 @@ agent-server 目前对并发**没有任何显式治理**：请求无上限进入
 - **P3 事件循环与上传**：[upload.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/middleware/upload.ts) 解析并发闸门 + 大文件落临时文件；评估 [parser.ts](file:///d:/Files/common/porgram/my-monorepo/apps/agent-server/src/files/parser.ts) 是否移入 `worker_threads`。
 - **P4 观测与验收**：指标埋点（含事件循环延迟监控）、`/api/health/ready` 分级健康检查、`scripts/` 下压测脚本（mock 模型打 `/api/chat` 与非流式接口）、容量基线与 SLO（首 token P95、整轮 P95、503 比例、池等待 P95）。
 - **跨阶段**：503 契约增补**已落地**（`.trae/rules/backend-design.md` 第 3 章 → `packages/reusable/src/http.ts` → ADR 0001 追记）；其余待办：新增环境变量四件套同步、桌面端等待态与过载文案（`messages.ts` 集中管理）。
-- **多实例（另立项，不在本文范围）**：LanceDB 由本地目录改为共享存储或收敛到单实例、限流外移至网关、反代对 SSE 关闭响应缓冲（`proxy_buffering off`）、确认单端登录在共享 `user_sessions` 下的行为不变。
+- **多实例（另立项，不在本文范围）**：LanceDB 由本地目录改为共享存储或收敛到单实例、限流外移至网关、反代对 SSE 关闭响应缓冲（`proxy_buffering off`）、确认单端登录在共享 `user_sessions` 下的行为不变。**已立项：[ADR 0011](0011-multi-instance-horizontal-scaling.md)（向量库定为 Qdrant、限流与同会话互斥外移 Redis、指标走 Prometheus 拉取，与本节初拟方向不同，取舍以 0011 为准）。**
