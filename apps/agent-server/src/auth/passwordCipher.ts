@@ -32,6 +32,7 @@ export function createPasswordCipher(): PasswordCipher {
 
   return {
     publicKey: () => ({ kty, n, e }),
+    /** 解出用本进程公钥加密的 Base64 口令；解不开一律返回 null，不向调用方区分失败原因 */
     decrypt(ciphertext: string): string | null {
       try {
         const plain = privateDecrypt(

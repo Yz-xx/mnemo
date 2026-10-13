@@ -59,6 +59,7 @@ export async function handleChatMessage(
     return;
   }
 
+  /** 本轮流式回复的入口（thunk）：交给会话锁串行执行，新建会话无需串行直接调用 */
   const reply = (): Promise<void> =>
     streamChatReply({
       res,

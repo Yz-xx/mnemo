@@ -25,6 +25,7 @@ export function createConversationLock(timeoutMs: number): ConversationLock {
   /** 每个会话一条等待链：链尾指向「该会话最后一轮」的完成 Promise */
   const chains = new Map<string, Promise<void>>();
 
+  /** 把本轮任务串到该会话队尾：先等前一轮收尾，超时抛 ConversationBusyError；前一轮成败都放行链继续 */
   const run = async <T>(conversationId: string, task: () => Promise<T>): Promise<T> => {
     // 先把自己挂到队尾（供后来的请求等待），再去等前一轮收尾
     const previous = chains.get(conversationId) ?? Promise.resolve();

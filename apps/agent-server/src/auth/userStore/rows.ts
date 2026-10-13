@@ -31,6 +31,7 @@ export interface StatsRow extends RowDataPacket {
 /** 列表与单条查询共用的列集合：不带 password，避免密文被带到上层 */
 export const USER_COLUMNS = 'id, username, role, status, created_at';
 
+/** 行转用户记录：只映射不含 password 的列，创建时间统一转 ISO 字符串 */
 export function toRecord(row: UserRow): UserRecord {
   return {
     id: Number(row.id),

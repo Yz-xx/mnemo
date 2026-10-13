@@ -38,3 +38,4 @@ apps/agent-server/data/
 
 # 其他
 .HISTORY/
+docs/adr/

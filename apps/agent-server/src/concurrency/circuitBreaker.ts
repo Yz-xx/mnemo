@@ -40,6 +40,7 @@ export interface CircuitBreaker {
   state(): CircuitState;
 }
 
+/** 建一个熔断器：closed 直达，open 快速失败并在冷却到点后放一个探测，探测成败决定闭合或重新打开 */
 export function createCircuitBreaker(options: CircuitBreakerOptions): CircuitBreaker {
   const { failureThreshold, cooldownMs, label, logger } = options;
   let state: CircuitState = 'closed';
@@ -47,6 +48,7 @@ export function createCircuitBreaker(options: CircuitBreakerOptions): CircuitBre
   let openedAt = 0;
 
   return {
+    /** 是否放行本次调用：closed 一律放行；open 且冷却已到则转半开并放行唯一探测；其余快速失败 */
     allow() {
       if (state === 'closed') return true;
       // 冷却结束：只放行一个探测（转半开），其余并发请求在探测有结果前继续快速失败
@@ -57,11 +59,13 @@ export function createCircuitBreaker(options: CircuitBreakerOptions): CircuitBre
       }
       return false;
     },
+    /** 上报成功：无论此前处于哪个状态都立即闭合并清空失败计数 */
     onSuccess() {
       if (state !== 'closed') logger?.info('依赖已恢复，熔断闭合', { dependency: label });
       state = 'closed';
       failures = 0;
     },
+    /** 上报失败：半开探测失败即重新打开并重计冷却（不叠加阈值）；closed 下累计达阈值才打开 */
     onFailure() {
       // 探测失败：立刻重新打开并重新计冷却，不叠加阈值
       if (state === 'half-open') {
@@ -78,6 +82,7 @@ export function createCircuitBreaker(options: CircuitBreakerOptions): CircuitBre
         logger?.warn('依赖连续失败，熔断打开', { dependency: label, failureThreshold, cooldownMs });
       }
     },
+    /** 上报中断：仅半开探测需退回打开状态（中断不计入失败）；closed / open 下无需处理 */
     onAbort() {
       // 只处理探测在途这一种：退回打开状态，冷却过后重新放探测；
       // 冷却正是刚刚放行本次探测的原因，故不重置 openedAt，下个请求即可再探测

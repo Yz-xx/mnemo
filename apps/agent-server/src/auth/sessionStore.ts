@@ -86,6 +86,7 @@ export class SessionStore {
     return userId;
   }
 
+  /** 删除单个令牌的会话：一并清掉其缓存项，避免登出后旧令牌仍命中缓存继续放行 */
   async remove(token: string): Promise<void> {
     this.cache.delete(token);
     await this.pool.execute('DELETE FROM user_sessions WHERE token = ?', [token]);

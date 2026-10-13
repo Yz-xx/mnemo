@@ -207,6 +207,7 @@ function toList(value: string | undefined, fallback: string[]): string[] {
   return [...new Set(items)];
 }
 
+/** 正数配置取值：非法或 ≤0 一律退回默认值；非负计数用 toCount、比例用 toRatio，取值域各自收窄 */
 function toNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;

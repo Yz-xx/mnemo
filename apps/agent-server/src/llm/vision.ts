@@ -32,10 +32,12 @@ export const DISABLED_VISION: VisionReader = {
   describe: async () => VISION_DISABLED_MESSAGE,
 };
 
+/** 建一个图片理解器：未配置视觉模型时 enabled 为 false，describe 直接回未开启提示 */
 export function createVisionReader(config: AppConfig): VisionReader {
   const enabled = isVisionEnabled(config);
   return {
     enabled,
+    /** 描述一张图片：开启后把内联图片交给视觉模型并回其文本描述，未开启则回提示文案 */
     async describe({ bytes, mime }) {
       if (!enabled) return VISION_DISABLED_MESSAGE;
 

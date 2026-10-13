@@ -54,6 +54,7 @@ export interface MetricsOptions {
   histogramSize?: number;
 }
 
+/** 建一个指标注册表：直方图窗口样本数可配，默认 1024 */
 export function createMetrics(options: MetricsOptions = {}): MetricsRegistry {
   const size = options.histogramSize ?? DEFAULT_HISTOGRAM_SIZE;
   const counters = new Map<string, number>();
@@ -61,12 +62,15 @@ export function createMetrics(options: MetricsOptions = {}): MetricsRegistry {
   const histograms = new Map<string, number[]>();
 
   return {
+    /** 累加计数器的当前值，默认步长 1 */
     increment(name, delta = 1) {
       counters.set(name, (counters.get(name) ?? 0) + delta);
     },
+    /** 覆盖写入计量器的当前值（无累加语义） */
     gauge(name, value) {
       gauges.set(name, value);
     },
+    /** 记一次耗时样本到直方图；超出窗口即丢最老样本 */
     observe(name, valueMs) {
       const samples = histograms.get(name) ?? [];
       samples.push(valueMs);
@@ -74,6 +78,7 @@ export function createMetrics(options: MetricsOptions = {}): MetricsRegistry {
       if (samples.length > size) samples.splice(0, samples.length - size);
       histograms.set(name, samples);
     },
+    /** 生成只读快照：计数器与计量器直接取值，直方图现算分位数与极值 */
     snapshot() {
       const result: MetricsSnapshot = {
         counters: Object.fromEntries(counters),

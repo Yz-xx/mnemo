@@ -39,6 +39,7 @@ export function parseJsonArray(raw: string[] | string | null): string[] | undefi
   return undefined;
 }
 
+/** 行转存储消息：把可能读回字符串的 BIGINT seq 收敛为数字，JSON 列经 parseJsonArray 兼容驱动解析差异 */
 export function toStoredMessage(row: MessageRow): StoredMessage {
   return {
     seq: Number(row.seq),

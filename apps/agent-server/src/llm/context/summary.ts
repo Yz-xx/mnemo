@@ -30,6 +30,7 @@ export interface Summarizer {
 
 /** 拼摘要提示词：被挤出的对话按角色序列出，有旧摘要时要求合并进同一段 */
 export function buildSummaryPrompt(task: SummaryTask): string {
+  /** 把角色枚举转成提示词里的中文称谓，非 user/assistant 一律按「系统」处理 */
   const speaker = (role: StoredMessage['role']): string =>
     role === 'user' ? '用户' : role === 'assistant' ? '助手' : '系统';
   const transcript = task.messages

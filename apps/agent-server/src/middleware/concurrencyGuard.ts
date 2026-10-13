@@ -57,8 +57,9 @@ export function createConcurrencyGuard(
       const gate = gates[tier];
 
       return (_req: Request, res: Response, next: NextFunction) => {
-        // 排队期间由 close 事件撤销申请；放行后再换成归还额度
+        // gone：排队期间用它的 signal 撤销申请；放行后换成下方 release 归还额度
         const gone = new AbortController();
+        /** 连接在排队期间断开即撤销申请；放行后该监听会被摘掉，故不会误伤已放行的请求 */
         const onClose = (): void => {
           if (!res.writableEnded) gone.abort();
         };
@@ -80,6 +81,7 @@ export function createConcurrencyGuard(
 
           // 正常收尾与连接中断都要归还额度，两个事件都挂并做幂等
           let released = false;
+          /** 归还一个在途额度；由 released 保证多次触发只生效一次 */
           const release = (): void => {
             if (released) return;
             released = true;

@@ -14,6 +14,7 @@ export interface SessionUser {
   status: UserStatus;
 }
 
+/** 裁剪出登录响应所需的用户字段：只留 id/username/role/status，不把密码等带进响应体 */
 export function toSessionUser(user: UserRecord): SessionUser {
   return { id: user.id, username: user.username, role: user.role, status: user.status };
 }

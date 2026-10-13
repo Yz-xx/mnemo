@@ -71,6 +71,7 @@ async function clear(): Promise<void> {
   await persist('');
 }
 
+/** 登录态：用户信息与提交状态是模块级单例，与 api/session 的令牌同源，供各组件共享同一份 */
 export function useAuth() {
   return { token, user, submitting, errorMessage, restore, submit, logout, clear };
 }

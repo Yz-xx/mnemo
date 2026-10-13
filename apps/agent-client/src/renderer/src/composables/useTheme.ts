@@ -45,6 +45,7 @@ watch(theme, (value) => {
   });
 });
 
+/** 主题控制：返回全局共享的主题 ref 与切换方法，切换经主进程持久化以跟随窗口底色 */
 export function useTheme(): ThemeControls {
   function toggleTheme(): void {
     theme.value = theme.value === 'dark' ? 'light' : 'dark';

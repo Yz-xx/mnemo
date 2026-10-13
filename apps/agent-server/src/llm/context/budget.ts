@@ -33,6 +33,7 @@ export interface ToolBudget {
 
 /** 创建本轮工具结果额度；limit 为本轮检索、读取与附件预读合计可注入的 token 上限 */
 export function createToolBudget(limit: number): ToolBudget {
+  // 本轮已注入的估算 token 数：与 limit 相减得到剩余额度
   let used = 0;
 
   return {
@@ -42,12 +43,14 @@ export function createToolBudget(limit: number): ToolBudget {
     },
     admit(text) {
       const tokens = estimateTextTokens(text);
+      // 剩余额度：原样装得下就照直注入
       const left = limit - used;
       if (tokens <= left) {
         used += tokens;
         return { text, truncated: false };
       }
-      // 截断前先给说明文字留出额度，否则提示本身又构成一笔超预算
+      // 截断前先给说明文字留出额度，否则提示本身又构成一笔超预算；
+      // room 为扣掉说明后的可用额度，仍放不下（<= 0）即视为额度已耗尽
       const room = left - estimateTextTokens(TRUNCATED_NOTE);
       if (room <= 0) return null;
       const admitted = `${truncateToTokens(text, room)}${TRUNCATED_NOTE}`;

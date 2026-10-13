@@ -90,6 +90,7 @@ my-monorepo/
 │   └── components/           # 公共 Vue 组件库（Vite 库模式，样式经 @layer 封装）
 ├── docs/                     # 架构决策记录（ADR）
 ├── scripts/                  # dev / build / lint / test 编排脚本
+├── dist/                     # `pnpm build` 汇总的各应用产物（按应用目录名分文件夹，不入库）
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -164,13 +165,13 @@ my-monorepo/
 
 `pnpm-workspace.yaml` 收纳 `packages/*` 与 `apps/*`；根 `package.json` 的脚本不直接写长命令，而是交给 `scripts/` 下的编排脚本：
 
-| 命令          | 实际行为                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `pnpm dev`    | 交互选择要启动的应用，先构建 `packages/*`（后端直接消费其 `dist`），再并行跑所选应用的 dev |
-| `pnpm build`  | 先打包 `packages/*`，再构建 `apps/*`                                                       |
-| `pnpm lint`   | `eslint .` + `prettier --check .`（`pnpm lint:fix` 自动修复）                              |
-| `pnpm test`   | `pnpm -r run test`，递归执行各子包单测（无 test 脚本的包自动跳过）                         |
-| `pnpm format` | `prettier --write .`                                                                       |
+| 命令          | 实际行为                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `pnpm dev`    | 交互选择要启动的应用，先构建 `packages/*`（后端直接消费其 `dist`），再并行跑所选应用的 dev    |
+| `pnpm build`  | 先打包 `packages/*`，再构建 `apps/*`，最后把各应用的 `dist` 产物汇总到根 `dist/<应用目录名>/` |
+| `pnpm lint`   | `eslint .` + `prettier --check .`（`pnpm lint:fix` 自动修复）                                 |
+| `pnpm test`   | `pnpm -r run test`，递归执行各子包单测（无 test 脚本的包自动跳过）                            |
+| `pnpm format` | `prettier --write .`                                                                          |
 
 ### 依赖与镜像
 
@@ -205,7 +206,7 @@ pnpm --filter @repo/admin-web run dev         # vite dev，默认 5173，/api �
 ```bash
 pnpm lint           # ESLint + Prettier
 pnpm test           # 各子包单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索、后台管理网站的分页取数 / 登录态 / 令牌收口 / 路由守卫）
-pnpm build          # 全仓构建
+pnpm build          # 全仓构建，并把各应用的 dist 产物汇总到根 dist/<应用目录名>/
 ```
 
 ---

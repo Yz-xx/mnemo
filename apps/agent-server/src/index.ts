@@ -94,6 +94,7 @@ function installShutdownHandlers(
 ): void {
   let stopping = false;
 
+  /** 优雅停机：置位后停止接单、等在途请求收尾，再关池并停采样；重复触发直接返回 */
   const shutdown = async (reason: string): Promise<void> => {
     if (stopping) return;
     stopping = true;

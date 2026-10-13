@@ -72,8 +72,11 @@ export function createBoundedGate(
   options: BoundedGateOptions = {},
 ): BoundedGate {
   const { logger, logContext } = options;
+  /** 在途额度数：已放行、尚未 release 的申请数，同时是放行与拒绝判定的依据 */
   let inFlight = 0;
+  /** 累计拒绝数：含硬水位拒绝与排队超时，只增不减，仅用于快照观测 */
   let rejected = 0;
+  /** 排队等待的申请队列：先到先得，元素是尚未收尾的一次申请 */
   const waiting: Waiting[] = [];
 
   /** 逐个放行排队者，直到在途数回到硬水位 */
@@ -84,12 +87,15 @@ export function createBoundedGate(
     }
   };
 
+  /** 归还一个在途额度并补位排队者；已无额度时按空跑忽略，避免计数被额外递减 */
   const release = (): void => {
     if (inFlight <= 0) return;
     inFlight -= 1;
     drain();
   };
 
+  /** 申请一个在途额度：未到软水位且无人排队则直达；软硬水位之间或队列非空则入队；
+   *  已达硬水位或队列满即拒绝；signal 撤销时退出队列并返回 aborted */
   const acquire = (signal?: AbortSignal): Promise<GateOutcome> =>
     new Promise<GateOutcome>((resolve) => {
       // 调用前就已撤销（如连接在入队前断开）：直接按撤销收尾，
@@ -117,16 +123,20 @@ export function createBoundedGate(
         return;
       }
 
+      /** 该次申请是否已收尾（放行 / 撤销 / 超时三选一），用于避免重复结算与重复计数 */
       let settled = false;
+      /** 单次申请的收尾：幂等，取消超时定时器与 abort 监听、退出队列，再按最终结果兑现 Promise */
       let finish: (outcome: GateOutcome) => void = () => undefined;
       const entry: Waiting = {
         admit: () => finish('admitted'),
         drop: () => finish('aborted'),
       };
+      /** 从排队队列中摘掉本次申请：收尾时队列里可能已无自己（已被放行取走） */
       const removeFromQueue = (): void => {
         const index = waiting.indexOf(entry);
         if (index >= 0) waiting.splice(index, 1);
       };
+      /** 排队期间调用方撤销（如客户端离开）时的回调：以 aborted 收尾 */
       const onAbort = (): void => finish('aborted');
       // 定时器先建好、finish 后赋值：既能在此处引用 finish，又不必用可变量持有句柄
       const timer = setTimeout(() => {
@@ -156,6 +166,7 @@ export function createBoundedGate(
   return {
     acquire,
     release,
+    /** 观测快照：在途、排队与累计拒绝数，连同水位口径一并返回 */
     snapshot: () => ({
       inFlight,
       queued: waiting.length,

@@ -97,6 +97,7 @@ export function selectRecentWindow(messages: StoredMessage[], keepBudget: number
  */
 export function planContext(input: ContextPlanInput): ContextPlan {
   const { history, summary, summaryUptoSeq, config } = input;
+  // 未摘要段：摘要截断点之后的消息；已摘要部分由 summary 代表，不重复注入
   const pending =
     summaryUptoSeq === null ? history : history.filter((message) => message.seq > summaryUptoSeq);
   const summaryTokens = summary ? estimateTextTokens(summary) : 0;

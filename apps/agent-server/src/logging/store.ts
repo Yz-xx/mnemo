@@ -107,6 +107,7 @@ export function buildFilters(
   return { where: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
+/** 行转接口日志记录：蛇形列名映射为驼峰字段，数字列与时间列在此收敛类型 */
 function toRecord(row: ApiLogRow): ApiLogRecord {
   return {
     id: Number(row.id),

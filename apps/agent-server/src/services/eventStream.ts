@@ -19,8 +19,10 @@ export function createEventStream(res: Response, drainTimeoutMs: number): EventS
   const writeChunk = (chunk: string): Promise<boolean> => {
     if (res.write(chunk)) return Promise.resolve(true);
     return new Promise<boolean>((resolve) => {
+      /** drain 与超时谁先到即定胜负，避免二者重复结算本次写入结果 */
       let settled = false;
       let settle: (ok: boolean) => void = () => undefined;
+      /** drain 事件回调：将本次写入判定为成功 */
       const onDrain = (): void => settle(true);
       // 定时器先建好、settle 后赋值：既能在此处引用 settle，又不必用可变量持有句柄
       const timer = setTimeout(() => settle(false), drainTimeoutMs);

@@ -49,6 +49,7 @@ interface CountRow extends RowDataPacket {
 /** 列集合显式列出：不用 SELECT *，以免补列后行对象的键悄悄变化 */
 const LOG_COLUMNS = 'id, actor_id, method, path, status, detail, created_at';
 
+/** 行转审计记录：蛇形列名映射为驼峰字段，创建时间统一转 ISO 字符串 */
 function toRecord(row: AuditLogRow): AuditLogRecord {
   return {
     id: Number(row.id),
