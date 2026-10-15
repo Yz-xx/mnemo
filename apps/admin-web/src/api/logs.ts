@@ -14,12 +14,13 @@ export interface ApiLogQuery {
 
 /** 接口日志列表：日志由服务端自动采集，此处只读 */
 export function listApiLogs(query: ApiLogQuery): Promise<PageResult<ApiLogItem>> {
-  const params = new URLSearchParams({
-    keyword: query.keyword,
-    method: query.method,
-    status: query.status,
-    page: String(query.page),
-    pageSize: String(query.pageSize),
+  return adminApi.get<PageResult<ApiLogItem>>('/api/admin/logs', {
+    params: {
+      keyword: query.keyword,
+      method: query.method,
+      status: query.status,
+      page: query.page,
+      pageSize: query.pageSize,
+    },
   });
-  return adminApi.request<PageResult<ApiLogItem>>(`/api/admin/logs?${params.toString()}`);
 }

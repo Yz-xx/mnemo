@@ -10,11 +10,20 @@ import {
 import { installMemoryStorage } from './storageStub';
 
 /**
- * 用真实 Response 顶替 fetch：错误归一化依赖 res.ok 与 res.json()，手写假对象容易与运行时行为脱节。
+ * 用真实 Response 顶替 fetch：错误归一化依赖 res.ok 与响应体解析，手写假对象容易与运行时行为脱节。
  * 返回替身本身，供需要检查请求参数的用例断言。
  */
 function stubFetch(status: number, body: unknown) {
-  const mock = vi.fn(() => Promise.resolve(new Response(JSON.stringify(body), { status })));
+  const mock = vi.fn(() =>
+    Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status,
+        // 真实服务端（Express 的 res.json）一律带 application/json；
+        // 通用客户端据此判定错误体能否解析出 message，替身漏设会被 fetch 当成 text/plain
+        headers: { 'content-type': 'application/json' },
+      }),
+    ),
+  );
   vi.stubGlobal('fetch', mock);
   return mock;
 }
@@ -43,7 +52,7 @@ describe('后台 HTTP 客户端的令牌与失效收口', () => {
     setToken('token-admin');
     const fetchMock = stubFetch(200, { items: [] });
 
-    await adminApi.request('/api/admin/users');
+    await adminApi.get('/api/admin/users');
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/admin/users',
@@ -59,7 +68,7 @@ describe('后台 HTTP 客户端的令牌与失效收口', () => {
     setSessionExpiredHandler(onExpired);
     stubFetch(401, { message: '登录已失效，请重新登录' });
 
-    await expect(adminApi.request('/api/admin/users')).rejects.toThrow('登录已失效，请重新登录');
+    await expect(adminApi.get('/api/admin/users')).rejects.toThrow('登录已失效，请重新登录');
 
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
     expect(onExpired).toHaveBeenCalledTimes(1);
@@ -71,7 +80,7 @@ describe('后台 HTTP 客户端的令牌与失效收口', () => {
     setSessionExpiredHandler(onExpired);
     stubFetch(500, { message: '服务内部错误' });
 
-    await expect(adminApi.request('/api/admin/users')).rejects.toThrow('服务内部错误');
+    await expect(adminApi.get('/api/admin/users')).rejects.toThrow('服务内部错误');
 
     // 500 不是登录问题，把用户踢回登录页只会让人白丢一次操作
     expect(localStorage.getItem(TOKEN_KEY)).toBe('token-admin');

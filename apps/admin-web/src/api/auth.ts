@@ -8,18 +8,16 @@ import { adminApi } from './client';
  */
 export async function login(username: string, password: string): Promise<AuthSession> {
   const encryptedPassword = await encryptPassword(adminApi, password);
-  return adminApi.request<AuthSession>('/api/admin/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password: encryptedPassword }),
-  });
+  const body = { username, password: encryptedPassword };
+  return adminApi.post<AuthSession>('/api/admin/auth/login', body);
 }
 
 /** 当前用户信息：路由守卫与初始化时拉取以恢复登录态 */
 export function fetchCurrentUser(): Promise<AuthUser> {
-  return adminApi.request<AuthUser>('/api/auth/me');
+  return adminApi.get<AuthUser>('/api/auth/me');
 }
 
 /** 登出：服务端清 session；客户端清 localStorage 由 store 处理 */
 export function logout(): Promise<void> {
-  return adminApi.request<void>('/api/auth/logout', { method: 'POST' });
+  return adminApi.post<void>('/api/auth/logout');
 }

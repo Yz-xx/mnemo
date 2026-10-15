@@ -7,11 +7,11 @@ import { adminApi } from './client';
 export function listAdminTools(): Promise<AdminToolItem[]> {
   // 服务端与其他列表接口统一返回 { items } 信封，这里就地解包，页面拿到的就是清单本身
   return adminApi
-    .request<{ items: AdminToolItem[] }>('/api/admin/system/tools')
+    .get<{ items: AdminToolItem[] }>('/api/admin/system/tools')
     .then((result) => result.items);
 }
 
 /** 系统配置：只读，密钥类配置只回是否已配置 */
 export function fetchSystemConfig(): Promise<AdminSystemConfig> {
-  return adminApi.request<AdminSystemConfig>('/api/admin/system/config');
+  return adminApi.get<AdminSystemConfig>('/api/admin/system/config');
 }

@@ -5,8 +5,10 @@ import type {
   ConversationSummary,
   KnowledgeDocument,
 } from '../types';
-import type { ApiClient, BaseUrlLike, ChatStreamEvent } from '@repo/reusable';
-import { ApiError, createApiClient, encryptPassword, isUnauthorized } from '@repo/reusable';
+import type { ChatStreamEvent } from '@repo/reusable';
+import type { BaseUrlLike, HttpClient } from '@repo/shared';
+import { encryptPassword, isUnauthorized, parseSSEStream } from '@repo/reusable';
+import { createHttpClient } from '@repo/shared';
 
 // 渲染进程只有本模块依赖 @repo/*（见 desktop-design 第 2 章）：其余模块要用共享能力
 // 也经此处转发，避免第二个模块直接引包，让产物里多带无关代码
@@ -16,7 +18,7 @@ export { toErrorMessage } from '@repo/shared';
 
 // 共享能力统一从本模块转发，调用方不直接引 @repo/*
 export type { ChatStreamEvent };
-export { ApiError, isUnauthorized };
+export { isUnauthorized };
 
 export interface SendChatPayload {
   conversationId?: string;
@@ -44,7 +46,7 @@ export interface UploadedFileInfo {
 }
 
 /**
- * 后端智能体服务的 HTTP 客户端：薄外壳，构造时基于 createApiClient 创建实例，
+ * 后端智能体服务的 HTTP 客户端：薄外壳，构造时基于 createHttpClient 创建实例，
  * 业务方法转发到通用客户端。
  *
  * 地址与令牌接受裸值或取值器：取值器形态下每次请求才求值，
@@ -53,38 +55,34 @@ export interface UploadedFileInfo {
  * 仅「保存前先探测草稿地址」这类临时目标才 new 出新实例（裸值即可）。
  */
 export class AgentApi {
-  private readonly api: ApiClient;
+  private readonly api: HttpClient;
 
   constructor(baseUrl: BaseUrlLike, token: string | (() => string) = '') {
-    this.api = createApiClient({
+    this.api = createHttpClient({
       baseURL: baseUrl,
       getToken: () => (typeof token === 'function' ? token() : token),
     });
   }
 
   health(): Promise<HealthInfo> {
-    return this.api.request<HealthInfo>('/api/health');
+    return this.api.get<HealthInfo>('/api/health');
   }
 
   async register(username: string, password: string): Promise<AuthSession> {
     // 口令先经服务端公钥加密再提交（见 ADR 0004），明文不上网
     const encryptedPassword = await encryptPassword(this.api, password);
-    return this.api.request<AuthSession>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: encryptedPassword }),
-    });
+    const body = { username, password: encryptedPassword };
+    return this.api.post<AuthSession>('/api/auth/register', body);
   }
 
   async login(username: string, password: string): Promise<AuthSession> {
     const encryptedPassword = await encryptPassword(this.api, password);
-    return this.api.request<AuthSession>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: encryptedPassword }),
-    });
+    const body = { username, password: encryptedPassword };
+    return this.api.post<AuthSession>('/api/auth/login', body);
   }
 
   logout(): Promise<void> {
-    return this.api.request<void>('/api/auth/logout', { method: 'POST' });
+    return this.api.post<void>('/api/auth/logout');
   }
 
   /** 上传附件：由服务端按文件头复核类型并存档，返回的 id 用于随消息引用 */
@@ -98,43 +96,42 @@ export class AgentApi {
     ) as ArrayBuffer;
     // 第三参显式给文件名：FormData 取不到 Blob 的名字，而服务端正是拿它做展示名
     form.append('file', new Blob([buffer]), file.name);
-    return this.api.request<UploadedFileInfo>('/api/files', { method: 'POST', body: form });
+    return this.api.post<UploadedFileInfo>('/api/files', form);
   }
 
   /** 取回文件字节：附件的原始内容与智能体生成的导出文件都经此下载 */
   downloadFile(id: string): Promise<ArrayBuffer> {
-    return this.api.downloadBlob(`/api/files/${id}/download`).then((blob) => blob.arrayBuffer());
+    return this.api
+      .get<Blob>(`/api/files/${id}/download`, { responseType: 'blob' })
+      .then((blob) => blob.arrayBuffer());
   }
 
   currentUser(): Promise<AuthUser> {
-    return this.api.request<AuthUser>('/api/auth/me');
+    return this.api.get<AuthUser>('/api/auth/me');
   }
 
   listConversations(): Promise<ConversationSummary[]> {
-    return this.api.request<ConversationSummary[]>('/api/conversations');
+    return this.api.get<ConversationSummary[]>('/api/conversations');
   }
 
   getConversation(id: string): Promise<Conversation> {
-    return this.api.request<Conversation>(`/api/conversations/${id}`);
+    return this.api.get<Conversation>(`/api/conversations/${id}`);
   }
 
   deleteConversation(id: string): Promise<void> {
-    return this.api.request<void>(`/api/conversations/${id}`, { method: 'DELETE' });
+    return this.api.delete<void>(`/api/conversations/${id}`);
   }
 
   listDocuments(): Promise<KnowledgeDocument[]> {
-    return this.api.request<KnowledgeDocument[]>('/api/knowledge/documents');
+    return this.api.get<KnowledgeDocument[]>('/api/knowledge/documents');
   }
 
   addDocument(input: { title: string; content: string }): Promise<KnowledgeDocument> {
-    return this.api.request<KnowledgeDocument>('/api/knowledge/documents', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    return this.api.post<KnowledgeDocument>('/api/knowledge/documents', input);
   }
 
   deleteDocument(id: string): Promise<void> {
-    return this.api.request<void>(`/api/knowledge/documents/${id}`, { method: 'DELETE' });
+    return this.api.delete<void>(`/api/knowledge/documents/${id}`);
   }
 
   /** 逐块读取 SSE 响应，解析为结构化事件流 */
@@ -142,10 +139,14 @@ export class AgentApi {
     payload: SendChatPayload,
     signal?: AbortSignal,
   ): AsyncGenerator<ChatStreamEvent> {
-    yield* this.api.streamSSE('/api/chat', {
+    // 通用客户端只把未消费的流交出来：SSE 的分帧属对话协议，由 parseSSEStream 承担
+    const stream = await this.api.request<ReadableStream<Uint8Array>>({
+      url: '/api/chat',
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: payload,
+      responseType: 'stream',
       signal,
     });
+    yield* parseSSEStream(stream);
   }
 }

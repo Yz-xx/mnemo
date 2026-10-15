@@ -48,7 +48,7 @@ renderer/src/
 ```
 
 - `api/bridge.ts` 导出 `initialSettings` 与 `readSettings` / `saveSettings`，无桥接时回退默认值，各模块不必自行判空。
-- `api/client.ts` 是渲染进程**唯一依赖 `@repo/*` 的模块**：负责请求头拼装、中断/超时与错误归一化（`ApiError` 带 `status`、`isUnauthorized` 判 401、状态码取自 `HTTP_STATUS`，401 触发清除登录态、204 直接返回 `undefined` 不解析响应体），其余模块不直接调用 `fetch`，共享能力（`toErrorMessage`、`SESSION_EXPIRED_MESSAGE`）也从这里转发。
+- `api/client.ts` 是渲染进程**唯一依赖 `@repo/*` 的模块**：HTTP 发送、请求头拼装、错误归一化、超时与流式发送收在 `@repo/shared` 的通用客户端 `createHttpClient`（见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器；非 2xx 抛携带状态码的 `HttpError`，登录失效判定取 `@repo/reusable` 的 `isUnauthorized`，SSE 分帧取 `parseSSEStream`；其余模块不直接调用 `fetch`，共享能力（`toErrorMessage`、`SESSION_EXPIRED_MESSAGE`）也从这里转发。
 - `api/session.ts` 是会话唯一来源：地址与令牌以取值器注入 `AgentApi`，请求发起时才求值，切换地址或登录/登出都无需重建实例；仅「保存前先探测草稿地址」（登录页探活、设置抽屉预览）保留临时实例。
 - `composables/` 承载跨组件共享的状态与业务，组件私有的状态留组件目录内；单文件超 250 行按关注点外提（纯函数层、独立子状态各自成文件），不做互相转发的碎类，跨层依赖用回调注入。
 - `components/` 只做展示与交互，经 props / emit 与 composable 交互；一律以**目录**为单位组织，目录名即组件名（`Xxx/{index.ts, Xxx.vue, Xxx.less}`），`index.ts` 统一 `export { default } from './Xxx.vue'`，消费方按 `import Xxx from '../components/Xxx'` 引入，不写 `.vue` 后缀。

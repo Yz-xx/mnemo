@@ -52,7 +52,7 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 - **连接状态**：`canSend` 要求后端在线且当前不在流式中，因此 `connection === 'offline'` 时输入区自动禁用。
 - **登录态联动**：请求经 `api/session.ts` 暴露的**唯一 `AgentApi` 实例**发出，地址与令牌在请求发起时才取值，因此登录/登出、切换后端地址都无需重建客户端；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
 
-`api/client.ts` 负责 HTTP 与 SSE 解析：状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`（如 401 触发重新登录、204 表示无响应体），响应状态码经 `toHttpStatusCode` 收敛后存入 `ApiError.status`，网关 / 代理注入的契约外码统一按 500 处理；`ChatStreamEvent`（SSE 事件类型）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@repo/reusable`，`toErrorMessage` 取自 `@repo/shared`，它是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；`buildHeaders()` 在已登录时统一附加 `Authorization: Bearer <token>`；非 2xx 时抛出携带状态码的 `ApiError`（`isUnauthorized` 据此识别登录失效），错误文案优先取服务端 `message` 字段；SSE 用 `ReadableStream` 逐块读取，按空行切分事件，**最后一段可能被截断，保留到下一轮再拼接**。
+`api/client.ts` 负责 HTTP 与 SSE 解析：请求头拼装、错误归一化、超时与流式发送收在 `@repo/shared` 的通用客户端 `createHttpClient`（取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器、并把业务方法转发给它；非 2xx 抛出携带状态码的 `HttpError`，登录失效用 `@repo/reusable` 的 `isUnauthorized` 判定（契约外的码按 500 处理）；`ChatStreamEvent`（SSE 事件类型）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@repo/reusable`，`toErrorMessage` 取自 `@repo/shared`，它是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；附件下载走 `responseType: 'blob'`，SSE 走 `responseType: 'stream'` 拿到未消费的字节流后由 `@repo/reusable` 的 `parseSSEStream` 按空行切分事件（**最后一段可能被截断，保留到下一轮再拼接**），`Authorization: Bearer <token>` 由客户端按 `getToken` 自动附加。
 
 ## 五、登录态与启动门禁
 

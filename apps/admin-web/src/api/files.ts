@@ -12,17 +12,14 @@ export interface FileQuery {
 
 /** 文件列表：管理视角，含全部用户的上传文件与归属账号名 */
 export function listAdminFiles(query: FileQuery): Promise<PageResult<AdminFileItem>> {
-  const params = new URLSearchParams({
-    keyword: query.keyword,
-    page: String(query.page),
-    pageSize: String(query.pageSize),
+  return adminApi.get<PageResult<AdminFileItem>>('/api/admin/files', {
+    params: { keyword: query.keyword, page: query.page, pageSize: query.pageSize },
   });
-  return adminApi.request<PageResult<AdminFileItem>>(`/api/admin/files?${params.toString()}`);
 }
 
 /** 删除文件：元数据与落盘字节一并清理 */
 export function deleteAdminFile(id: string): Promise<void> {
-  return adminApi.request<void>(`/api/admin/files/${id}`, { method: 'DELETE' });
+  return adminApi.delete<void>(`/api/admin/files/${id}`);
 }
 
 // 批量操作统一走一个 POST 接口而不是前端循环调单条，
@@ -30,8 +27,5 @@ export function deleteAdminFile(id: string): Promise<void> {
 
 /** 批量删除文件：元数据与落盘字节一并清理，不存在的条目视为已完成 */
 export function batchDeleteAdminFiles(ids: string[]): Promise<void> {
-  return adminApi.request<void>('/api/admin/files/batch-delete', {
-    method: 'POST',
-    body: JSON.stringify({ ids }),
-  });
+  return adminApi.post<void>('/api/admin/files/batch-delete', { ids });
 }

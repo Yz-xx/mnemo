@@ -1,5 +1,6 @@
-import type { ApiClient } from '@repo/reusable';
-import { createApiClient } from '@repo/reusable';
+import type { HttpClient } from '@repo/shared';
+import { isUnauthorized } from '@repo/reusable';
+import { createHttpClient } from '@repo/shared';
 
 // localStorage 键名：admin 网站登录令牌的持久化位置
 export const TOKEN_KEY = 'admin_token';
@@ -22,13 +23,23 @@ export function setSessionExpiredHandler(handler: () => void): void {
  * baseURL 留空走同源：开发期由 vite proxy 把 /api 转发到 agent-server，
  * 生产期由反向代理统一接入，前端无需感知后端真实地址。
  */
-export const adminApi: ApiClient = createApiClient({
+export const adminApi: HttpClient = createHttpClient({
   baseURL: '',
   getToken: () => localStorage.getItem(TOKEN_KEY),
-  onUnauthorized: () => {
+});
+
+/**
+ * 401 处理从工厂回调改挂在错误拦截器上：通用客户端不认识「登录态」这个概念，
+ * 只提供拦截点——取 token 与失效后怎么办都是各端自己的事。
+ * 失效判定复用 isUnauthorized，保持「网关注入的 403 归到 500、不算登录失效」的契约口径。
+ * 返回原错误即「未恢复」，链路照常抛出，调用方在 catch 里拿到的仍是同一个错误。
+ */
+adminApi.interceptors.error.use((error) => {
+  if (isUnauthorized(error)) {
     clearToken();
     onSessionExpired?.();
-  },
+  }
+  return error;
 });
 
 /** 登录成功后写入 token */

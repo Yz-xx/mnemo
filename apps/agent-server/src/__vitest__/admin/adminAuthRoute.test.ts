@@ -1,11 +1,12 @@
 import type { AppDependencies } from '../../configuration/dependencies.js';
-import type { ApiClient } from '@repo/reusable';
+import type { HttpClient } from '@repo/shared';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createServer } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createApiClient, encryptPassword, HTTP_STATUS } from '@repo/reusable';
+import { encryptPassword, HTTP_STATUS } from '@repo/reusable';
+import { createHttpClient } from '@repo/shared';
 import { createPasswordCipher } from '../../auth/passwordCipher.js';
 import { createAdminAuthRouter } from '../../routes/admin/auth.js';
 
@@ -60,7 +61,7 @@ app.use(
 
 let server: Server;
 let baseUrl = '';
-let api: ApiClient;
+let api: HttpClient;
 
 /** 登录请求：password 传什么就发什么，用来对比密文与明文的待遇 */
 function login(username: string, password: string): Promise<globalThis.Response> {
@@ -76,7 +77,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;
-  api = createApiClient({ baseURL: baseUrl });
+  api = createHttpClient({ baseURL: baseUrl });
 });
 
 afterAll(async () => {

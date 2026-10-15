@@ -14,24 +14,19 @@ export interface ConversationQuery {
 export function listAdminConversations(
   query: ConversationQuery,
 ): Promise<PageResult<AdminConversationSummary>> {
-  const params = new URLSearchParams({
-    keyword: query.keyword,
-    page: String(query.page),
-    pageSize: String(query.pageSize),
+  return adminApi.get<PageResult<AdminConversationSummary>>('/api/admin/conversations', {
+    params: { keyword: query.keyword, page: query.page, pageSize: query.pageSize },
   });
-  return adminApi.request<PageResult<AdminConversationSummary>>(
-    `/api/admin/conversations?${params.toString()}`,
-  );
 }
 
 /** 会话详情：含全部消息，供后台核查对话内容 */
 export function fetchAdminConversation(id: string): Promise<AdminConversationDetail> {
-  return adminApi.request<AdminConversationDetail>(`/api/admin/conversations/${id}`);
+  return adminApi.get<AdminConversationDetail>(`/api/admin/conversations/${id}`);
 }
 
 /** 删除会话：其全部消息一并清除 */
 export function deleteAdminConversation(id: string): Promise<void> {
-  return adminApi.request<void>(`/api/admin/conversations/${id}`, { method: 'DELETE' });
+  return adminApi.delete<void>(`/api/admin/conversations/${id}`);
 }
 
 // 批量操作统一走一个 POST 接口而不是前端循环调单条，
@@ -39,8 +34,5 @@ export function deleteAdminConversation(id: string): Promise<void> {
 
 /** 批量删除会话：消息由外键级联清理，不存在的条目视为已完成 */
 export function batchDeleteAdminConversations(ids: string[]): Promise<void> {
-  return adminApi.request<void>('/api/admin/conversations/batch-delete', {
-    method: 'POST',
-    body: JSON.stringify({ ids }),
-  });
+  return adminApi.post<void>('/api/admin/conversations/batch-delete', { ids });
 }

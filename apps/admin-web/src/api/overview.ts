@@ -5,10 +5,10 @@ import { adminApi } from './client';
 
 /** 总览统计 */
 export function fetchStats(): Promise<AdminStats> {
-  return adminApi.request<AdminStats>('/api/admin/stats');
+  return adminApi.get<AdminStats>('/api/admin/stats');
 }
 
 /** 运行状态 */
 export function fetchHealth(): Promise<AdminHealth> {
-  return adminApi.request<AdminHealth>('/api/admin/health');
+  return adminApi.get<AdminHealth>('/api/admin/health');
 }

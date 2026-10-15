@@ -7,3 +7,4 @@ export * from './strings.js';
 export * from './common.js';
 export * from './bytes.js';
 export * from './time.js';
+export * from './http/index.js';

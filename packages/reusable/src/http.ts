@@ -30,12 +30,12 @@ export const HTTP_STATUS = {
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
-/** 状态码取值：用于需要把取值范围写进签名的位置（如 ApiError.status） */
+/** 状态码取值：用于需要把取值范围写进签名的位置（如按状态码分档的映射表） */
 export type HttpStatusCode = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS];
 
 /**
  * 边界收窄：把响应上拿到的任意状态码收敛到契约取值。
- * 调用方（如桌面端 ApiError）要按状态码分支，就必须先落在契约集合上：
+ * 调用方（如 `isUnauthorized`）要按状态码分支，就必须先落在契约集合上：
  * 网关、代理或异常环境可能注入契约外的码（403/502/0），
  * 直接断言会给出不属于契约的类型，静默放行又会让分支判断面对未知输入。
  * 统一按 §3「5xx 对外只用 500」的口径回落，契约外的码不泄漏给调用方。

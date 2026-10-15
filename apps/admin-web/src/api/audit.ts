@@ -12,10 +12,7 @@ export interface AuditQuery {
 
 /** 操作审计列表：只记管理端写操作，由服务端自动登记，此处只读 */
 export function listAuditLogs(query: AuditQuery): Promise<PageResult<AuditLogItem>> {
-  const params = new URLSearchParams({
-    keyword: query.keyword,
-    page: String(query.page),
-    pageSize: String(query.pageSize),
+  return adminApi.get<PageResult<AuditLogItem>>('/api/admin/audit', {
+    params: { keyword: query.keyword, page: query.page, pageSize: query.pageSize },
   });
-  return adminApi.request<PageResult<AuditLogItem>>(`/api/admin/audit?${params.toString()}`);
 }

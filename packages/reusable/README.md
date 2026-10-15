@@ -16,10 +16,12 @@
 |            | `HttpStatusCode`                      | 由 `HTTP_STATUS` 派生的取值联合类型                                                    |
 |            | `toHttpStatusCode(v)`                 | 边界收窄：契约外的状态码回落为 500，供调用方安全地按码分支                             |
 | `chat`     | `AgentStreamEvent`、`ChatStreamEvent` | SSE 对话流的事件类型（纯类型，不产生运行时代码）                                       |
+| `sse`      | `parseSSEStream(stream)`              | 把 SSE 响应体流按 `data:` 行分帧，解析为本包的事件类型                                 |
+| `errors`   | `isUnauthorized(error)`               | 登录失效判定：错误经契约收敛后为 401 才算失效                                          |
 | `messages` | `SESSION_EXPIRED_MESSAGE`             | 登录失效固定文案：服务端 401 与桌面端登录页共用同一句话                                |
 | `password` | `encryptPassword(api, plain)`         | 取服务端公钥（RSA-OAEP）加密口令并返回 Base64 密文                                     |
 
-当前使用方：后端各路由与中间件统一取 `HTTP_STATUS`，`auth/middleware.ts` 与 `messages.ts` 取 `SESSION_EXPIRED_MESSAGE`，`ChatStreamEvent` 是后端 SSE 推送与桌面端事件消费共用的声明；桌面端的渲染进程由 `api/client.ts` 统一引入 `HTTP_STATUS` / `toHttpStatusCode` / `HttpStatusCode` / `ChatStreamEvent` / `SESSION_EXPIRED_MESSAGE` / `encryptPassword` 并转发给其余模块，它是渲染进程**唯一同时依赖本包与 `@repo/shared` 的模块**；`encryptPassword` 另被管理网站的两处（登录、新建用户）取用。契约说明见 [ADR 0001](../../docs/adr/0001-http-status-contract.md)，口令传输与存储见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)。`createApiClient` 工厂另被管理网站与桌面端共同取用，其 `baseURL` 除裸值外也接受取值器（与该工厂一贯的 `getToken` 一样在请求发起时才求值），实例因此可长期持有，地址或令牌变化都无需重建。
+当前使用方：后端各路由与中间件统一取 `HTTP_STATUS`，`auth/middleware.ts` 与 `messages.ts` 取 `SESSION_EXPIRED_MESSAGE`，`ChatStreamEvent` 是后端 SSE 推送与桌面端事件消费共用的声明。**HTTP 请求本身不再由本包承担**：请求头拼装、错误归一化、超时与流式发送都是与业务无关的通用能力，已迁至 [@repo/shared](../shared/README.md) 的 `createHttpClient`（取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），管理网站与桌面端各建一个实例、注入 `baseURL` 与 `getToken`，401 收口从工厂回调改挂在错误拦截器上，靠本包的 `isUnauthorized` 保持「契约外的码按 500、不算失效」的口径；SSE 的分帧由本包的 `parseSSEStream` 消费通用客户端交出的字节流。桌面端的渲染进程由 `api/client.ts` 统一引入本包与 `@repo/shared` 的能力并转发给其余模块，它是渲染进程**唯一同时依赖这两个包的模块**；`encryptPassword` 被桌面端（登录、注册）与管理网站的两处（登录、新建用户）取用。契约说明见 [ADR 0001](../../docs/adr/0001-http-status-contract.md)，口令传输与存储见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)。
 
 ## 二、按需引入
 
@@ -38,4 +40,4 @@ import { HTTP_STATUS, toHttpStatusCode } from '@repo/reusable';
 
 - `pnpm --filter @repo/reusable run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式，**单入口**）产出 `dist/index.{d.ts,mjs,cjs}` 等文件，声明文件由 `vite-plugin-dts` 依 `tsconfig.json` 的 include / exclude 生成（测试目录不参与产物）；
 - 产物保留空格与注释、开启 sourcemap，便于使用方调试；跨包依赖（`@repo/shared`）由构建配置按 `package.json` 的 `dependencies` 统一 external 并保留裸包名——使用方本就直连 shared，内联会把同一份通用工具在产物里存两遍。
-- `pnpm --filter @repo/reusable run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖 HTTP 状态码契约 4 项）。
+- `pnpm --filter @repo/reusable run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖 HTTP 状态码契约 5 项、`isUnauthorized` 的契约收敛 4 项、`parseSSEStream` 的分帧与截断 5 项）。

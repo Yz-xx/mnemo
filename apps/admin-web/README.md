@@ -5,7 +5,7 @@
 - 框架：Vue 3 `<script setup>` + TypeScript + Vite 6 + Less
 - 路由：vue-router 4 + `unplugin-vue-router` 文件式自动路由（`src/pages` 即路由表）
 - 状态：pinia（setup store），目前只有 `auth` 一个 store
-- 请求：复用 `@repo/reusable` 的 `createApiClient` 工厂，本包只注入 `baseURL` 与 token 取值器
+- 请求：复用 `@repo/shared` 的通用客户端 `createHttpClient`（见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本包只注入 `baseURL` 与 token 取值器，401 收口挂在错误拦截器上
 - 图表：echarts 按需引入（`echarts/core` + 按需注册图表与组件，避免整包进产物）
 - 图标：lucide-vue-next
 - UI：不引 Element / Ant，表格、分页、搜索栏、弹窗等组件自建并目录化
@@ -71,7 +71,7 @@ apps/admin-web/
 ## 二、技术选型与取舍
 
 - **文件式自动路由**：`src/pages` 下的文件结构即路由，省掉一张手写路由表这一处「改页面必改两处」的漂移点。生成的 `typed-router.d.ts` 入库并登记到 `tsconfig` 的 `include`，`router.push('/users')` 一类的路径因此能被类型检查拦下笔误。
-- **HTTP 客户端上提到 `@repo/reusable`**：请求头拼装、错误归一化、SSE 解析三段逻辑与桌面端完全同形，抽成注入式工厂后本包只提供「baseURL 与 token 从哪来」。token 取值推迟到请求发起时（而非构造期固化），实例可长期持有。
+- **HTTP 客户端落在 `@repo/shared`**：请求头拼装、错误归一化、超时与流式发送都与业务无关，抽成注入式工厂后本包只提供「baseURL 与 token 从哪来」，401 收口从工厂回调改挂在错误拦截器上（失效判定复用 `@repo/reusable` 的 `isUnauthorized`，见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)）。token 取值推迟到请求发起时（而非构造期固化），实例可长期持有。
 - **固定亮色 + 自建组件**：后台以信息密度和可读性为先，不做主题切换，故不引主题体系；UI 需求集中在表格、分页、弹窗三处，自建比引入整套组件库更省，也避免样式被第三方覆盖规则牵着走。
 - **依赖边界**：`vite` / `@types/node` / `@vitejs/plugin-vue` 由根 `package.json` 提供，本包**不重复声明**；`unplugin-vue-router` 只服务构建（`vite.config.ts` 与文件式路由生成），归 `devDependencies`。只登记真正用到的 `@repo/*` 包与 tsconfig 路径映射——多留一条映射，等于给一次误 import 留了「也能通过」的后路。
 - **服务端能力优先**：列表的过滤、搜索与分页一律走服务端参数，前端不本地过滤。否则「当前页显示 3 条、总数却写 47」这类对不上的状态迟早出现。
@@ -180,7 +180,7 @@ pnpm --filter @repo/admin-web run preview  # 预览构建产物
 
 - 开发期 `/api` 由 `vite.config.ts` 的 proxy 转发到 `http://localhost:3000`（`agent-server` 的默认端口），因此本机先把后端跑起来；`baseURL` 留空走同源，生产期由反向代理统一接入，前端不感知后端真实地址。
 - 后端在 `apps/agent-server`，需要先起来才能登录：空库首次启动时由 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 自举超管（未配置则启动告警），之后后台账号只能由超管在用户管理里创建（或用运维超级令牌调 `POST /api/admin/users` 建一个）。
-- 单测放 `src/__vitest__/`，只覆盖纯逻辑（分页取数、登录态 store、HTTP 客户端的令牌收口、路由守卫），组件层靠 `vue-tsc` 与实机走查兜底，取舍见 [ADR 0005](../../docs/adr/0005-admin-web-test-scope.md)。跑 `pnpm --filter @repo/admin-web run test`，或在根目录 `pnpm test` 一并执行——测试运行在 node 环境，`localStorage` 与 `fetch` 由 `src/__vitest__/storageStub.ts` 顶替，不依赖真实浏览器。
+- 单测放 `src/__vitest__/`，只覆盖纯逻辑（分页取数、登录态 store、HTTP 客户端的令牌收口、路由守卫、各列表接口的查询串参数拼装），组件层靠 `vue-tsc` 与实机走查兜底，取舍见 [ADR 0005](../../docs/adr/0005-admin-web-test-scope.md)。跑 `pnpm --filter @repo/admin-web run test`，或在根目录 `pnpm test` 一并执行——测试运行在 node 环境，`localStorage` 与 `fetch` 由 `src/__vitest__/storageStub.ts` 顶替，不依赖真实浏览器。
 - 质量校验走根脚本：`pnpm lint`（ESLint + Prettier）与 `pnpm test`；改了路由或类型后建议单独跑一次 `pnpm --filter @repo/admin-web run build`，它包含 `vue-tsc --noEmit` 全量类型检查。
 
 ---
