@@ -1,10 +1,12 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import type { DbPool } from '../db/pool.js';
+import type { QueryResultRow } from 'pg';
 import { randomUUID } from 'node:crypto';
+import { isUuid } from '../db/uuid.js';
 
 /** 登录有效期：7 天，超时后需重新登录 */
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-interface SessionRow extends RowDataPacket {
+interface SessionRow extends QueryResultRow {
   user_id: number;
   expires_at: Date;
 }
@@ -27,7 +29,7 @@ export class SessionStore {
   private readonly cache = new Map<string, CachedSession>();
 
   constructor(
-    private readonly pool: Pool,
+    private readonly pool: DbPool,
     private readonly cacheTtlMs: number,
   ) {}
 
@@ -37,20 +39,20 @@ export class SessionStore {
     const now = Date.now();
 
     // 删除旧会话与写入新令牌放在同一事务：避免中途失败时旧令牌已失效、新令牌又没落库
-    const connection = await this.pool.getConnection();
+    const client = await this.pool.connect();
     try {
-      await connection.beginTransaction();
-      await connection.execute('DELETE FROM user_sessions WHERE user_id = ?', [userId]);
-      await connection.execute(
-        'INSERT INTO user_sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
+      await client.query('BEGIN');
+      await client.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+      await client.query(
+        'INSERT INTO user_sessions (token, user_id, created_at, expires_at) VALUES ($1, $2, $3, $4)',
         [token, userId, new Date(now), new Date(now + SESSION_TTL_MS)],
       );
-      await connection.commit();
+      await client.query('COMMIT');
     } catch (error) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       throw error;
     } finally {
-      connection.release();
+      client.release();
     }
 
     // 该账号旧会话已被删除，缓存里的旧令牌必须一起失效，否则它们仍能命中缓存继续放行
@@ -60,14 +62,16 @@ export class SessionStore {
 
   /** 校验令牌并返回用户 ID；令牌不存在或已过期时返回 null，过期记录顺手清除 */
   async resolve(token: string): Promise<number | null> {
+    // 令牌列是 uuid：非 UUID 取值直接判为无效，不让非法输入走到 SQL 层触发类型报错
+    if (!isUuid(token)) return null;
     const cached = this.cache.get(token);
     if (cached) {
       if (cached.expiresAt > Date.now()) return cached.userId;
       this.cache.delete(token);
     }
 
-    const [rows] = await this.pool.execute<SessionRow[]>(
-      'SELECT user_id, expires_at FROM user_sessions WHERE token = ? LIMIT 1',
+    const { rows } = await this.pool.query<SessionRow>(
+      'SELECT user_id, expires_at FROM user_sessions WHERE token = $1 LIMIT 1',
       [token],
     );
     const row = rows[0];
@@ -89,13 +93,15 @@ export class SessionStore {
   /** 删除单个令牌的会话：一并清掉其缓存项，避免登出后旧令牌仍命中缓存继续放行 */
   async remove(token: string): Promise<void> {
     this.cache.delete(token);
-    await this.pool.execute('DELETE FROM user_sessions WHERE token = ?', [token]);
+    // 非法令牌不可能存在于库中，直接返回，也避免 uuid 列比较时报类型错误
+    if (!isUuid(token)) return;
+    await this.pool.query('DELETE FROM user_sessions WHERE token = $1', [token]);
   }
 
   /** 删除某账号的全部会话：账号被删除时一并清理，避免残留可用的登录态 */
   async removeAllByUser(userId: number): Promise<void> {
     this.evictUser(userId);
-    await this.pool.execute('DELETE FROM user_sessions WHERE user_id = ?', [userId]);
+    await this.pool.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
   }
 
   /**
@@ -104,32 +110,31 @@ export class SessionStore {
    * 返回被清理的会话条数。
    */
   async prune(): Promise<number> {
-    const connection = await this.pool.getConnection();
+    const client = await this.pool.connect();
     try {
-      await connection.beginTransaction();
+      await client.query('BEGIN');
       // 先清理过期记录，避免过期行参与后续去重
-      const [expired] = await connection.execute<ResultSetHeader>(
-        'DELETE FROM user_sessions WHERE expires_at <= ?',
-        [new Date()],
-      );
-      // 自连接删除：保留每个账号 created_at 最新的一条；时间相同时用 token 兜底比较，保证结果确定
-      // 该语句为固定 SQL 且多表 DELETE 不便走预处理协议，故使用 query
-      const [duplicated] = await connection.query<ResultSetHeader>(
-        `DELETE s FROM user_sessions AS s
-           JOIN user_sessions AS k
-             ON k.user_id = s.user_id
+      const expired = await client.query('DELETE FROM user_sessions WHERE expires_at <= $1', [
+        new Date(),
+      ]);
+      // 自连接删除：保留每个账号 created_at 最新的一条；时间相同时用 token 兜底比较，保证结果确定。
+      // PG 的多表删除与 MySQL 写法不同，改用 USING 引入要被连接的第二张表
+      const duplicated = await client.query(
+        `DELETE FROM user_sessions AS s
+           USING user_sessions AS k
+          WHERE k.user_id = s.user_id
             AND (k.created_at > s.created_at
                  OR (k.created_at = s.created_at AND k.token > s.token))`,
       );
-      await connection.commit();
+      await client.query('COMMIT');
       // 库里会话已被收敛，缓存里的映射可能已不对应现存记录，整表清空最稳妥
       this.cache.clear();
-      return expired.affectedRows + duplicated.affectedRows;
+      return (expired.rowCount ?? 0) + (duplicated.rowCount ?? 0);
     } catch (error) {
-      await connection.rollback();
+      await client.query('ROLLBACK');
       throw error;
     } finally {
-      connection.release();
+      client.release();
     }
   }
 

@@ -1,4 +1,5 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { DbPool } from '../db/pool.js';
+import type { QueryResultRow } from 'pg';
 
 /** 状态档位：all 不限，client 只看 4xx，server 只看 5xx */
 export type ApiLogStatusKind = 'all' | 'client' | 'server';
@@ -48,7 +49,7 @@ export interface ApiLogPage {
   total: number;
 }
 
-interface ApiLogRow extends RowDataPacket {
+interface ApiLogRow extends QueryResultRow {
   id: number;
   request_id: string;
   method: string;
@@ -63,7 +64,7 @@ interface ApiLogRow extends RowDataPacket {
   created_at: Date;
 }
 
-interface CountRow extends RowDataPacket {
+interface CountRow extends QueryResultRow {
   total: number;
 }
 
@@ -84,7 +85,7 @@ export interface ApiLogFilters {
 }
 
 /**
- * 组装列表查询的 WHERE 子句与参数：参数顺序必须与占位符出现顺序严格一致，
+ * 组装列表查询的 WHERE 子句与参数：占位符序号按参数入列顺序递增，
  * 单独成函数是为了让这份对应关系能被直接测到——错位不会报错，只会静默查出错误结果。
  */
 export function buildFilters(
@@ -93,13 +94,13 @@ export function buildFilters(
   const clauses: string[] = [];
   const params: (string | number)[] = [];
   if (query.keyword) {
-    // LOCATE 免去对 % / _ 的转义，与用户列表的匹配口径保持一致
-    clauses.push('LOCATE(?, path) > 0');
+    // strpos 免去对 % / _ 的转义，与用户列表的匹配口径保持一致
     params.push(query.keyword);
+    clauses.push(`strpos(path, $${params.length}) > 0`);
   }
   if (query.method) {
-    clauses.push('method = ?');
     params.push(query.method);
+    clauses.push(`method = $${params.length}`);
   }
   if (query.statusKind !== 'all') {
     clauses.push(STATUS_RANGE[query.statusKind]);
@@ -134,12 +135,34 @@ export interface ApiLogFlushOptions {
 }
 
 /** 批量 INSERT 的固定列序：行参数拼装顺序必须与它严格一致 */
-const INSERT_BATCH = `INSERT INTO api_logs
-  (request_id, method, path, status, duration_ms, user_id,
-   query_params, request_body, response_body, error, created_at)
- VALUES ?`;
+const INSERT_COLUMNS = [
+  'request_id',
+  'method',
+  'path',
+  'status',
+  'duration_ms',
+  'user_id',
+  'query_params',
+  'request_body',
+  'response_body',
+  'error',
+  'created_at',
+] as const;
 
-/** 一条日志转为批量 INSERT 的一行参数，顺序与 INSERT_BATCH 的列序一致 */
+/**
+ * 按行数展开占位符：MySQL 的 `VALUES ?` 整块展开在 PG 没有对应写法，
+ * 改成逐行逐列拼 `$1..$n`——列名是本模块常量，值仍全部走绑定参数。
+ */
+function insertBatchSql(rowCount: number): string {
+  const tuples = Array.from(
+    { length: rowCount },
+    (_, row) =>
+      `(${INSERT_COLUMNS.map((_, col) => `$${row * INSERT_COLUMNS.length + col + 1}`).join(', ')})`,
+  );
+  return `INSERT INTO api_logs (${INSERT_COLUMNS.join(', ')}) VALUES ${tuples.join(', ')}`;
+}
+
+/** 一条日志转为批量 INSERT 的一行参数，顺序与 INSERT_COLUMNS 一致 */
 function toRowParams(entry: ApiLogEntry): (string | number | Date | null)[] {
   return [
     entry.requestId,
@@ -170,7 +193,7 @@ export class ApiLogStore {
   private pending: Promise<void> = Promise.resolve();
 
   constructor(
-    private readonly pool: Pool,
+    private readonly pool: DbPool,
     private readonly options: ApiLogFlushOptions,
   ) {}
 
@@ -205,8 +228,7 @@ export class ApiLogStore {
     // 先取出再清空：写入期间新到的日志留在缓冲里等下一批，不会被本次误清
     const rows = this.buffer.splice(0, this.buffer.length).map(toRowParams);
     try {
-      // 多行 INSERT 走 query：预处理协议不便展开嵌套数组占位符（与 sessionStore.prune 同口径）
-      await this.pool.query(INSERT_BATCH, [rows]);
+      await this.pool.query(insertBatchSql(rows.length), rows.flat());
     } catch (error) {
       this.options.onError?.(error);
     }
@@ -215,12 +237,13 @@ export class ApiLogStore {
   /** 管理端列表：按条件过滤 + 分页；按序号倒序，等价于时间倒序且走主键索引 */
   async list(query: ApiLogQuery): Promise<ApiLogPage> {
     const { where, params } = buildFilters(query);
-    const [countRows] = await this.pool.execute<CountRow[]>(
+    const { rows: countRows } = await this.pool.query<CountRow>(
       `SELECT COUNT(*) AS total FROM api_logs ${where}`,
       params,
     );
-    const [rows] = await this.pool.execute<ApiLogRow[]>(
-      `SELECT ${LOG_COLUMNS} FROM api_logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    const { rows } = await this.pool.query<ApiLogRow>(
+      `SELECT ${LOG_COLUMNS} FROM api_logs ${where} ORDER BY id DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, query.pageSize, (query.page - 1) * query.pageSize],
     );
     return { items: rows.map(toRecord), total: Number(countRows[0]?.total ?? 0) };

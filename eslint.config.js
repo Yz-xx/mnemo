@@ -1,7 +1,10 @@
 // ESLint 9 统一扁平配置（Flat Config）
-// 全仓共用：JS 推荐规则 + TypeScript 推荐规则 + Vue3 推荐规则，并关闭与 Prettier 冲突的格式规则
+// 全仓共用：JS 推荐规则 + TypeScript 推荐规则 + Vue3 推荐规则 + import 排序与未用导入清理，
+// 并关闭与 Prettier 冲突的格式规则
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
+import importX from 'eslint-plugin-import-x';
+import unusedImports from 'eslint-plugin-unused-imports';
 import vue from 'eslint-plugin-vue';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -39,12 +42,47 @@ export default tseslint.config(
     },
   },
 
-  // 以 _ 开头的参数/变量表示有意忽略（如 Express 错误中间件的未用参数）
+  // 导入整理：声明顺序由 eslint-plugin-import-x 强制（替代原 @ianvs/prettier-plugin-sort-imports），
+  // 未被引用的 import 由 unused-imports 整行删除；以 _ 开头的参数/变量表示有意忽略
   {
+    plugins: {
+      'import-x': importX,
+      'unused-imports': unusedImports,
+    },
     rules: {
+      'unused-imports/no-unused-imports': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+      // 分组口径与原 .prettierrc.json 的 importOrder 保持一致：
+      // 类型 → Node 内置 → 第三方 → @repo/* → @/* → 相对路径，组内按大小写不敏感升序
+      'import-x/order': [
+        'error',
+        {
+          groups: [
+            'type',
+            'builtin',
+            'external',
+            'internal',
+            'parent',
+            'sibling',
+            'index',
+            'object',
+            'unknown',
+          ],
+          // pathGroups 的 group 只接受内置枚举，无法自定义组名，因此 @repo/* 与 @/* 同归 internal，
+          // 靠列表先后配合 position: before 维持「@repo 在前、@/ 在后」的既有顺序
+          pathGroups: [
+            { pattern: '@repo/**', group: 'internal', position: 'before' },
+            { pattern: '@/**', group: 'internal', position: 'before' },
+          ],
+          // 只把 type 排除在外：否则 import type 会命中 pathGroups 被拉进 internal，破坏「类型声明置顶」
+          pathGroupsExcludedImportTypes: ['type'],
+          alphabetize: { order: 'asc', caseInsensitive: true },
+          // 组间空行不作规定，避免引入原先 prettier 未强制的空行标准
+          'newlines-between': 'ignore',
+        },
       ],
     },
   },
@@ -73,6 +111,6 @@ export default tseslint.config(
     },
   },
 
-  // 放在最后，确保关闭所有与 Prettier 冲突的格式类规则
+  // 关闭所有与 Prettier 冲突的格式类规则
   prettier,
 );

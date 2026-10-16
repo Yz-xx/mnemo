@@ -1,4 +1,4 @@
-// 统计（MySQL 聚合）与运行状态（进程内信息）来自两个接口，互不依赖，故用 allSettled 并行：
+// 统计（PostgreSQL 聚合）与运行状态（进程内信息）来自两个接口，互不依赖，故用 allSettled 并行：
 // 状态接口失败时统计卡片照常展示，只把错误提示挂出来。
 import type { AdminHealth, AdminStats, MessageTrendPoint } from '@/api/types';
 import { Activity, BookOpen, MessageSquare, Users } from 'lucide-vue-next';

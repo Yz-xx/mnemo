@@ -26,7 +26,7 @@ const columns = [
 
 /**
  * 知识库管理：管理视角的文档列表（含各用户的私有文档）+ 新增全局文档 + 单条与批量删除 + 内容查看与编辑。
- * 文档存在 LanceDB 而非 MySQL，后端在内存里过滤与分页，前端按同一套翻页交互处理。
+ * 文档存在向量库而非关系表，后端在内存里过滤与分页，前端按同一套翻页交互处理。
  */
 export function useKnowledgePage() {
   const keyword = ref('');

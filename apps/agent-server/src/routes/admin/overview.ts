@@ -44,7 +44,7 @@ export function createAdminOverviewRouter({
     res.json({
       ...describeHealth(config),
       uptimeSeconds: Math.floor(process.uptime()),
-      mysql: `${config.mysql.host}:${config.mysql.port}/${config.mysql.database}`,
+      postgres: `${config.postgres.host}:${config.postgres.port}/${config.postgres.database}`,
     });
   });
 

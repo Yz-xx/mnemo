@@ -9,14 +9,14 @@ import type {
   UserRole,
   UserStats,
 } from './types.js';
-import type { Pool, ResultSetHeader } from 'mysql2/promise';
+import type { DbPool } from '../../db/pool.js';
 import { hashPassword, verifyPassword } from '../passwordHash.js';
 import { toRecord, USER_COLUMNS } from './rows.js';
 import { ADMIN_ROLES } from './types.js';
 
 /** 用户表读写：密码统一以 scrypt 哈希入库，明文既不落库也不进日志 */
 export class UserStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: DbPool) {}
 
   /**
    * 注册新用户；用户名已被占用时返回 null。
@@ -28,14 +28,17 @@ export class UserStore {
     password: string,
     role: UserRole = 'user',
   ): Promise<UserRecord | null> {
-    // INSERT IGNORE 命中用户名唯一索引时不会报错，affectedRows 为 0
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      'INSERT IGNORE INTO users (username, password, role, status, created_at) VALUES (?, ?, ?, ?, ?)',
+    // ON CONFLICT DO NOTHING 顶掉 MySQL 的 INSERT IGNORE：命中唯一约束时不报错、不返回行
+    const { rows, rowCount } = await this.pool.query<{ id: number }>(
+      `INSERT INTO users (username, password, role, status, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (username) DO NOTHING
+       RETURNING id`,
       [username, hashPassword(password), role, 'active', new Date()],
     );
-    if (result.affectedRows === 0) return null;
+    if (rowCount === 0 || !rows[0]) return null;
     return {
-      id: result.insertId,
+      id: Number(rows[0].id),
       username,
       role,
       status: 'active',
@@ -48,23 +51,26 @@ export class UserStore {
    * 每个新库都需要一枚初始超管，否则只能靠运维超级令牌手工改库才能开启后台。
    */
   async ensureSuperAdmin(username: string, password: string): Promise<SuperAdminBootstrap> {
-    const [rows] = await this.pool.execute<CountRow[]>(
-      `SELECT COUNT(*) AS total FROM users WHERE role IN (${ADMIN_ROLES.map(() => '?').join(', ')})`,
+    const placeholders = ADMIN_ROLES.map((_, index) => `$${index + 1}`).join(', ');
+    const { rows } = await this.pool.query<CountRow>(
+      `SELECT COUNT(*) AS total FROM users WHERE role IN (${placeholders})`,
       [...ADMIN_ROLES],
     );
     if (Number(rows[0]?.total ?? 0) > 0) return 'skipped';
     // 用户名可能已被某个客户端账号占用，此时超管建不出来，调用方需要告警
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      'INSERT IGNORE INTO users (username, password, role, status, created_at) VALUES (?, ?, ?, ?, ?)',
+    const { rowCount } = await this.pool.query(
+      `INSERT INTO users (username, password, role, status, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (username) DO NOTHING`,
       [username, hashPassword(password), 'super_admin', 'active', new Date()],
     );
-    return result.affectedRows > 0 ? 'created' : 'username-taken';
+    return (rowCount ?? 0) > 0 ? 'created' : 'username-taken';
   }
 
   /** 登录校验：比对口令哈希 */
   async authenticate(username: string, password: string): Promise<UserRecord | null> {
-    const [rows] = await this.pool.execute<UserRow[]>(
-      `SELECT ${USER_COLUMNS}, password FROM users WHERE username = ? LIMIT 1`,
+    const { rows } = await this.pool.query<UserRow>(
+      `SELECT ${USER_COLUMNS}, password FROM users WHERE username = $1 LIMIT 1`,
       [username],
     );
     const row = rows[0];
@@ -75,8 +81,8 @@ export class UserStore {
 
   /** 按 ID 查询用户：既用于凭令牌恢复登录态，也是管理端鉴权判定角色与状态的依据 */
   async findById(id: number): Promise<UserRecord | null> {
-    const [rows] = await this.pool.execute<UserRow[]>(
-      `SELECT ${USER_COLUMNS} FROM users WHERE id = ? LIMIT 1`,
+    const { rows } = await this.pool.query<UserRow>(
+      `SELECT ${USER_COLUMNS} FROM users WHERE id = $1 LIMIT 1`,
       [id],
     );
     return rows[0] ? toRecord(rows[0]) : null;
@@ -89,29 +95,29 @@ export class UserStore {
   async findNamesByIds(ids: number[]): Promise<Map<number, string>> {
     const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
     if (unique.length === 0) return new Map();
-    // 只拼占位符个数，取值仍走参数：execute 的预处理语句不支持把数组展开成多个占位
-    const placeholders = unique.map(() => '?').join(', ');
-    const [rows] = await this.pool.execute<NameRow[]>(
+    // 只拼占位符个数与序号，取值仍走绑定参数
+    const placeholders = unique.map((_, index) => `$${index + 1}`).join(', ');
+    const { rows } = await this.pool.query<NameRow>(
       `SELECT id, username FROM users WHERE id IN (${placeholders})`,
       unique,
     );
     return new Map(rows.map((row) => [Number(row.id), row.username]));
   }
 
-  /** 管理端列表：按用户名包含匹配 + 分页；用 LOCATE 免去对 % / _ 通配符的转义 */
+  /** 管理端列表：按用户名包含匹配 + 分页；用 strpos 免去对 % / _ 通配符的转义 */
   async list(query: UserQuery, scope: UserListScope = 'all'): Promise<UserPage> {
     const { keyword, page, pageSize } = query;
     // 可见范围写进 SQL 而不是取回整页后再裁剪：否则普通管理员看到的每页条数与总数都对不上
     const scopeClause = scope === 'client' ? "role = 'user' AND " : '';
-    const [countRows] = await this.pool.execute<CountRow[]>(
-      `SELECT COUNT(*) AS total FROM users WHERE ${scopeClause}LOCATE(?, username) > 0`,
+    const { rows: countRows } = await this.pool.query<CountRow>(
+      `SELECT COUNT(*) AS total FROM users WHERE ${scopeClause}strpos(username, $1) > 0`,
       [keyword],
     );
-    const [rows] = await this.pool.execute<UserRow[]>(
+    const { rows } = await this.pool.query<UserRow>(
       `SELECT ${USER_COLUMNS} FROM users
-        WHERE ${scopeClause}LOCATE(?, username) > 0
+        WHERE ${scopeClause}strpos(username, $1) > 0
         ORDER BY id DESC
-        LIMIT ? OFFSET ?`,
+        LIMIT $2 OFFSET $3`,
       [keyword, pageSize, (page - 1) * pageSize],
     );
     return { items: rows.map(toRecord), total: Number(countRows[0]?.total ?? 0) };
@@ -119,37 +125,36 @@ export class UserStore {
 
   /** 管理端变更角色或状态；用户不存在时返回 null */
   async update(id: number, patch: UserPatch): Promise<UserRecord | null> {
-    // 列名取自代码内的字面量而非请求体，可以拼接；取值仍走占位符
+    // 列名取自代码内的字面量而非请求体，可以拼接；取值仍走绑定参数
     const assignments: string[] = [];
     const params: (string | number)[] = [];
     if (patch.role !== undefined) {
-      assignments.push('role = ?');
       params.push(patch.role);
+      assignments.push(`role = $${params.length}`);
     }
     if (patch.status !== undefined) {
-      assignments.push('status = ?');
       params.push(patch.status);
+      assignments.push(`status = $${params.length}`);
     }
     if (assignments.length > 0) {
-      await this.pool.execute(`UPDATE users SET ${assignments.join(', ')} WHERE id = ?`, [
-        ...params,
-        id,
-      ]);
+      params.push(id);
+      await this.pool.query(
+        `UPDATE users SET ${assignments.join(', ')} WHERE id = $${params.length}`,
+        params,
+      );
     }
     return this.findById(id);
   }
 
   /** 删除账号；其会话、对话与文件由调用方先行清理，这里只动 users 表 */
   async remove(id: number): Promise<boolean> {
-    const [result] = await this.pool.execute<ResultSetHeader>('DELETE FROM users WHERE id = ?', [
-      id,
-    ]);
-    return result.affectedRows > 0;
+    const { rowCount } = await this.pool.query('DELETE FROM users WHERE id = $1', [id]);
+    return (rowCount ?? 0) > 0;
   }
 
   /** 账号汇总：总数与活跃/停用/后台账号三项计数；admins 含超管与管理员 */
   async stats(): Promise<UserStats> {
-    const [rows] = await this.pool.execute<StatsRow[]>(
+    const { rows } = await this.pool.query<StatsRow>(
       `SELECT COUNT(*) AS total,
               SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
               SUM(CASE WHEN status = 'banned' THEN 1 ELSE 0 END) AS banned,
@@ -170,7 +175,7 @@ export class UserStore {
    * 只数 active——被停用的账号进不了后台，不该占用这个保底名额。
    */
   async countActiveAdmins(): Promise<number> {
-    const [rows] = await this.pool.execute<CountRow[]>(
+    const { rows } = await this.pool.query<CountRow>(
       `SELECT COUNT(*) AS total FROM users
         WHERE role IN ('super_admin', 'admin') AND status = 'active'`,
     );

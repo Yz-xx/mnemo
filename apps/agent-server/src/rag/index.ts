@@ -1,4 +1,4 @@
-export type { KnowledgeStoreOptions } from './storage.js';
+export type { KnowledgeStoreOptions, KnowledgeVectorStore } from './vectorStore.js';
 export type {
   KnowledgeActor,
   KnowledgeContent,
@@ -7,4 +7,5 @@ export type {
   KnowledgeUpload,
 } from './documents.js';
 export type { KnowledgeSearchResult } from './search.js';
+export { createKnowledgeVectorStore } from './createVectorStore.js';
 export { KnowledgeStore } from './store.js';

@@ -1,6 +1,6 @@
 import type { AppConfig } from '../../configuration/config/index.js';
+import type { DbPool } from '../../db/pool.js';
 import type { ConcurrencyGuard } from '../../middleware/concurrencyGuard.js';
-import type { Pool } from 'mysql2/promise';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMetrics } from '../../observability/index.js';
 import { describeReadiness } from '../../services/readiness.js';
@@ -28,8 +28,8 @@ function configWith(input: {
 }
 
 /** 可用的假连接池：SELECT 1 正常返回 */
-function healthyPool(): Pool {
-  return { query: vi.fn(async () => [[]]) } as unknown as Pool;
+function healthyPool(): DbPool {
+  return { query: vi.fn(async () => ({ rows: [], rowCount: 0 })) } as unknown as DbPool;
 }
 
 /** 假闸门：就绪检查只读它的快照 */
@@ -73,16 +73,16 @@ describe('describeReadiness', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:11434/api/tags', expect.anything());
   });
 
-  it('MySQL 探测失败即 degraded，失败项带可定位的原因', async () => {
+  it('PostgreSQL 探测失败即 degraded，失败项带可定位的原因', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => reachable()),
     );
     const pool = {
       query: vi.fn(async () => {
-        throw new Error('connect ECONNREFUSED 127.0.0.1:3306');
+        throw new Error('connect ECONNREFUSED 127.0.0.1:5432');
       }),
-    } as unknown as Pool;
+    } as unknown as DbPool;
 
     const payload = await describeReadiness({
       config: configWith({ chat: 'ollama', embedding: 'ollama' }),
@@ -92,9 +92,9 @@ describe('describeReadiness', () => {
     });
 
     expect(payload.status).toBe('degraded');
-    const mysql = payload.checks.find((check) => check.name === 'mysql');
-    expect(mysql).toMatchObject({ status: 'fail' });
-    expect(mysql?.detail).toContain('ECONNREFUSED');
+    const postgres = payload.checks.find((check) => check.name === 'postgres');
+    expect(postgres).toMatchObject({ status: 'fail' });
+    expect(postgres?.detail).toContain('ECONNREFUSED');
   });
 
   it('对话模型不可达即 degraded；DeepSeek / OpenAI 兼容服务走 /models', async () => {

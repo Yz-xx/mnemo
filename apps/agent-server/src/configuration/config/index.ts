@@ -9,8 +9,10 @@ export type {
   HttpConfig,
   LlmProvider,
   LogConfig,
-  MysqlConfig,
   ObservabilityConfig,
+  PostgresConfig,
+  VectorStoreConfig,
+  VectorStoreProvider,
 } from './env.js';
 export type { AdminSystemConfig } from './systemView.js';
 export { SERVICE_NAME, loadConfig } from './env.js';

@@ -81,7 +81,7 @@ export interface AdminHealth {
   knowledgeEnabled: boolean;
   timestamp: string;
   uptimeSeconds: number;
-  mysql: string;
+  postgres: string;
 }
 
 /** 文档可见范围：global 全局共享，private 仅上传者本人可见 */
@@ -238,7 +238,7 @@ export interface AdminSystemConfig {
     dir: string;
     retentionDays: number;
   };
-  mysql: {
+  postgres: {
     host: string;
     port: number;
     user: string;

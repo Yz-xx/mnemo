@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 系统配置：只读展示服务端当前生效的运行参数，供运维核对。
-// 密钥类配置（模型 API Key、MySQL 密码、知识库令牌）服务端只回「是否已配置」，页面拿不到明文。
+// 密钥类配置（模型 API Key、PostgreSQL 密码、知识库令牌）服务端只回「是否已配置」，页面拿不到明文。
 import { useConfigPage } from './config';
 
 const { errorMsg, loading, groups } = useConfigPage();

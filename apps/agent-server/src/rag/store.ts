@@ -6,39 +6,56 @@ import type {
 } from './documents.js';
 import type { RetrievalGovernance } from './retrieval.js';
 import type { KnowledgeSearchResult } from './search.js';
-import type { KnowledgeStoreOptions } from './storage.js';
+import type { KnowledgeStoreOptions, KnowledgeVectorStore } from './vectorStore.js';
+import type { PostgresConfig, VectorStoreConfig } from '../configuration/config/index.js';
 import type { Embeddings } from '@langchain/core/embeddings';
 import { randomUUID } from 'node:crypto';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
+import { describeConnectionError } from '../configuration/errors.js';
+import { createKnowledgeVectorStore } from './createVectorStore.js';
 import { readOwner, readUpdatedAt, toChunkRow, toDocument, toDocumentRow } from './documents.js';
-import {
-  CHUNKS_TABLE,
-  chunksSchema,
-  DOCUMENT_ID,
-  DOCUMENTS_TABLE,
-  documentsSchema,
-} from './lance.js';
 import { callEmbedding, retrieveChunks } from './retrieval.js';
-import { visibilityFilter } from './search.js';
-import { KnowledgeStorage } from './storage.js';
+
+/** 文档 ID 为 UUID：作为存储过滤条件前按白名单校验，避免注入 */
+const DOCUMENT_ID = /^[0-9a-fA-F-]{36}$/;
 
 /**
- * 知识库（LanceDB）：文档切分向量化后落在本地库目录中，
- * 检索走向量近邻 + 可见性过滤，实现全局共享与用户私有两级隔离。
- * 连接、建表与旧表补列、向量基准校验由 KnowledgeStorage 承担；
+ * 知识库：文档切分向量化后落库，检索走向量近邻 + 可见性过滤，
+ * 实现全局共享与用户私有两级隔离。
+ * 连接、建表与旧表补列、行读写、近邻查询、向量基准校验由 KnowledgeVectorStore 承担；
  * 检索的闸门 / 超时 / 降级与向量服务熔断由 rag/retrieval.ts 承担，这里只保留文档业务语义。
  */
 export class KnowledgeStore {
-  private readonly storage: KnowledgeStorage;
+  private readonly store: KnowledgeVectorStore;
 
   constructor(
     dataDir: string,
-    embeddings: Embeddings,
+    private readonly embeddings: Embeddings,
     private readonly options: KnowledgeStoreOptions,
     /** 检索与向量化治理：不传即不治理（本地脚本与单测），生产由组合根注入 */
     private readonly governance?: RetrievalGovernance,
+    /**
+     * 向量存储开关：缺省即走默认 pgvector，且缺 PG 连接参数会直接抛错；
+     * 需回退本地库的脚本与单测须显式传 { provider: 'lance' }（见 docs/adr/0012 阶段 3）
+     */
+    vector?: VectorStoreConfig,
+    /** 关系库连接参数：仅 pgvector 适配器用得上，走 LanceDB 时忽略（见 docs/adr/0012 阶段 2） */
+    postgres?: PostgresConfig,
   ) {
-    this.storage = new KnowledgeStorage(dataDir, embeddings, options);
+    // 走工厂而非直接 new：适配器选择收在 createVectorStore 一处，本处只摆参数
+    this.store = createKnowledgeVectorStore(vector, dataDir, options, postgres);
+  }
+
+  /**
+   * 批量向量化片段：写入路径（入库与编辑）用。
+   * 连接类异常翻译成含服务地址的提示，与检索路径同一口径
+   */
+  private async embedDocuments(texts: string[]): Promise<number[][]> {
+    try {
+      return await this.embeddings.embedDocuments(texts);
+    } catch (error) {
+      throw describeConnectionError(error, this.options.embeddingEndpoint, '向量化服务');
+    }
   }
 
   /**
@@ -57,10 +74,10 @@ export class KnowledgeStore {
     const pieces = await splitter.splitText(content);
     if (pieces.length === 0) throw new Error('文档内容为空，无法切分');
 
-    const vectors = await callEmbedding(this.governance, () => this.storage.embedDocuments(pieces));
+    const vectors = await callEmbedding(this.governance, () => this.embedDocuments(pieces));
     const dim = vectors[0]?.length ?? 0;
     if (dim === 0) throw new Error('文档向量化结果为空');
-    await this.storage.assertCompatible(dim);
+    await this.store.assertCompatible(dim);
     return { pieces, vectors, dim };
   }
 
@@ -75,9 +92,7 @@ export class KnowledgeStore {
     access: 'visible' | 'manage',
   ): Promise<Record<string, unknown> | null> {
     if (!DOCUMENT_ID.test(id)) return null;
-    const documents = await this.storage.openExisting(DOCUMENTS_TABLE);
-    if (!documents) return null;
-    const [row] = await documents.query().where(`id = '${id}'`).limit(1).toArray();
+    const row = await this.store.findDocument(id);
     if (!row) return null;
     const owner = readOwner(row);
     const allowed =
@@ -89,9 +104,7 @@ export class KnowledgeStore {
 
   /** 列出对当前用户可见的文档：全局共享的 + 自己上传的 */
   async list(userId: number): Promise<KnowledgeDocument[]> {
-    const table = await this.storage.openExisting(DOCUMENTS_TABLE);
-    if (!table) return [];
-    const rows = await table.query().where(visibilityFilter(userId)).toArray();
+    const rows = await this.store.listDocuments(userId);
     return rows.map(toDocument).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -100,16 +113,13 @@ export class KnowledgeStore {
    * 后台看的是整体归置情况，“谁的文档”由归属字段表达，因此不能套用可见性过滤。
    */
   async listAll(): Promise<KnowledgeDocument[]> {
-    const table = await this.storage.openExisting(DOCUMENTS_TABLE);
-    if (!table) return [];
-    const rows = await table.query().toArray();
+    const rows = await this.store.listAllDocuments();
     return rows.map(toDocument).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   /** 文档总数（含全局与全部私有文档）：总览看整体规模，不做可见性过滤 */
   async count(): Promise<number> {
-    const table = await this.storage.openExisting(DOCUMENTS_TABLE);
-    return table ? table.countRows() : 0;
+    return this.store.countDocuments();
   }
 
   /** 写入文档：切分 → 批量向量化 → 分别写入文档表与片段表 */
@@ -125,13 +135,13 @@ export class KnowledgeStore {
       createdAt: new Date().toISOString(),
     };
 
-    const documents = await this.storage.ensure(DOCUMENTS_TABLE, documentsSchema());
-    await documents.add([
+    await this.store.ensureDocumentStore();
+    await this.store.addDocument(
       toDocumentRow(document, input.content, null, dim, this.options.embeddingModel),
-    ]);
+    );
 
-    const chunks = await this.storage.ensure(CHUNKS_TABLE, chunksSchema(dim));
-    await chunks.add(
+    await this.store.ensureChunkStore(dim);
+    await this.store.addChunks(
       pieces.map((content, index) =>
         toChunkRow(document, content, vectors[index] ?? [], document.createdAt),
       ),
@@ -142,10 +152,7 @@ export class KnowledgeStore {
   /** 删除文档及其片段：管理员可删任意文档，普通用户仅限自己上传的；权限不足一律按「不存在」处理 */
   async remove(id: string, actor: KnowledgeActor): Promise<boolean> {
     if (!(await this.findDocument(id, actor, 'manage'))) return false;
-    const documents = await this.storage.openExisting(DOCUMENTS_TABLE);
-    await documents?.delete(`id = '${id}'`);
-    const chunks = await this.storage.openExisting(CHUNKS_TABLE);
-    await chunks?.delete(`document_id = '${id}'`);
+    await this.store.removeDocument(id);
     return true;
   }
 
@@ -160,12 +167,9 @@ export class KnowledgeStore {
     const updatedAt = readUpdatedAt(row);
     const content = String(row.content ?? '');
     if (content) return { document, content, source: 'raw', updatedAt };
-
-    const chunks = await this.storage.openExisting(CHUNKS_TABLE);
-    const rows = chunks ? await chunks.query().where(`document_id = '${id}'`).toArray() : [];
     return {
       document,
-      content: rows.map((chunk) => String(chunk.content)).join('\n\n'),
+      content: await this.store.stitchChunks(id),
       source: 'stitched',
       updatedAt,
     };
@@ -174,7 +178,7 @@ export class KnowledgeStore {
   /**
    * 编辑文档：整体替换内容并重切分重向量化，id、归属与范围保持不变。
    * 不做逐分片编辑：分片是检索单元，单改文本会与向量不一致，
-   * 且重叠区跨分片重复，就地改必然错乱。文档行用 delete + add 原位重建
+   * 且重叠区跨分片重复，就地改必然错乱。文档行由存储适配器原位重建
    * （update 的 values 走 SQL 表达式，把用户文本拼进去会注入，禁止）
    */
   async replace(
@@ -193,19 +197,15 @@ export class KnowledgeStore {
     };
     const updatedAt = new Date().toISOString();
 
-    const chunks = await this.storage.ensure(CHUNKS_TABLE, chunksSchema(dim));
-    await chunks.delete(`document_id = '${id}'`);
-    await chunks.add(
+    await this.store.ensureChunkStore(dim);
+    await this.store.ensureDocumentStore();
+    await this.store.replaceDocument(
+      id,
+      toDocumentRow(document, input.content, updatedAt, dim, this.options.embeddingModel),
       pieces.map((content, index) =>
         toChunkRow(document, content, vectors[index] ?? [], updatedAt),
       ),
     );
-
-    const documents = await this.storage.ensure(DOCUMENTS_TABLE, documentsSchema());
-    await documents.delete(`id = '${id}'`);
-    await documents.add([
-      toDocumentRow(document, input.content, updatedAt, dim, this.options.embeddingModel),
-    ]);
     return document;
   }
 
@@ -218,7 +218,8 @@ export class KnowledgeStore {
     options: { userId: number; topK?: number },
   ): Promise<KnowledgeSearchResult[]> {
     return retrieveChunks({
-      storage: this.storage,
+      store: this.store,
+      embeddings: this.embeddings,
       options: this.options,
       governance: this.governance,
       query,
@@ -229,6 +230,6 @@ export class KnowledgeStore {
 
   /** 关闭连接并释放文件句柄，供停机与测试清理使用 */
   async close(): Promise<void> {
-    await this.storage.close();
+    await this.store.close();
   }
 }

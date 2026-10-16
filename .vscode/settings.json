@@ -1,0 +1,14 @@
+{
+  "editor.stickyScroll.enabled": true,
+  "editor.hover.sticky": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "never",
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "never"
+  },
+  "editor.formatOnSave": true,
+  "eslint.format.enable": true, // 开启后，手动格式化时才会有Eslint选项
+  "[vue]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint" // 配上后，手动格式化默认用Eslint
+  }
+}

@@ -1,8 +1,8 @@
 import type { UserRecord, UserRole, UserStatus } from './types.js';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { QueryResultRow } from 'pg';
 
 /** users 表的一行：只在 Store 内部使用，password 不随 UserRecord 出表 */
-export interface UserRow extends RowDataPacket {
+export interface UserRow extends QueryResultRow {
   id: number;
   username: string;
   password: string;
@@ -11,17 +11,17 @@ export interface UserRow extends RowDataPacket {
   created_at: Date;
 }
 
-export interface CountRow extends RowDataPacket {
+export interface CountRow extends QueryResultRow {
   total: number;
 }
 
 /** 只取昵称列的行：知识库列表按 ID 批量还原账号名，不需要完整用户字段 */
-export interface NameRow extends RowDataPacket {
+export interface NameRow extends QueryResultRow {
   id: number;
   username: string;
 }
 
-export interface StatsRow extends RowDataPacket {
+export interface StatsRow extends QueryResultRow {
   total: number;
   active: number;
   banned: number;

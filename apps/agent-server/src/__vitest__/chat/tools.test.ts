@@ -30,12 +30,15 @@ const OPTIONS = {
   embeddingEndpoint: 'http://127.0.0.1:11434',
 };
 
+/** 单测固定走嵌入式 LanceDB：工具用例与本地库绑定，不依赖 PostgreSQL（见 docs/adr/0012 阶段 3） */
+const VECTOR = { provider: 'lance' } as const;
+
 let dataDir: string;
 let store: KnowledgeStore;
 
 beforeEach(async () => {
   dataDir = fs.mkdtempSync(path.join(TEST_ROOT, 'tools-'));
-  store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS);
+  store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS, undefined, VECTOR);
   await store.add({
     title: '公共手册',
     content: '苹果和香蕉都是全局共享资料。',

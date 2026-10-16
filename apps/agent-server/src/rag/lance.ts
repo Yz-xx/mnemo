@@ -4,13 +4,19 @@ import { Field, FixedSizeList, Float32, Float64, Schema, Utf8 } from 'apache-arr
 export const DOCUMENTS_TABLE = 'documents';
 export const CHUNKS_TABLE = 'chunks';
 
-/** 文档 ID 为 UUID，按白名单校验后再拼进过滤表达式，避免注入 */
-export const DOCUMENT_ID = /^[0-9a-fA-F-]{36}$/;
+/**
+ * 可见性过滤表达式（LanceDB where 子句）：全局文档对所有人生效，
+ * 私有文档只对归属者生效。归属者 ID 为数字，不构成注入面。
+ */
+export function visibilityFilter(userId: number): string {
+  if (!Number.isInteger(userId)) throw new Error('用户 ID 非法');
+  return `(scope = 'global' OR owner_user_id = ${userId})`;
+}
 
 /**
  * 文档表结构：显式声明列类型，避免按首行数据推断类型出错
  * （owner_user_id 需要可空，数值列统一用 Float64 以免读出 BigInt）。
- * content 与 updated_at 为后补列：已存在的表由 storage 层迁移补齐，旧行值为 null
+ * content 与 updated_at 为后补列：已存在的表由适配器迁移补齐，旧行值为 null
  */
 export function documentsSchema(): Schema {
   return new Schema([

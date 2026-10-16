@@ -21,15 +21,18 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     port: 3000,
     dataDir: 'D:/data',
     log: { level: 'info', dir: 'D:/data/logs', retentionDays: 14 },
-    mysql: {
+    // 关系数据与向量库同实例：两处配置合一（见 docs/adr/0012 阶段 2）
+    postgres: {
       host: '127.0.0.1',
-      port: 3306,
-      user: 'root',
-      password: 'mysql-secret',
+      port: 5432,
+      user: 'postgres',
+      password: 'postgres-secret',
       database: 'agent_data',
+      poolMax: 10,
       queueLimit: 32,
       connectTimeoutMs: 10000,
     },
+    vectorStore: { provider: 'pgvector' },
     http: {
       headersTimeoutMs: 20000,
       requestTimeoutMs: 120000,
@@ -164,22 +167,24 @@ describe('管理端系统配置', () => {
     const serialized = JSON.stringify(view);
 
     expect(serialized).not.toContain('secret');
-    expect(view.mysql.passwordConfigured).toBe(true);
+    expect(view.postgres.passwordConfigured).toBe(true);
     expect(view.knowledge.adminTokenConfigured).toBe(true);
+    // 向量库分支只回 provider：连接明细已并入关系库一段，不再另带一份
+    expect(view.vectorStore.provider).toBe('pgvector');
     // 非密钥项照常展示，后台要能核对实际参数
     expect(view.llm.model).toBe('qwen3');
-    expect(view.mysql.database).toBe('agent_data');
+    expect(view.postgres.database).toBe('agent_data');
   });
 
   it('未填的密钥按未配置回报', () => {
     const view = describeSystemConfig(
       baseConfig({
-        mysql: { ...baseConfig().mysql, password: '' },
+        postgres: { ...baseConfig().postgres, password: '' },
         knowledge: { ...baseConfig().knowledge, adminToken: '' },
       }),
     );
 
-    expect(view.mysql.passwordConfigured).toBe(false);
+    expect(view.postgres.passwordConfigured).toBe(false);
     expect(view.knowledge.adminTokenConfigured).toBe(false);
   });
 });

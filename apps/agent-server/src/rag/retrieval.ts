@@ -1,14 +1,14 @@
+import type { KnowledgeSearchResult } from './search.js';
+import type { KnowledgeStoreOptions, KnowledgeVectorStore } from './vectorStore.js';
 import type { CircuitBreaker } from '../concurrency/circuitBreaker.js';
 import type { BoundedGate } from '../concurrency/gate.js';
 import type { MetricsRegistry } from '../observability/index.js';
-import type { KnowledgeSearchResult } from './search.js';
-import type { KnowledgeStorage, KnowledgeStoreOptions } from './storage.js';
+import type { Embeddings } from '@langchain/core/embeddings';
 import type { Logger } from '@repo/logger';
 import { CircuitOpenError } from '../concurrency/circuitBreaker.js';
 import { withTimeout } from '../concurrency/timeout.js';
+import { describeConnectionError } from '../configuration/errors.js';
 import { METRIC } from '../observability/index.js';
-import { CHUNKS_TABLE } from './lance.js';
-import { visibilityFilter } from './search.js';
 
 /**
  * 检索与向量化的治理接缝（见 docs/adr/0010 决策 11、16）：
@@ -79,39 +79,44 @@ export async function runRetrieval<T>(
   }
 }
 
-/** 检索主体：先按可见性过滤，再按余弦距离取前 topK 条 */
+/** 向量化单个查询：连接类异常翻译成含服务地址的提示，与写入路径同一口径 */
+async function embedQuery(
+  embeddings: Embeddings,
+  text: string,
+  endpoint: string,
+): Promise<number[]> {
+  try {
+    return await embeddings.embedQuery(text);
+  } catch (error) {
+    throw describeConnectionError(error, endpoint, '向量化服务');
+  }
+}
+
+/** 检索主体：先按可见性预过滤，再按余弦距离取前 topK 条 */
 async function searchChunks(input: {
-  storage: KnowledgeStorage;
+  store: KnowledgeVectorStore;
+  embeddings: Embeddings;
   options: KnowledgeStoreOptions;
   governance?: RetrievalGovernance;
   query: string;
   userId: number;
   topK?: number;
 }): Promise<KnowledgeSearchResult[]> {
-  const { storage, options, governance, query, userId, topK } = input;
-  const table = await storage.openExisting(CHUNKS_TABLE);
-  if (!table || (await table.countRows()) === 0) return [];
+  const { store, embeddings, options, governance, query, userId, topK } = input;
+  // 空库直接返回：省一次向量化，也避免把「库为空」报成向量服务故障
+  if ((await store.countChunks()) === 0) return [];
 
-  const vector = await callEmbedding(governance, () => storage.embedQuery(query));
-  await storage.assertCompatible(vector.length);
+  const vector = await callEmbedding(governance, () =>
+    embedQuery(embeddings, query, options.embeddingEndpoint),
+  );
+  await store.assertCompatible(vector.length);
 
-  const rows = await table
-    .query()
-    .nearestTo(vector)
-    .distanceType('cosine')
-    .where(visibilityFilter(userId))
-    .limit(topK ?? options.topK)
-    .toArray();
-
+  const hits = await store.searchChunks(vector, { userId, topK: topK ?? options.topK });
   // 低于相似度下限的片段属于噪声，直接丢弃；过滤后条数可能少于 topK
-  return rows
-    .map((row) => ({
-      documentId: String(row.document_id),
-      title: String(row.title),
-      content: String(row.content),
-      score: 1 - Number(row._distance),
-    }))
-    .filter((item) => item.score >= options.minScore);
+  const kept = hits.filter((hit) => hit.score >= options.minScore);
+  // 召回条数：与耗时同属治理上下文，用于回答「答非所问是知识库没命中还是模型没用上」
+  governance?.metrics?.increment(METRIC.RETRIEVAL_HITS, kept.length);
+  return kept;
 }
 
 /**
@@ -119,7 +124,8 @@ async function searchChunks(input: {
  * 返回空数组即本轮没有可用的知识库结果，调用方照常继续对话。
  */
 export async function retrieveChunks(input: {
-  storage: KnowledgeStorage;
+  store: KnowledgeVectorStore;
+  embeddings: Embeddings;
   options: KnowledgeStoreOptions;
   governance?: RetrievalGovernance;
   query: string;

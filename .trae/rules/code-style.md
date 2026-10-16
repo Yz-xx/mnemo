@@ -11,7 +11,7 @@ alwaysApply: false
 规则以配置为准，不要另立标准：
 
 - Prettier（`.prettierrc.json`）：单引号、语句末尾分号、`printWidth: 100`、`tabWidth: 2`、`trailingComma: all`、`arrowParens: always`、`endOfLine: lf`。
-- ESLint 为扁平配置（`eslint.config.js`）：`js.configs.recommended` + `typescript-eslint` recommended + `eslint-plugin-vue` flat/recommended，末尾接 `eslint-config-prettier` 关闭所有格式类规则。
+- ESLint 为扁平配置（`eslint.config.js`）：`js.configs.recommended` + `typescript-eslint` recommended + `eslint-plugin-vue` flat/recommended + `eslint-plugin-import-x`（`import-x/order` 管导入排序、`unused-imports/no-unused-imports` 管未用导入），末尾接 `eslint-config-prettier` 关闭所有格式类规则。
 - 有意忽略的参数或变量用 `_` 前缀（如 Express 错误中间件的 `_req`、`_next`），由 `argsIgnorePattern` / `varsIgnorePattern` 放行。
 - `.vue` 文件中 `no-undef` 已关闭，类型由 TS 编译器负责，不要为类型名添加 eslint 抑制注释。
 - Node 环境全局变量仅对 `scripts/**`、`apps/agent-server/**`、桌面端 `main`/`preload`、各类配置文件开放，渲染进程代码不得依赖 Node 全局。
@@ -20,7 +20,7 @@ alwaysApply: false
 ## 2. TypeScript
 
 - 导出的函数显式标注返回类型（如 `: Promise<void>`、`: void`）；一次性内部回调可省略。
-- 类型导入一律带类型标记：只导类型时用 `import type { ... }`，与值同模块混导时用行内 `type` 修饰符（如 `import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client'`）。**`import type` 行统一集中在文件最上方**，其后是值导入，按模块来源分段：Node 内置 → 第三方 → 仓库内模块（`@repo/*` 与 `@/*` 别名）→ 相对路径。顺序由 prettier 的 `@ianvs/prettier-plugin-sort-imports` 强制（`.prettierrc.json` 的 `importOrder: ["<TYPES>", "<BUILTIN_MODULES>", "<THIRD_PARTY_MODULES>", "^@repo/", "^@/", "^[.]"]`），`pnpm format` 自动修复，无需手写。
+- 类型导入一律带类型标记：只导类型时用 `import type { ... }`，与值同模块混导时用行内 `type` 修饰符（如 `import { AgentApi, isUnauthorized, type HealthInfo } from '../api/client'`）。**`import type` 行统一集中在文件最上方**（其内部由 `alphabetize` 按路径排序，不再按来源分组），其后是值导入，按模块来源分段：Node 内置 → 第三方 → 仓库内模块（`@repo/*` 与 `@/*` 别名）→ 相对路径，组内按路径大小写不敏感升序。顺序由 `eslint.config.js` 的 `import-x/order` 强制（`groups` 首项为 `type`，`@repo/*` 与 `@/*` 经 `pathGroups` 归入 `internal`），`pnpm lint:fix` 自动修复，无需手写。
 - 类型导出与导入同口径：**`export type { ... } from '...'` 统一集中在文件最上方**，其后才是值导出 `export { ... } from '...'`；聚合入口文件（`index.ts`）尤须如此。
 - 对象结构用 `interface`（如 `AppDependencies`、`ChatStreamHandlers`），联合与工具类型用 `type`。
 - 不用 `any`；外部不可信输入用 `unknown`，并在系统边界收窄。

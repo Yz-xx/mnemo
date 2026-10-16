@@ -8,6 +8,11 @@ export const METRIC = {
   DB_APPEND: 'db.appendMs',
   /** 单次知识库检索（含向量化）的耗时 */
   RETRIEVAL: 'retrieval.ms',
+  /**
+   * 知识库检索累计通过的片段数（已过 minScore 阈值）。
+   * 与 RETRIEVAL 的样本数相除即平均召回条数：回答「答非所问是知识库没命中还是模型没用上」
+   */
+  RETRIEVAL_HITS: 'retrieval.hits',
   /** 单轮模型侧总耗时：从进入本轮流式到大模型流结束 */
   LLM_ROUND: 'llm.roundMs',
   /** 连接池申请从入队到取得连接的等待时长 */

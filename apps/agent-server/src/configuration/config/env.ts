@@ -20,17 +20,33 @@ export interface LogConfig {
   retentionDays: number;
 }
 
-/** MySQL 连接参数：用户与对话记录持久化在此库中 */
-export interface MysqlConfig {
+/** 向量存储驱动：本地嵌入式 LanceDB，或 PostgreSQL 的 pgvector 扩展 */
+export type VectorStoreProvider = 'lance' | 'pgvector';
+
+/**
+ * PostgreSQL 连接参数（见 docs/adr/0012）：关系数据与知识库向量同在一个实例。
+ * 阶段 2 起关系库池与向量库池共用这一份参数，MySQL 配置随之删除。
+ */
+export interface PostgresConfig {
   host: string;
   port: number;
   user: string;
   password: string;
   database: string;
-  /** 池满后的等待队列长度上限：0 表示不排队（池满即失败），避免等待时间无界增长 */
+  /** 连接池上限：达到上限后的申请改为在应用侧排队 */
+  poolMax: number;
+  /**
+   * 排队深度上限（见 docs/adr/0012 风险 2）：pg 的池本身会无界排队，而 ADR 0010 的 P0 生存线
+   * 依赖「队满即拒绝」，故在应用侧按 MySQL `queueLimit` 的语义补上这一条
+   */
   queueLimit: number;
-  /** 建立单条连接的超时（毫秒）：MySQL 不可达时尽快失败，不让请求一直挂着 */
+  /** 建立单条连接的超时（毫秒）：PG 不可达时尽快失败 */
   connectTimeoutMs: number;
+}
+
+/** 向量存储配置：换库只动 provider 一处开关，回退即改回 lance */
+export interface VectorStoreConfig {
+  provider: VectorStoreProvider;
 }
 
 /** 上下文治理配置：窗口预算与触发比例，以及单轮工具结果的额度占比 */
@@ -134,7 +150,10 @@ export interface AppConfig {
   port: number;
   dataDir: string;
   log: LogConfig;
-  mysql: MysqlConfig;
+  /** 关系数据与知识库向量共用的 PostgreSQL 实例（见 docs/adr/0012 阶段 2） */
+  postgres: PostgresConfig;
+  /** 知识库向量存储：本地 LanceDB 或 PostgreSQL+pgvector（见 docs/adr/0012） */
+  vectorStore: VectorStoreConfig;
   /** HTTP 服务端超时与连接回收 */
   http: HttpConfig;
   /** 并发治理：分档闸门与过载兜底 */
@@ -271,16 +290,23 @@ export function loadConfig(): AppConfig {
       dir: process.env.LOG_DIR ?? path.join(dataDir, 'logs'),
       retentionDays: toNumber(process.env.LOG_RETENTION_DAYS, 14),
     },
-    mysql: {
-      host: process.env.MYSQL_HOST ?? '127.0.0.1',
-      port: toNumber(process.env.MYSQL_PORT, 3306),
-      user: process.env.MYSQL_USER ?? 'root',
+    // 关系数据与知识库向量同库（见 docs/adr/0012 阶段 2）：两份配置合一，环境变量统一为 PG_*
+    postgres: {
+      host: process.env.PG_HOST ?? '127.0.0.1',
+      port: toNumber(process.env.PG_PORT, 5432),
+      user: process.env.PG_USER ?? 'postgres',
       // 默认留空而非写死常见弱口令：宁可连接失败，也不让误部署直接用上猜到的密码
-      password: process.env.MYSQL_PASSWORD ?? '',
-      database: process.env.MYSQL_DATABASE ?? 'agent_data',
+      password: process.env.PG_PASSWORD ?? '',
+      database: process.env.PG_DATABASE ?? 'postgres',
+      // 池子不必大：读写都是短查询，池越大越容易把慢查询的影响面放大
+      poolMax: toNumber(process.env.PG_POOL_MAX, 10),
       // 池满快速失败而非无限排队：默认给一段能排完的余量
-      queueLimit: toCount(process.env.MYSQL_QUEUE_LIMIT, 32),
-      connectTimeoutMs: toNumber(process.env.MYSQL_CONNECT_TIMEOUT_MS, 10000),
+      queueLimit: toCount(process.env.PG_QUEUE_LIMIT, 32),
+      connectTimeoutMs: toNumber(process.env.PG_CONNECT_TIMEOUT_MS, 10000),
+    },
+    // 向量存储：默认走 PostgreSQL + pgvector（见 docs/adr/0012 阶段 3 下线 LanceDB）；显式配成 lance 才回退本地库
+    vectorStore: {
+      provider: process.env.VECTOR_STORE_PROVIDER === 'lance' ? 'lance' : 'pgvector',
     },
     // HTTP 超时只保证半死连接不永久占位，具体取值须由 P4 压测校准
     http: {

@@ -1,54 +1,42 @@
+import type { DbPool } from '../../db/pool.js';
 import type { MessageRole, StoredMessage } from '../types.js';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { QueryResultRow } from 'pg';
 
-interface MessageRow extends RowDataPacket {
-  /** 自增序号：BIGINT UNSIGNED 经驱动读回可能是字符串，取值处统一 Number() 收敛 */
+interface MessageRow extends QueryResultRow {
+  /** BIGINT 列：池上已注册 int8 → number 解析器，取用处仍统一 Number() 收敛 */
   seq: number | string;
   id: string;
   role: MessageRole;
   content: string;
-  /**
-   * mysql2 默认会自动解析 JSON 列为 JS 对象，因此这里可能是 string[]（已解析）
-   * 或 string（某些配置下未解析）；无工具调用时为 null
-   */
-  tools: string[] | string | null;
-  /** 同 tools，可能是已解析的 string[] 或原始字符串；无附件时为 null */
-  attachments: string[] | string | null;
+  /** jsonb 列：pg 驱动已解析为数组；无工具调用时为 null */
+  tools: string[] | null;
+  /** 同 tools，无附件时为 null */
+  attachments: string[] | null;
   /** 同 tools；无检索来源时为 null */
-  sources: string[] | string | null;
+  sources: string[] | null;
   created_at: Date;
 }
 
 /**
- * 解析 JSON 列的工具/附件数组。
- * mysql2 默认自动把 JSON 列解析为 JS 对象，此时 raw 已是数组；
- * 只有在关闭自动解析的配置下才会是字符串，需手动 JSON.parse。
- * 两种情况都要兼容，否则已入库的标签会在读取时被静默吞掉。
+ * 归一 jsonb 列的工具/附件数组。
+ * pg 驱动直接返回已解析的数组，这里只需把「空数组」收敛为 undefined——
+ * 写入侧已把空数组写成 null，但历史或人工补的数据可能留下空数组，
+ * 统一按「没有值」处理，调用方才能只判有无。
  */
-export function parseJsonArray(raw: string[] | string | null): string[] | undefined {
-  if (!raw) return undefined;
-  if (Array.isArray(raw)) return raw.length > 0 ? raw : undefined;
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? (parsed as string[]) : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
+export function toArray(raw: string[] | null): string[] | undefined {
+  return raw && raw.length > 0 ? raw : undefined;
 }
 
-/** 行转存储消息：把可能读回字符串的 BIGINT seq 收敛为数字，JSON 列经 parseJsonArray 兼容驱动解析差异 */
+/** 行转存储消息：把可能读回字符串的 BIGINT seq 收敛为数字，jsonb 列经 toArray 归一 */
 export function toStoredMessage(row: MessageRow): StoredMessage {
   return {
     seq: Number(row.seq),
     id: row.id,
     role: row.role,
     content: row.content,
-    tools: parseJsonArray(row.tools),
-    attachments: parseJsonArray(row.attachments),
-    sources: parseJsonArray(row.sources),
+    tools: toArray(row.tools),
+    attachments: toArray(row.attachments),
+    sources: toArray(row.sources),
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -57,9 +45,9 @@ export function toStoredMessage(row: MessageRow): StoredMessage {
  * 读取某会话的全部消息，按 seq 升序。
  * 会话详情（客户端）与后台核查（管理端）共用这一条查询，避免两处各写一份 SELECT 后漂移。
  */
-export async function readMessages(pool: Pool, conversationId: string): Promise<StoredMessage[]> {
-  const [rows] = await pool.execute<MessageRow[]>(
-    'SELECT seq, id, role, content, tools, attachments, sources, created_at FROM messages WHERE conversation_id = ? ORDER BY seq',
+export async function readMessages(pool: DbPool, conversationId: string): Promise<StoredMessage[]> {
+  const { rows } = await pool.query<MessageRow>(
+    'SELECT seq, id, role, content, tools, attachments, sources, created_at FROM messages WHERE conversation_id = $1 ORDER BY seq',
     [conversationId],
   );
   return rows.map(toStoredMessage);

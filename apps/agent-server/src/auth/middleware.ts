@@ -1,6 +1,6 @@
-import type { AppDependencies } from '../configuration/dependencies.js';
 import type { AdminActor } from './actor.js';
 import type { SessionStore } from './sessionStore.js';
+import type { AppDependencies } from '../configuration/dependencies.js';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
 import { ERROR_MESSAGE } from '../configuration/messages.js';

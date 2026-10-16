@@ -1,7 +1,7 @@
 import type { AppConfig } from '../configuration/config/index.js';
+import type { DbPool } from '../db/pool.js';
 import type { ConcurrencyGuard, GateSnapshot } from '../middleware/concurrencyGuard.js';
 import type { MetricsRegistry, MetricsSnapshot } from '../observability/index.js';
-import type { Pool } from 'mysql2/promise';
 import { toErrorMessage } from '@repo/shared';
 import { withTimeout } from '../concurrency/timeout.js';
 import { describeChatEndpoint, describeEmbeddingEndpoint } from '../configuration/config/index.js';
@@ -9,7 +9,7 @@ import { describeChatEndpoint, describeEmbeddingEndpoint } from '../configuratio
 /**
  * 分级健康检查（见 docs/adr/0010 决策 17）：
  * `/api/health` 只回答「进程活着」——轻量、不受闸门影响，过载时运维仍能观测；
- * 本模块支撑的 `/api/health/ready` 才探测外部依赖（MySQL / 模型 / 向量服务），并汇总闸门水位与
+ * 本模块支撑的 `/api/health/ready` 才探测外部依赖（PostgreSQL / 模型 / 向量服务），并汇总闸门水位与
  * 指标快照，用一份响应回答「现在能不能正常接活、卡在哪一环」。
  */
 
@@ -70,7 +70,7 @@ async function probe(
 /** 就绪探测入参：依赖与指标由组合根注入，时间可注入便于测试固定时间戳 */
 export interface ReadinessInput {
   config: AppConfig;
-  pool: Pool;
+  pool: DbPool;
   guard: ConcurrencyGuard;
   metrics: MetricsRegistry;
   now?: Date;
@@ -85,8 +85,8 @@ export async function describeReadiness(input: ReadinessInput): Promise<Readines
   const timeoutMs = config.observability.readinessProbeTimeoutMs;
 
   const checks = await Promise.all([
-    // MySQL：一条最省的往返即可确认连接可用（连接池自身另由 pool.* 指标观测）
-    probe('mysql', async () => void (await pool.query('SELECT 1')), timeoutMs),
+    // PostgreSQL：一条最省的往返即可确认连接可用（连接池自身另由 pool.* 指标观测）
+    probe('postgres', async () => void (await pool.query('SELECT 1')), timeoutMs),
     probe(
       'chat-model',
       () =>

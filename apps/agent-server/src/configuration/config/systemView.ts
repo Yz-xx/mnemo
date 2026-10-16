@@ -1,4 +1,10 @@
-import type { AppConfig, EmbeddingProvider, LlmProvider, LogConfig } from './env.js';
+import type {
+  AppConfig,
+  EmbeddingProvider,
+  LlmProvider,
+  LogConfig,
+  VectorStoreProvider,
+} from './env.js';
 
 /** 当前对话模型名称，用于健康检查与界面展示 */
 export function describeChatModel(config: AppConfig): string {
@@ -24,7 +30,7 @@ export function describeEmbeddingEndpoint(config: AppConfig): string {
 
 /**
  * 管理端系统配置视图：运维在后台核对运行参数用。
- * 密钥类配置（模型 API Key、MySQL 密码、知识库管理令牌）一律只回「是否已配置」，
+ * 密钥类配置（模型 API Key、PostgreSQL 密码、知识库管理令牌）一律只回「是否已配置」，
  * 明文不出服务端——后台是只读展示，没有把密钥摆回页面上的必要。
  */
 export interface AdminSystemConfig {
@@ -58,12 +64,15 @@ export interface AdminSystemConfig {
     allowedTypes: string[];
   };
   log: LogConfig;
-  mysql: {
+  postgres: {
     host: string;
     port: number;
     user: string;
     database: string;
     passwordConfigured: boolean;
+  };
+  vectorStore: {
+    provider: VectorStoreProvider;
   };
 }
 
@@ -103,12 +112,15 @@ export function describeSystemConfig(config: AppConfig): AdminSystemConfig {
       allowedTypes: config.upload.allowedTypes,
     },
     log: config.log,
-    mysql: {
-      host: config.mysql.host,
-      port: config.mysql.port,
-      user: config.mysql.user,
-      database: config.mysql.database,
-      passwordConfigured: config.mysql.password !== '',
+    postgres: {
+      host: config.postgres.host,
+      port: config.postgres.port,
+      user: config.postgres.user,
+      database: config.postgres.database,
+      passwordConfigured: config.postgres.password !== '',
+    },
+    vectorStore: {
+      provider: config.vectorStore.provider,
     },
   };
 }

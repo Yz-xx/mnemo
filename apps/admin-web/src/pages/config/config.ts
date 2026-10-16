@@ -89,12 +89,12 @@ export function useConfigPage() {
         ],
       },
       {
-        title: 'MYSQL',
+        title: 'POSTGRES',
         rows: [
-          { label: '地址', value: `${item.mysql.host}:${item.mysql.port}` },
-          { label: '账号', value: item.mysql.user },
-          { label: '数据库', value: item.mysql.database },
-          ...secretRow('密码', item.mysql.passwordConfigured),
+          { label: '地址', value: `${item.postgres.host}:${item.postgres.port}` },
+          { label: '账号', value: item.postgres.user },
+          { label: '数据库', value: item.postgres.database },
+          ...secretRow('密码', item.postgres.passwordConfigured),
         ],
       },
     ];

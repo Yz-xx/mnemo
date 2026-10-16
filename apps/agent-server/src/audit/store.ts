@@ -1,4 +1,5 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { DbPool } from '../db/pool.js';
+import type { QueryResultRow } from 'pg';
 
 /** 一条审计记录：由审计中间件在写操作响应结束时投递 */
 export interface AuditLogEntry {
@@ -32,7 +33,7 @@ export interface AuditLogPage {
   total: number;
 }
 
-interface AuditLogRow extends RowDataPacket {
+interface AuditLogRow extends QueryResultRow {
   id: number;
   actor_id: number | null;
   method: string;
@@ -42,7 +43,7 @@ interface AuditLogRow extends RowDataPacket {
   created_at: Date;
 }
 
-interface CountRow extends RowDataPacket {
+interface CountRow extends QueryResultRow {
   total: number;
 }
 
@@ -69,13 +70,13 @@ function toRecord(row: AuditLogRow): AuditLogRecord {
  * 只追加不修改；写入失败由调用方吞掉——记审计失败不该影响已经返回的响应。
  */
 export class AuditLogStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: DbPool) {}
 
   /** 追加一条审计记录 */
   async record(entry: AuditLogEntry): Promise<void> {
-    await this.pool.execute(
+    await this.pool.query(
       `INSERT INTO audit_logs (actor_id, method, path, status, detail, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [entry.actorId, entry.method, entry.path, entry.status, entry.detail, new Date()],
     );
   }
@@ -84,14 +85,16 @@ export class AuditLogStore {
   async list(query: AuditLogQuery): Promise<AuditLogPage> {
     const { keyword, page, pageSize } = query;
     // 无关键词时不拼 WHERE：与用户列表、文档列表的过滤口径一致
-    const where = keyword ? 'WHERE LOCATE(?, path) > 0' : '';
+    // strpos 免去对 % / _ 的转义；keyword 是唯一入参，故占位符序号固定为 $1
+    const where = keyword ? 'WHERE strpos(path, $1) > 0' : '';
     const params = keyword ? [keyword] : [];
-    const [countRows] = await this.pool.execute<CountRow[]>(
+    const { rows: countRows } = await this.pool.query<CountRow>(
       `SELECT COUNT(*) AS total FROM audit_logs ${where}`,
       params,
     );
-    const [rows] = await this.pool.execute<AuditLogRow[]>(
-      `SELECT ${LOG_COLUMNS} FROM audit_logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    const { rows } = await this.pool.query<AuditLogRow>(
+      `SELECT ${LOG_COLUMNS} FROM audit_logs ${where} ORDER BY id DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, (page - 1) * pageSize],
     );
     return { items: rows.map(toRecord), total: Number(countRows[0]?.total ?? 0) };

@@ -1,5 +1,5 @@
+import type { DbPool } from './db/pool.js';
 import type { Logger } from '@repo/logger';
-import type { Pool } from 'mysql2/promise';
 import { once } from 'node:events';
 import http from 'node:http';
 import { createLogger } from '@repo/logger';
@@ -19,19 +19,14 @@ import {
 } from './configuration/config/index.js';
 import { createConversationLock } from './conversation/lock.js';
 import { ConversationStore } from './conversation/store/index.js';
-import { createMysqlPool } from './db/pool.js';
+import { createDbPool } from './db/pool.js';
 import { ensureSchema } from './db/schema/index.js';
 import { FileStore } from './files/store/index.js';
 import { AgentService } from './llm/agent.js';
 import { createEmbeddings } from './llm/model.js';
 import { ApiLogStore } from './logging/store.js';
 import { createConcurrencyGuard } from './middleware/concurrencyGuard.js';
-import {
-  createMetrics,
-  METRIC,
-  monitorPool,
-  startEventLoopSampler,
-} from './observability/index.js';
+import { createMetrics, METRIC, startEventLoopSampler } from './observability/index.js';
 import { KnowledgeStore } from './rag/index.js';
 
 // 配置与日志先于其它依赖建立：建库、连接池等启动环节失败时也能留下可排查的记录
@@ -87,7 +82,7 @@ async function bootstrapSuperAdmin(
  */
 function installShutdownHandlers(
   server: http.Server,
-  pool: Pool,
+  pool: DbPool,
   knowledge: KnowledgeStore,
   apiLogs: ApiLogStore,
   stopSampling: () => void,
@@ -132,10 +127,9 @@ function installShutdownHandlers(
 /** 组合根：集中完成依赖装配，路由层只依赖抽象出来的实例 */
 async function bootstrap(): Promise<void> {
   // 首次启动时自动建库建表，随后复用同一个连接池
-  await ensureSchema(config.mysql);
-  const pool = createMysqlPool(config.mysql);
-  // 观测连接池排队与等待：池不足时先体现在等待时长与超时计数上
-  monitorPool(pool, { metrics, connectTimeoutMs: config.mysql.connectTimeoutMs });
+  await ensureSchema(config.postgres);
+  // 应用侧池在 pg 池之上补「排队深度有界」：过载时以 503 快速失败（见 docs/adr/0012 风险 2）
+  const pool = createDbPool(config.postgres, { metrics });
 
   // 接口日志改批量刷写：攒批 + 定时，替掉每请求一条 INSERT；失败告警收在 onError
   const apiLogs = new ApiLogStore(pool, {
@@ -155,17 +149,19 @@ async function bootstrap(): Promise<void> {
   const files = new FileStore(pool, config.upload.dir);
   // 知识库检索与向量化治理（见 docs/adr/0010 决策 11、16）：
   // 读路径过独立闸门并套超时、失败降级为空结果；向量服务连续失败即熔断，读写共用一份计数
+  // 存储与切分参数先抽常量：构造处的参数位只剩依赖与开关，长对象字面量不再埋没关键项
+  const knowledgeOptions = {
+    chunkSize: config.knowledge.chunkSize,
+    chunkOverlap: config.knowledge.chunkOverlap,
+    topK: config.knowledge.topK,
+    minScore: config.knowledge.minScore,
+    embeddingModel: describeEmbeddingModel(config),
+    embeddingEndpoint: describeEmbeddingEndpoint(config),
+  };
   const knowledge = new KnowledgeStore(
     config.dataDir,
     createEmbeddings(config),
-    {
-      chunkSize: config.knowledge.chunkSize,
-      chunkOverlap: config.knowledge.chunkOverlap,
-      topK: config.knowledge.topK,
-      minScore: config.knowledge.minScore,
-      embeddingModel: describeEmbeddingModel(config),
-      embeddingEndpoint: describeEmbeddingEndpoint(config),
-    },
+    knowledgeOptions,
     {
       gate: createBoundedGate(config.concurrency.retrieval, {
         logger,
@@ -181,6 +177,10 @@ async function bootstrap(): Promise<void> {
       metrics,
       logger,
     },
+    // 适配器按配置开关选（见 docs/adr/0012）：VECTOR_STORE_PROVIDER 改回 lance 即回退本地库
+    config.vectorStore,
+    // 向量库与关系库共用同一 PG 实例，连接参数一并注入（pgvector 适配器据此另建自己的池）
+    config.postgres,
   );
   // 视觉读取器用默认实现（第 4 参传 undefined 走默认值），日志与指标作为第 5、6 参注入
   const agent = new AgentService(config, knowledge, files, undefined, logger, metrics);
@@ -222,7 +222,7 @@ async function bootstrap(): Promise<void> {
       url: `http://localhost:${config.port}`,
       chatModel: `${config.llm.provider} / ${describeChatModel(config)}`,
       embeddingModel: `${config.embedding.provider} / ${describeEmbeddingModel(config)}`,
-      mysql: `${config.mysql.host}:${config.mysql.port}/${config.mysql.database}`,
+      postgres: `${config.postgres.host}:${config.postgres.port}/${config.postgres.database}`,
       dataDir: config.dataDir,
       uploadDir: config.upload.dir,
       logDir: config.log.dir,
@@ -235,7 +235,7 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((error: unknown) => {
-  // 建库失败（如 MySQL 未启动 / 密码错误）时直接退出，避免服务处于不可用状态
+  // 建库失败（如 PostgreSQL 未启动 / 密码错误）时直接退出，避免服务处于不可用状态
   logger.error('服务启动失败', { error });
   process.exitCode = 1;
 });

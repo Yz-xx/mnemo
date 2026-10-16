@@ -1,3 +1,4 @@
+import type { DbPool } from '../../db/pool.js';
 import type { MetricsRegistry } from '../../observability/index.js';
 import type {
   AppendResult,
@@ -16,8 +17,8 @@ import type {
   ConversationRow,
   ConversationStats,
 } from './mapper.js';
-import type { Pool, ResultSetHeader } from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
+import { isUuid } from '../../db/uuid.js';
 import { METRIC } from '../../observability/index.js';
 import { findConversation, listAllConversations, removeConversationById } from './admin.js';
 import { buildTitle, DEFAULT_TITLE } from './mapper.js';
@@ -25,21 +26,21 @@ import { readMessages } from './messages.js';
 import { readStats } from './stats.js';
 import { saveConversationSummary } from './summary.js';
 
-/** 会话持久化（MySQL）：所有读写都按 user_id 隔离，实现多账号数据互不可见 */
+/** 会话持久化（PostgreSQL）：所有读写都按 user_id 隔离，实现多账号数据互不可见 */
 export class ConversationStore {
   /** metrics 可选：未注入时（如单测）埋点整体短路，不影响读写行为 */
   constructor(
-    private readonly pool: Pool,
+    private readonly pool: DbPool,
     private readonly metrics?: MetricsRegistry,
   ) {}
 
   /** 按最近更新时间倒序列出该用户的会话摘要 */
   async list(userId: number): Promise<ConversationSummary[]> {
-    const [rows] = await this.pool.execute<ConversationRow[]>(
+    const { rows } = await this.pool.query<ConversationRow>(
       `SELECT c.id, c.title, c.updated_at,
               (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
          FROM conversations c
-        WHERE c.user_id = ?
+        WHERE c.user_id = $1
         ORDER BY c.updated_at DESC`,
       [userId],
     );
@@ -53,9 +54,11 @@ export class ConversationStore {
 
   /** 读取单个会话及其全部消息；不属于该用户时返回 null */
   async get(userId: number, id: string): Promise<Conversation | null> {
-    const [rows] = await this.pool.execute<ConversationDetailRow[]>(
+    // 非法 ID 不可能命中记录，直接判为不存在，也避免 uuid 列比较时抛类型错误
+    if (!isUuid(id)) return null;
+    const { rows } = await this.pool.query<ConversationDetailRow>(
       `SELECT id, title, created_at, updated_at, summary, summary_upto_seq
-         FROM conversations WHERE id = ? AND user_id = ? LIMIT 1`,
+         FROM conversations WHERE id = $1 AND user_id = $2 LIMIT 1`,
       [id, userId],
     );
     const row = rows[0];
@@ -89,8 +92,8 @@ export class ConversationStore {
       updatedAt: now.toISOString(),
       messages: [],
     };
-    await this.pool.execute(
-      'INSERT INTO conversations (id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    await this.pool.query(
+      'INSERT INTO conversations (id, user_id, title, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)',
       [conversation.id, userId, conversation.title, now, now],
     );
     return conversation;
@@ -101,9 +104,10 @@ export class ConversationStore {
    * 追加消息只需据此判断归属与是否首条提问，避免为此拉回整条会话历史。
    */
   private async readHeader(userId: number, id: string): Promise<ConversationHeader | null> {
-    const [rows] = await this.pool.execute<ConversationHeaderRow[]>(
+    if (!isUuid(id)) return null;
+    const { rows } = await this.pool.query<ConversationHeaderRow>(
       `SELECT id, title, created_at, updated_at
-         FROM conversations WHERE id = ? AND user_id = ? LIMIT 1`,
+         FROM conversations WHERE id = $1 AND user_id = $2 LIMIT 1`,
       [id, userId],
     );
     const row = rows[0];
@@ -143,9 +147,12 @@ export class ConversationStore {
     const toJson = (value: string[] | undefined): string | null =>
       value && value.length > 0 ? JSON.stringify(value) : null;
 
-    // 先入库再回填自增 seq：滚动摘要按 seq 定位截断点，缺了它未摘要段会被整段过滤掉
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      'INSERT INTO messages (id, conversation_id, role, content, tools, attachments, sources, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    // 先入库再回填自增 seq：滚动摘要按 seq 定位截断点，缺了它未摘要段会被整段过滤掉。
+    // PG 没有 insertId，改用 RETURNING 把自增 seq 随插入一并取回
+    const { rows: inserted } = await this.pool.query<{ seq: number | string }>(
+      `INSERT INTO messages (id, conversation_id, role, content, tools, attachments, sources, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING seq`,
       [
         messageId,
         header.id,
@@ -162,7 +169,7 @@ export class ConversationStore {
     const title =
       header.title === DEFAULT_TITLE && role === 'user' ? buildTitle(content) : header.title;
 
-    await this.pool.execute('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?', [
+    await this.pool.query('UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3', [
       title,
       now,
       header.id,
@@ -174,7 +181,7 @@ export class ConversationStore {
     return {
       conversation: { ...header, title, updatedAt: now.toISOString() },
       message: {
-        seq: Number(result.insertId),
+        seq: Number(inserted[0]?.seq ?? 0),
         id: messageId,
         role,
         content,
@@ -188,20 +195,20 @@ export class ConversationStore {
 
   /** 删除会话；消息通过外键级联删除 */
   async remove(userId: number, id: string): Promise<boolean> {
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      'DELETE FROM conversations WHERE id = ? AND user_id = ?',
+    if (!isUuid(id)) return false;
+    const { rowCount } = await this.pool.query(
+      'DELETE FROM conversations WHERE id = $1 AND user_id = $2',
       [id, userId],
     );
-    return result.affectedRows > 0;
+    return (rowCount ?? 0) > 0;
   }
 
   /** 删除该用户的全部对话；消息由外键级联清理 */
   async removeAllByUser(userId: number): Promise<number> {
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      'DELETE FROM conversations WHERE user_id = ?',
-      [userId],
-    );
-    return result.affectedRows;
+    const { rowCount } = await this.pool.query('DELETE FROM conversations WHERE user_id = $1', [
+      userId,
+    ]);
+    return rowCount ?? 0;
   }
 
   /** 总览统计：跨用户聚合，实现见 stats.ts；同名方法保留，路由的依赖形态不变 */

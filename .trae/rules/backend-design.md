@@ -94,8 +94,9 @@ apps/agent-server/src/
 - 查询一律参数化（`?` 占位），禁止字符串拼接 SQL；动态标识符用 `mysql.escapeId`。
 - 时间在应用层生成后写入，读取时统一转回 ISO 字符串。
 - 启动时惰性清理过期会话：事务内先删过期记录，再保留每个用户最新一条。
-- 知识库不进 MySQL，落在本地 LanceDB 目录（`data/knowledge/lancedb`）：`documents` 存元数据，`chunks` 存片段与向量；表结构显式声明（可空列、`FixedSizeList` 向量维度、数值列用 `Float64`）。
-- LanceDB 的过滤表达式只允许拼入白名单校验过的值（UUID、整数 `userId`）。
+- 知识库向量走独立适配器（`KnowledgeVectorStore`，见 docs/adr/0012）：生产默认 PostgreSQL + pgvector（`knowledge_documents` / `knowledge_chunks` 两表，向量列 `vector(N)` + HNSW 余弦索引），LanceDB 适配器保留为回退路径（`VECTOR_STORE_PROVIDER=lance`）；建表 `CREATE TABLE IF NOT EXISTS` 幂等，片段外键 `ON DELETE CASCADE` 承担级联删除。
+- 可见性过滤一律参数化：PG 侧走绑定参数（`$n`），LanceDB 侧只拼入白名单校验过的值（UUID、整数 `userId`）。
+- PG 的 `COUNT(*)` 读回字符串，适配器出口必须收敛成数字；时间列读回 `Date` 时要统一还原为 ISO 串。
 - 向量模型或维度变化时必须显式报错，不允许按较短维度截断计算相似度。
 
 ## 7. LLM 与工具

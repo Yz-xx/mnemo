@@ -10,7 +10,10 @@
     "start": "node --env-file=.env.production dist/index.js",
     "test": "vitest run",
     "mock:model": "tsx scripts/mockModel.ts",
-    "bench": "tsx scripts/bench.ts"
+    "migrate:vector": "tsx --env-file=.env.development scripts/migrateVectorStore.ts",
+    "migrate:relational": "tsx --env-file=.env.development scripts/migrateRelational.ts",
+    "bench": "tsx scripts/bench.ts",
+    "report:retrieval": "tsx --env-file=.env.development scripts/retrievalReport.ts"
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.39.0",
@@ -30,14 +33,17 @@
     "langchain": "^1.5.11",
     "mammoth": "^1.12.3",
     "multer": "^2.4.0",
-    "mysql2": "^3.24.4",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.3.289",
+    "pg": "^8.23.1",
+    "pgvector": "^0.2.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/multer": "^2.2.0",
+    "@types/pg": "^8.23.1",
+    "mysql2": "^3.24.6",
     "tsx": "^4.23.13",
     "vitest": "^3.2.7"
   }

@@ -44,7 +44,7 @@ const { errorMsg, health, loading, points, cards, uptime, updatedAt } = useOverv
         知识库{{ health.knowledgeEnabled ? '已启用' : '未启用' }}
       </span>
       <span class="overview__status-item">运行时长 {{ uptime }}</span>
-      <span class="overview__status-item">MySQL {{ health.mysql }}</span>
+      <span class="overview__status-item">PostgreSQL {{ health.postgres }}</span>
     </section>
 
     <section class="overview__block reveal" :style="{ '--reveal-index': cards.length + 2 }">

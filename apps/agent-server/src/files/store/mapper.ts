@@ -1,16 +1,16 @@
 import type { StoredFile } from './types.js';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { QueryResultRow } from 'pg';
 
 /** 管理端列表行：列集合比客户端多一个 user_id */
 interface AdminFileRow extends FileRow {
   user_id: number;
 }
 
-interface TotalRow extends RowDataPacket {
+interface TotalRow extends QueryResultRow {
   total: number;
 }
 
-interface FileRow extends RowDataPacket {
+interface FileRow extends QueryResultRow {
   id: string;
   name: string;
   ext: string;

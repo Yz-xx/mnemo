@@ -4,6 +4,7 @@ import type { SessionStore } from '../auth/sessionStore.js';
 import type { UserStore } from '../auth/userStore/index.js';
 import type { ConversationLock } from '../conversation/lock.js';
 import type { ConversationStore } from '../conversation/store/index.js';
+import type { DbPool } from '../db/pool.js';
 import type { FileStore } from '../files/store/index.js';
 import type { AgentService } from '../llm/agent.js';
 import type { ApiLogStore } from '../logging/store.js';
@@ -12,7 +13,6 @@ import type { MetricsRegistry } from '../observability/index.js';
 import type { KnowledgeStore } from '../rag/index.js';
 import type { AppConfig } from './config/index.js';
 import type { Logger } from '@repo/logger';
-import type { Pool } from 'mysql2/promise';
 
 /**
  * 应用运行期依赖集合：由组合根 index.ts 统一装配后注入路由层。
@@ -23,8 +23,8 @@ export interface AppDependencies {
   logger: Logger;
   /** 进程内指标注册表：各埋点方写入，就绪检查读取快照 */
   metrics: MetricsRegistry;
-  /** 数据库连接池：就绪检查据此探测 MySQL；池指标由 observability/poolMonitor 写入同一注册表 */
-  pool: Pool;
+  /** 数据库连接池：就绪检查据此探测 PostgreSQL；池指标由 observability/poolMonitor 写入同一注册表 */
+  pool: DbPool;
   agent: AgentService;
   /** 分档并发闸门：路由层按档取中间件挂载，过载以 503 拒绝 */
   guard: ConcurrencyGuard;

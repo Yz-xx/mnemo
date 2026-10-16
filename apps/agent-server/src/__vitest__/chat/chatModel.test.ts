@@ -8,15 +8,18 @@ const CONFIG: AppConfig = {
   port: 3000,
   dataDir: 'tmp',
   log: { level: 'error', dir: 'tmp', retentionDays: 1 },
-  mysql: {
+  // 关系数据与向量库同实例：两处配置合一（见 docs/adr/0012 阶段 2）
+  postgres: {
     host: '127.0.0.1',
-    port: 3306,
-    user: 'root',
+    port: 5432,
+    user: 'postgres',
     password: '',
     database: 'agent_data',
+    poolMax: 1,
     queueLimit: 32,
     connectTimeoutMs: 10000,
   },
+  vectorStore: { provider: 'lance' },
   http: {
     headersTimeoutMs: 20000,
     requestTimeoutMs: 120000,
