@@ -7,8 +7,8 @@ import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { encryptPassword, HTTP_STATUS } from '@repo/reusable';
 import { createHttpClient } from '@repo/shared';
-import { createPasswordCipher } from '../../auth/passwordCipher.js';
-import { createAdminAuthRouter } from '../../routes/admin/auth.js';
+import { createAdminAuthRouter } from '../../controllers/admin/auth.js';
+import { createPasswordCipher } from '../../infrastructure/auth/passwordCipher.js';
 
 /**
  * 后台登录入口的端到端回归。

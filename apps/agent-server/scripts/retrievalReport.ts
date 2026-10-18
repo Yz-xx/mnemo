@@ -17,10 +17,14 @@ import {
   describeEmbeddingModel,
   loadConfig,
 } from '../src/configuration/config/index.js';
-import { createPgPool } from '../src/db/pool.js';
-import { createEmbeddings } from '../src/llm/model.js';
-import { SEARCH_CHUNKS_SQL, SESSION_PARAMETERS, toVectorParam } from '../src/rag/pg.js';
-import { PgVectorStore } from '../src/rag/pgStore.js';
+import { createPgPool } from '../src/infrastructure/db/pool.js';
+import {
+  SEARCH_CHUNKS_SQL,
+  SESSION_PARAMETERS,
+  toVectorParam,
+} from '../src/mappers/knowledge/pg.js';
+import { PgVectorStore } from '../src/mappers/knowledge/pgStore.js';
+import { createEmbeddings } from '../src/services/llm/model.js';
 
 const ROUNDS = Number(process.env.REPORT_ROUNDS ?? 5);
 const TOP_K = 4;

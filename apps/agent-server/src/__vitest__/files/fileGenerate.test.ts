@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildDocument } from '../../files/generate.js';
-import { extractText } from '../../files/parser.js';
+import { buildDocument } from '../../infrastructure/files/generate.js';
+import { extractText } from '../../infrastructure/files/parser.js';
 
 const TITLE = '季度报告';
 const BODY = '营收增长 12%\n成本下降 3%';

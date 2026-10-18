@@ -1,7 +1,7 @@
-import type { ConversationHeader } from '../../conversation/types.js';
-import type { DbPool } from '../../db/pool.js';
+import type { ConversationHeader } from '../../entities/conversation.js';
+import type { DbPool } from '../../infrastructure/db/pool.js';
 import { describe, expect, it } from 'vitest';
-import { ConversationStore } from '../../conversation/store/index.js';
+import { ConversationStore } from '../../mappers/conversation/conversations.js';
 
 /** 合法 UUID 形态的会话 ID：会话 ID 列是 uuid，非法取值会在 Store 入口被拦下，读不到会话头 */
 const CID = '22222222-2222-4222-8222-222222222222';

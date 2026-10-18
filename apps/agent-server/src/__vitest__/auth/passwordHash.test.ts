@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashPassword, verifyPassword } from '../../auth/passwordHash.js';
+import { hashPassword, verifyPassword } from '../../infrastructure/auth/passwordHash.js';
 
 describe('口令哈希', () => {
   it('入库串带 scrypt 前缀且不含明文', () => {

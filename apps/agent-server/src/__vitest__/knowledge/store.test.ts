@@ -1,11 +1,7 @@
-import type { Connection } from '@lancedb/lancedb';
-import fs from 'node:fs';
-import path from 'node:path';
-import { connect } from '@lancedb/lancedb';
-import { Field, Float64, Schema, Utf8 } from 'apache-arrow';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { KnowledgeStore } from '../../rag/index.js';
-import { FakeEmbeddings, OfflineEmbeddings, TEST_ROOT } from '../helpers/fakeEmbeddings.js';
+import { KnowledgeStore } from '../../services/knowledge/index.js';
+import { FakeEmbeddings, OfflineEmbeddings } from '../helpers/fakeEmbeddings.js';
+import { FakeVectorStore } from '../helpers/fakeVectorStore.js';
 
 const OPTIONS = {
   chunkSize: 60,
@@ -16,23 +12,18 @@ const OPTIONS = {
   embeddingEndpoint: 'http://127.0.0.1:11434',
 };
 
-/** 单测固定走嵌入式 LanceDB：知识库行为用例与本地库绑定，不依赖 PostgreSQL（见 docs/adr/0012 阶段 3） */
-const VECTOR = { provider: 'lance' } as const;
-
-/** 旧库示例文档的固定 ID：迁移与新增两条用例共用同一份旧表 */
-const LEGACY_DOCUMENT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-
-let dataDir: string;
+// 编排层用例只验证文档业务语义，向量存储一律注入内存替身：
+// 不依赖 PostgreSQL，也不会退化成对 SQL 片段的脆弱匹配（适配器自身的 SQL 由 pgStore.test.ts 覆盖）
+let vectorStore: FakeVectorStore;
 let store: KnowledgeStore;
 
 beforeEach(() => {
-  dataDir = fs.mkdtempSync(path.join(TEST_ROOT, 'knowledge-'));
-  store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS, undefined, VECTOR);
+  vectorStore = new FakeVectorStore(OPTIONS);
+  store = new KnowledgeStore(new FakeEmbeddings(), OPTIONS, vectorStore);
 });
 
 afterEach(async () => {
   await store.close();
-  fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
 describe('KnowledgeStore', () => {
@@ -177,10 +168,9 @@ describe('KnowledgeStore', () => {
       scope: 'global',
       userId: 1,
     });
-    // 另起一个连接模拟更换向量模型：同一目录同一时间只保留一个连接
-    await store.close();
 
-    const changed = new KnowledgeStore(dataDir, new FakeEmbeddings(4), OPTIONS, undefined, VECTOR);
+    // 复用同一向量存储模拟更换向量模型：基准已登记为 3 维，写入 4 维向量应被拒
+    const changed = new KnowledgeStore(new FakeEmbeddings(4), OPTIONS, vectorStore);
     await expect(
       changed.add({
         title: '水果手册',
@@ -189,17 +179,13 @@ describe('KnowledgeStore', () => {
         userId: 1,
       }),
     ).rejects.toThrow(/向量维度不一致/);
-    await changed.close();
   });
 
   it('向量化服务不可用时提示服务地址，便于定位是否启动', async () => {
-    const offlineDir = fs.mkdtempSync(path.join(TEST_ROOT, 'knowledge-offline-'));
     const offline = new KnowledgeStore(
-      offlineDir,
       new OfflineEmbeddings(),
       OPTIONS,
-      undefined,
-      VECTOR,
+      new FakeVectorStore(OPTIONS),
     );
 
     // 连接失败只给出 "fetch failed"，提示里必须带上地址才能自查
@@ -213,7 +199,6 @@ describe('KnowledgeStore', () => {
     ).rejects.toThrow(/无法连接向量化服务 http:\/\/127\.0\.0\.1:11434/);
 
     await offline.close();
-    fs.rmSync(offlineDir, { recursive: true, force: true });
   });
 
   it('getContent 返回库内原文与元数据', async () => {
@@ -254,13 +239,9 @@ describe('KnowledgeStore', () => {
       userId: 1,
     });
 
-    // 旧库的文档行没有原文：清空 content 列模拟迁移后的旧行，读取应回退按分片拼接
-    await store.close();
-    const connection = await connect(path.join(dataDir, 'knowledge', 'lancedb'));
-    const table = await connection.openTable('documents');
-    await table.update({ where: `id = '${document.id}'`, valuesSql: { content: 'NULL' } });
-    await connection.close();
-    store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS, undefined, VECTOR);
+    // 旧库的文档行没有原文：把替身中的文档行改写为「无原文」，读取应回退按分片拼接
+    const row = await vectorStore.findDocument(document.id);
+    await vectorStore.addDocument({ ...(row ?? {}), content: '', updated_at: '' });
 
     const content = await store.getContent(document.id, { userId: 1, isAdmin: false });
     expect(content?.source).toBe('stitched');
@@ -304,15 +285,8 @@ describe('KnowledgeStore', () => {
       userId: 1,
     });
 
-    // 同一目录同一时间只保留一个连接：关掉原连接再模拟向量化服务掉线
-    await store.close();
-    const offline = new KnowledgeStore(
-      dataDir,
-      new OfflineEmbeddings(),
-      OPTIONS,
-      undefined,
-      VECTOR,
-    );
+    // 换成掉线的向量化服务：写入路径在动库之前先向量化，失败时库内数据保持原样
+    const offline = new KnowledgeStore(new OfflineEmbeddings(), OPTIONS, vectorStore);
     await expect(
       offline.replace(
         document.id,
@@ -322,7 +296,6 @@ describe('KnowledgeStore', () => {
     ).rejects.toThrow(/无法连接向量化服务/);
     await offline.close();
 
-    store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS, undefined, VECTOR);
     const content = await store.getContent(document.id, { userId: 1, isAdmin: false });
     expect(content?.content).toBe('苹果是一种常见水果。');
     const [hit] = await store.search('苹果', { userId: 1 });
@@ -351,75 +324,5 @@ describe('KnowledgeStore', () => {
         { userId: 1, isAdmin: true },
       ),
     ).resolves.toBe(null);
-  });
-
-  /** 模拟功能上线前的旧库：documents 表按旧 schema 建出（无 content/updated_at 后补列）并写入一行 */
-  async function createLegacyDocumentsTable(): Promise<void> {
-    const connection: Connection = await connect(path.join(dataDir, 'knowledge', 'lancedb'));
-    await connection.createEmptyTable(
-      'documents',
-      new Schema([
-        new Field('id', new Utf8(), false),
-        new Field('title', new Utf8(), false),
-        new Field('scope', new Utf8(), false),
-        new Field('owner_user_id', new Float64(), true),
-        new Field('chunks', new Float64(), false),
-        new Field('embedding_model', new Utf8(), false),
-        new Field('dim', new Float64(), false),
-        new Field('created_at', new Utf8(), false),
-      ]),
-    );
-    const documents = await connection.openTable('documents');
-    await documents.add([
-      {
-        id: LEGACY_DOCUMENT_ID,
-        title: '旧手册',
-        scope: 'global',
-        owner_user_id: null,
-        chunks: 1,
-        embedding_model: 'fake-embedding',
-        dim: 3,
-        created_at: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
-    await connection.close();
-  }
-
-  it('旧表缺列时编辑触发补列迁移，迁移后留存原文可读', async () => {
-    await store.close();
-    await createLegacyDocumentsTable();
-    store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS, undefined, VECTOR);
-
-    // 编辑走写入路径：旧表缺列时迁移补列必须在动库前正常完成
-    const updated = await store.replace(
-      LEGACY_DOCUMENT_ID,
-      { title: '新手册', content: '香蕉是热带水果。' },
-      { userId: 2, isAdmin: true },
-    );
-    expect(updated?.title).toBe('新手册');
-
-    const content = await store.getContent(LEGACY_DOCUMENT_ID, { userId: 1, isAdmin: false });
-    expect(content?.source).toBe('raw');
-    expect(content?.content).toBe('香蕉是热带水果。');
-  });
-
-  it('旧表补列后新增文档仍可入库：未编辑的 updated_at 落空串而非 null', async () => {
-    await store.close();
-    await createLegacyDocumentsTable();
-    store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS, undefined, VECTOR);
-
-    // 新增走 add：updated_at 语义为「从未编辑」，而补列由 addColumns 生成、被 Lance 记为
-    // non-nullable，写 null 会让整批写入失败，因此必须落成空串哨兵
-    const document = await store.add({
-      title: '浏览器渲染原理',
-      content: '浏览器渲染分为解析、布局、绘制等阶段。',
-      scope: 'global',
-      userId: 7,
-    });
-
-    const content = await store.getContent(document.id, { userId: 7, isAdmin: false });
-    expect(content?.source).toBe('raw');
-    expect(content?.updatedAt).toBe(null);
-    await expect(store.list(7)).resolves.toHaveLength(2);
   });
 });

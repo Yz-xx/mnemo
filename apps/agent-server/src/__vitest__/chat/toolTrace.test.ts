@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ToolTrace } from '../../llm/toolTrace.js';
+import { ToolTrace } from '../../services/llm/toolTrace.js';
 
 /**
  * 测试夹具：工具名与标签由调用方从工具定义注入，

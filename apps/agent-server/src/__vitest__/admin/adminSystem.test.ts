@@ -1,10 +1,10 @@
 import type { AppConfig } from '../../configuration/config/index.js';
-import type { FileSource } from '../../llm/tools/index.js';
-import type { KnowledgeStore } from '../../rag/index.js';
+import type { KnowledgeStore } from '../../services/knowledge/index.js';
+import type { FileSource } from '../../services/llm/tools/index.js';
 import { describe, expect, it } from 'vitest';
 import { describeSystemConfig } from '../../configuration/config/index.js';
-import { createTools, describeTools } from '../../llm/tools/index.js';
-import { DISABLED_VISION } from '../../llm/vision.js';
+import { createTools, describeTools } from '../../services/llm/tools/index.js';
+import { DISABLED_VISION } from '../../services/llm/vision.js';
 import { PASSTHROUGH_PARSE } from '../helpers/fakeParse.js';
 
 /** 组装工具只读这些依赖的构造参数，不调用它们：给空替身即可 */
@@ -32,7 +32,6 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       queueLimit: 32,
       connectTimeoutMs: 10000,
     },
-    vectorStore: { provider: 'pgvector' },
     http: {
       headersTimeoutMs: 20000,
       requestTimeoutMs: 120000,
@@ -169,8 +168,6 @@ describe('管理端系统配置', () => {
     expect(serialized).not.toContain('secret');
     expect(view.postgres.passwordConfigured).toBe(true);
     expect(view.knowledge.adminTokenConfigured).toBe(true);
-    // 向量库分支只回 provider：连接明细已并入关系库一段，不再另带一份
-    expect(view.vectorStore.provider).toBe('pgvector');
     // 非密钥项照常展示，后台要能核对实际参数
     expect(view.llm.model).toBe('qwen3');
     expect(view.postgres.database).toBe('agent_data');

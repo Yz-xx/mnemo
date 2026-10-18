@@ -1,6 +1,9 @@
 import type { AppConfig, GateConfig } from '../../configuration/config/index.js';
 import { describe, expect, it } from 'vitest';
-import { ParseGovernance, ParseOverloadedError } from '../../files/parseGovernance.js';
+import {
+  ParseGovernance,
+  ParseOverloadedError,
+} from '../../infrastructure/files/parseGovernance.js';
 
 /** 只填解析闸门会读取的字段：本组用例关注水位与降级，不需要完整配置 */
 function makeGovernance(parse: GateConfig): ParseGovernance {

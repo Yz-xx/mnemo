@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createToolBudget, estimateTextTokens, truncateToTokens } from '../../llm/context/index.js';
+import {
+  createToolBudget,
+  estimateTextTokens,
+  truncateToTokens,
+} from '../../services/llm/context/index.js';
 
 /** 造一段非 ASCII 文本：每字符 1 token，于是 token 数与字符数相等，断言可直接按长度推算 */
 const wide = (tokens: number): string => '中'.repeat(tokens);

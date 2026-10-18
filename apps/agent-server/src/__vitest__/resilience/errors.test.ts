@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeConnectionError } from '../../configuration/errors.js';
+import { describeConnectionError } from '../../common/errors.js';
 
 describe('连接类错误翻译', () => {
   const target = 'ollama（http://127.0.0.1:11434，模型 qwen3）';

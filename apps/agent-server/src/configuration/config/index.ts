@@ -11,11 +11,9 @@ export type {
   LogConfig,
   ObservabilityConfig,
   PostgresConfig,
-  VectorStoreConfig,
-  VectorStoreProvider,
-} from './env.js';
+} from './env/index.js';
 export type { AdminSystemConfig } from './systemView.js';
-export { SERVICE_NAME, loadConfig } from './env.js';
+export { SERVICE_NAME, loadConfig } from './env/index.js';
 export {
   describeChatEndpoint,
   describeChatModel,

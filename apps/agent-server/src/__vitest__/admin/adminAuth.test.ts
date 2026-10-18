@@ -1,12 +1,13 @@
-import type { AdminActor } from '../../auth/actor.js';
-import type { SessionStore } from '../../auth/sessionStore.js';
-import type { UserRecord, UserStore } from '../../auth/userStore/index.js';
 import type { AppConfig } from '../../configuration/config/index.js';
+import type { UserRecord } from '../../entities/user.js';
+import type { AdminActor } from '../../infrastructure/auth/actor.js';
+import type { SessionStore } from '../../mappers/session.js';
+import type { UserStore } from '../../mappers/user/store.js';
 import type { Request, Response } from 'express';
 import { describe, expect, it } from 'vitest';
 import { HTTP_STATUS } from '@repo/reusable';
-import { createRequireAdmin } from '../../auth/middleware.js';
-import { ERROR_MESSAGE } from '../../configuration/messages.js';
+import { ERROR_MESSAGE } from '../../common/messages.js';
+import { createRequireAdmin } from '../../middleware/auth.js';
 
 const ADMIN_TOKEN = 'ops-secret';
 

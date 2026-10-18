@@ -1,10 +1,10 @@
 # AI 智能体桌面应用（my-monorepo）
 
-一个可本地运行的 AI 智能体应用：**Electron 桌面端**负责交互，**Express + LangChain 后端**负责推理与工具调用，账号与对话记录持久化在 **MySQL**，并内置一套 **LanceDB 向量知识库**（全局共享 + 用户私有）。整个仓库由 pnpm workspace 统一管理，一条命令即可拉起全链路。
+一个可本地运行的 AI 智能体应用：**Electron 桌面端**负责交互，**Express + LangChain 后端**负责推理与工具调用，账号与对话记录持久化在 **PostgreSQL**，并内置一套 **pgvector 向量知识库**（全局共享 + 用户私有）。整个仓库由 pnpm workspace 统一管理，一条命令即可拉起全链路。
 
 - 桌面端：Electron 44 + Vue 3 + TypeScript + Less（electron-vite 构建）
-- 后端：Express 5 + LangChain 1.x（`@langchain/ollama` / `@langchain/openai`）+ zod + mysql2
-- 存储：MySQL 保存用户、登录会话与对话记录；知识库为本地 LanceDB 向量库
+- 后端：Express 5 + LangChain 1.x（`@langchain/ollama` / `@langchain/openai`）+ zod + pg
+- 存储：PostgreSQL 保存用户、登录会话与对话记录；知识库向量走同一 PostgreSQL 实例的 pgvector 扩展
 - 账号：注册 / 登录 / 登出，密码经 RSA-OAEP 加密传输、`scrypt` 加盐哈希入库，接口以 Bearer 令牌鉴权；账号与端绑定（客户端 / 管理后台），后台角色分超管与管理员两级，取舍见 [ADR 0006](./docs/adr/0006-account-isolation-and-admin-hierarchy.md)
 - 文档：支持上传 docx / xlsx / pdf / 图片附件，可理解图片（本地多模态模型），并按需导出 docx / xlsx / pdf
 - 模型：默认本地 Ollama（`qwen3` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
@@ -38,7 +38,7 @@ my-monorepo/
 │   │   │   │   ├── actor.ts          # 管理端身份与超管判据
 │   │   │   │   └── middleware.ts     # Bearer 令牌鉴权中间件
 │   │   │   ├── db/
-│   │   │   │   ├── pool.ts           # mysql2 连接池
+│   │   │   │   ├── pool.ts           # PostgreSQL 连接池
 │   │   │   │   └── schema/           # 启动自动建库建表（tables / columns / roles 按关注点分文件）
 │   │   │   ├── llm/
 │   │   │   │   ├── model.ts          # 对话模型 / 向量模型工厂
@@ -51,8 +51,8 @@ my-monorepo/
 │   │   │   │   ├── type.ts           # magic bytes 判定上传类型
 │   │   │   │   ├── parser.ts         # 正文解析（docx / xlsx / pdf）
 │   │   │   │   └── generate.ts       # 导出生成（docx / xlsx / pdf）
-│   │   │   ├── rag/                  # 知识库：切分 + 向量化 + LanceDB 近邻检索（按关注点分文件）
-│   │   │   ├── conversation/store/   # 会话与消息持久化（MySQL，按用户隔离，按关注点分文件）
+│   │   │   ├── rag/                  # 知识库：切分 + 向量化 + pgvector 近邻检索（按关注点分文件）
+│   │   │   ├── conversation/store/   # 会话与消息持久化（PostgreSQL，按用户隔离，按关注点分文件）
 │   │   │   ├── services/
 │   │   │   │   ├── chatStream.ts     # SSE 流式回复编排（推送事件 + 落库）
 │   │   │   │   └── knowledge.ts      # 文档入库编排（计时 + 日志）
@@ -60,7 +60,7 @@ my-monorepo/
 │   │   │   └── __vitest__/           # 单元测试（vitest 运行，不参与编译）
 │   │   ├── .env.development          # 开发环境配置（pnpm dev 加载）
 │   │   ├── .env.production           # 生产环境配置（pnpm start 加载）
-│   │   └── data/                     # 运行时数据（LanceDB 向量库，已被 gitignore）
+│   │   └── data/                     # 运行时数据（上传文件等，已被 gitignore）
 │   ├── agent-client/         # Electron 桌面端
 │   │   └── src/
 │   │       ├── main/                 # 主进程：index.ts 只留生命周期，其余按职责分模块
@@ -122,10 +122,10 @@ my-monorepo/
 │                          │        calculator                                │
 │                          └ 流式：streamMode = 'messages'                    │
 │                                    │                                        │
-│           KnowledgeStore（LanceDB 向量近邻检索）  UserStore / SessionStore / │
+│          KnowledgeStore（pgvector 向量近邻检索）  UserStore / SessionStore / │
 │                       ↓                          ConversationStore           │
-│              data/knowledge/lancedb                        ↓               │
-│                                                    MySQL（agent_data）      │
+│              PostgreSQL + pgvector                         ↓               │
+│                                                    PostgreSQL（agent_data） │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -151,7 +151,7 @@ my-monorepo/
 
 | 文档                                                             | 内容范围                                                                                               |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [apps/agent-server/README.md](./apps/agent-server/README.md)     | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、LanceDB 知识库、会话持久化、配置项与构建       |
+| [apps/agent-server/README.md](./apps/agent-server/README.md)     | 后端接口与鉴权、账号与数据表、SSE 协议、智能体与工具层、pgvector 知识库、会话持久化、配置项与构建      |
 | [apps/agent-client/README.md](./apps/agent-client/README.md)     | 三层结构与 IPC、渲染进程状态流、登录门禁、主题与防闪烁、Less 样式体系、界面组成、构建打包与视觉验证    |
 | [apps/admin-web/README.md](./apps/admin-web/README.md)           | 后台管理网站的目录结构、技术选型取舍、鉴权与登录态、接口清单、页面与组件、样式令牌、开发构建与后续模块 |
 | [packages/shared/README.md](./packages/shared/README.md)         | 通用工具库的导出索引（字符串 / 通用函数 / 字节与时间格式化）、引用方式与构建                           |
@@ -199,7 +199,7 @@ pnpm --filter @repo/agent-client run dev     # electron-vite dev
 pnpm --filter @repo/admin-web run dev         # vite dev，默认 5173，/api 代理到 3000
 ```
 
-前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 MySQL 8 与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)；后台管理网站还需运行中的后端与一个后台侧账号——空库首次启动时由 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 自举超管（未配置则启动告警），之后后台账号只能由超管在用户管理里创建，见 [apps/admin-web/README.md](./apps/admin-web/README.md)。
+前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 PostgreSQL（含 pgvector 扩展）与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)；后台管理网站还需运行中的后端与一个后台侧账号——空库首次启动时由 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 自举超管（未配置则启动告警），之后后台账号只能由超管在用户管理里创建，见 [apps/admin-web/README.md](./apps/admin-web/README.md)。
 
 质量校验：
 

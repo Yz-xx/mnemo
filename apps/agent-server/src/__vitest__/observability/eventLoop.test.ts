@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { monitorEventLoopDelay } = vi.hoisted(() => ({ monitorEventLoopDelay: vi.fn() }));
 vi.mock('node:perf_hooks', () => ({ monitorEventLoopDelay }));
 
-const { startEventLoopSampler } = await import('../../observability/eventLoop.js');
+const { startEventLoopSampler } = await import('../../infrastructure/observability/eventLoop.js');
 
 /** 假直方图：percentile 按传入分位返回纳秒值，便于验证换算 */
 function fakeHistogram(nanos: Record<number, number>, maxNanos: number) {

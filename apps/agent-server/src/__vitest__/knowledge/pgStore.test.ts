@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { describe, expect, it } from 'vitest';
-import { SESSION_PARAMETERS } from '../../rag/pg.js';
-import { PgVectorStore } from '../../rag/pgStore.js';
+import { SESSION_PARAMETERS } from '../../mappers/knowledge/pg.js';
+import { PgVectorStore } from '../../mappers/knowledge/pgStore.js';
 
 const OPTIONS = {
   chunkSize: 60,

@@ -1,9 +1,9 @@
 import type { AppConfig } from '../../configuration/config/index.js';
-import type { DbPool } from '../../db/pool.js';
+import type { DbPool } from '../../infrastructure/db/pool.js';
 import type { ConcurrencyGuard } from '../../middleware/concurrencyGuard.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMetrics } from '../../observability/index.js';
-import { describeReadiness } from '../../services/readiness.js';
+import { createMetrics } from '../../infrastructure/observability/index.js';
+import { describeReadiness } from '../../services/health/readiness.js';
 
 /** 只填就绪检查会读取的字段：用例关注探测分支，不需要完整配置 */
 function configWith(input: {

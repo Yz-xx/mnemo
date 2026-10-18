@@ -1,12 +1,13 @@
 import type { AppConfig } from '../../configuration/config/index.js';
-import type { FileStore, StoredFile } from '../../files/store/index.js';
-import type { VisionReader } from '../../llm/vision.js';
-import type { KnowledgeStore } from '../../rag/index.js';
+import type { StoredFile } from '../../entities/file.js';
+import type { FileStore } from '../../mappers/file/fileStore.js';
+import type { KnowledgeStore } from '../../services/knowledge/index.js';
+import type { VisionReader } from '../../services/llm/vision.js';
 import type { BaseMessage, ToolCallChunk } from '@langchain/core/messages';
 import type { AgentStreamEvent } from '@repo/reusable';
 import { AIMessageChunk, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AgentService } from '../../llm/agent.js';
+import { AgentService } from '../../services/llm/agent.js';
 
 /**
  * 捕获 createAgent 收到的对话消息：把真实 agent 换成只记录入参的替身，
@@ -48,7 +49,6 @@ const CONFIG: AppConfig = {
     queueLimit: 32,
     connectTimeoutMs: 10000,
   },
-  vectorStore: { provider: 'lance' },
   http: {
     headersTimeoutMs: 20000,
     requestTimeoutMs: 120000,

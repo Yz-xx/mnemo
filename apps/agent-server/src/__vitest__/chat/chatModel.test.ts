@@ -1,7 +1,7 @@
 import type { AppConfig } from '../../configuration/config/index.js';
 import { ChatOllama } from '@langchain/ollama';
 import { describe, expect, it } from 'vitest';
-import { createChatModel } from '../../llm/model.js';
+import { createChatModel } from '../../services/llm/model.js';
 
 /** 只读 llm / ollama / deepseek 三段，其余字段给占位值即可 */
 const CONFIG: AppConfig = {
@@ -19,7 +19,6 @@ const CONFIG: AppConfig = {
     queueLimit: 32,
     connectTimeoutMs: 10000,
   },
-  vectorStore: { provider: 'lance' },
   http: {
     headersTimeoutMs: 20000,
     requestTimeoutMs: 120000,

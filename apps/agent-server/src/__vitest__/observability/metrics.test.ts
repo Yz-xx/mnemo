@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMetrics } from '../../observability/index.js';
+import { createMetrics } from '../../infrastructure/observability/index.js';
 
 describe('createMetrics', () => {
   it('累加计数与覆盖式计量各自独立存放', () => {

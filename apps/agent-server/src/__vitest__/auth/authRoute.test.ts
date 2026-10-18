@@ -7,8 +7,8 @@ import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { encryptPassword, HTTP_STATUS } from '@repo/reusable';
 import { createHttpClient } from '@repo/shared';
-import { createPasswordCipher } from '../../auth/passwordCipher.js';
-import { createAuthRouter } from '../../routes/client/auth.js';
+import { createAuthRouter } from '../../controllers/client/auth.js';
+import { createPasswordCipher } from '../../infrastructure/auth/passwordCipher.js';
 
 /**
  * 登录口令传输的端到端回归。

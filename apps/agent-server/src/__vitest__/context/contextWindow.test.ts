@@ -1,7 +1,7 @@
-import type { StoredMessage } from '../../conversation/types.js';
+import type { StoredMessage } from '../../entities/conversation.js';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
-import { assembleContext, selectRecentWindow } from '../../llm/context/index.js';
+import { assembleContext, selectRecentWindow } from '../../services/llm/context/index.js';
 
 const CREATED_AT = '2026-10-08T00:00:00.000Z';
 

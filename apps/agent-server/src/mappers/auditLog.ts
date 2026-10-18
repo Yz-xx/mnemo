@@ -1,0 +1,76 @@
+import type {
+  AuditLogEntry,
+  AuditLogPage,
+  AuditLogQuery,
+  AuditLogRecord,
+} from '../entities/auditLog.js';
+import type { DbPool } from '../infrastructure/db/pool.js';
+import type { QueryResultRow } from 'pg';
+
+interface AuditLogRow extends QueryResultRow {
+  id: number;
+  actor_id: number | null;
+  method: string;
+  path: string;
+  status: number;
+  detail: string | null;
+  created_at: Date;
+}
+
+interface CountRow extends QueryResultRow {
+  total: number;
+}
+
+/** 列集合显式列出：不用 SELECT *，以免补列后行对象的键悄悄变化 */
+const LOG_COLUMNS = 'id, actor_id, method, path, status, detail, created_at';
+
+/** 行转审计记录：蛇形列名映射为驼峰字段，创建时间统一转 ISO 字符串 */
+function toRecord(row: AuditLogRow): AuditLogRecord {
+  return {
+    id: Number(row.id),
+    actorId: row.actor_id === null ? null : Number(row.actor_id),
+    method: row.method,
+    path: row.path,
+    status: Number(row.status),
+    detail: row.detail,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+/**
+ * 管理端写操作审计：由审计中间件投递，管理端按路径检索。
+ * 与接口日志的分工是「范围」而非「内容」——这里只留管理端的写入动作及其操作人，
+ * 不记读操作与普通用户请求，运维回溯变更时不必在一堆 GET 里翻找。
+ * 只追加不修改；写入失败由调用方吞掉——记审计失败不该影响已经返回的响应。
+ */
+export class AuditLogStore {
+  constructor(private readonly pool: DbPool) {}
+
+  /** 追加一条审计记录 */
+  async record(entry: AuditLogEntry): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO audit_logs (actor_id, method, path, status, detail, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [entry.actorId, entry.method, entry.path, entry.status, entry.detail, new Date()],
+    );
+  }
+
+  /** 管理端列表：按路径关键词过滤 + 分页；按序号倒序，等价于时间倒序且走主键索引 */
+  async list(query: AuditLogQuery): Promise<AuditLogPage> {
+    const { keyword, page, pageSize } = query;
+    // 无关键词时不拼 WHERE：与用户列表、文档列表的过滤口径一致
+    // strpos 免去对 % / _ 的转义；keyword 是唯一入参，故占位符序号固定为 $1
+    const where = keyword ? 'WHERE strpos(path, $1) > 0' : '';
+    const params = keyword ? [keyword] : [];
+    const { rows: countRows } = await this.pool.query<CountRow>(
+      `SELECT COUNT(*) AS total FROM audit_logs ${where}`,
+      params,
+    );
+    const { rows } = await this.pool.query<AuditLogRow>(
+      `SELECT ${LOG_COLUMNS} FROM audit_logs ${where} ORDER BY id DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, (page - 1) * pageSize],
+    );
+    return { items: rows.map(toRecord), total: Number(countRows[0]?.total ?? 0) };
+  }
+}

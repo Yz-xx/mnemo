@@ -1,5 +1,5 @@
 ---
-description: apps/agent-server 的设计规范，涵盖分层结构与依赖方向、组合根与依赖注入、路由与鉴权、SSE 流式对话协议、MySQL 数据层与错误码约定。新增或修改后端接口、服务、数据层与中间件时遵守。
+description: apps/agent-server 的设计规范，涵盖分层结构与依赖方向、组合根与依赖注入、路由与鉴权、SSE 流式对话协议、PostgreSQL 数据层与错误码约定。新增或修改后端接口、服务、数据层与中间件时遵守。
 globs: apps/agent-server/**
 alwaysApply: false
 ---
@@ -10,44 +10,45 @@ alwaysApply: false
 
 ```text
 apps/agent-server/src/
-├── index.ts          组合根：读配置 → 建库表 → 建连接池 → 装配 Store/Service → createApp → listen
+├── index.ts          组合根：读配置 → 建库表 → 建连接池 → 装配 mapper/service → createApp → listen
 ├── app.ts            createApp：仅"通用中间件 → 注册路由 → 错误兜底"三段骨架
-├── configuration/    config/（env 读取、默认值与运行视图）、dependencies.ts、errors.ts、messages.ts
+├── controllers/      接口层：client/ 客户端接口、admin/ 管理端接口；index.ts 注册前缀与鉴权
+├── services/         业务逻辑层：跨路由编排与领域逻辑；按业务领域分 admin/、conversation/、health/、knowledge/、llm/、logging/ 六个目录，无同域伙伴的领域平铺
+├── mappers/          数据操作层：按领域分文件，只做 SQL 读写与行映射
+├── entities/         实体层：跨层共享的数据形状（纯类型定义，无行为）
+├── configuration/    config/（env 读取、默认值与运行视图）、dependencies.ts
+├── infrastructure/   auth/、concurrency/、db/、files/、observability/、lifecycle.ts
+├── common/           errors.ts、messages.ts
+├── utils/            pagination.ts、batchIds.ts、uuid.ts
 ├── middleware/       cors.ts、requestLog.ts、adminAudit.ts、upload.ts、errorHandler.ts
-├── routes/           client/ 客户端接口、admin/ 管理端接口；index.ts 注册前缀与鉴权，pagination.ts 为共用工具
-├── services/         跨路由的编排逻辑
-├── auth/             userStore/（用户表读写与角色定义）、actor、sessionStore、sessionUser、middleware、credentials
-├── conversation/     会话与消息持久化；store/ 下按关注点分文件
-├── llm/              agent、model、prompt、vision；tools/ 下按关注点分文件
-├── rag/              知识库存储与检索，按关注点分文件
-├── files/            附件解析、导出与存储
-├── audit/ logging/   操作审计与接口日志存储
-├── db/               pool.ts、schema/（tables / columns / roles）
 └── __vitest__/       单元测试（不参与编译产物）
 ```
 
-- 依赖方向单向：`routes → services → store/llm/db`，下层不得反向 import 上层。
-- `routes/` 下**不导出 Router 的纯工具**（如 `pagination.ts`）被多个路由 import 属复用，不算横向依赖；判据是「这个文件是否导出了 Router」。
-- 依赖一律显式注入：`AppDependencies` 定义在 `dependencies.ts`，路由只 import 该类型，不反向依赖 `app.ts`。
+- 依赖方向单向：`controllers → services → mappers → entities`，下层不得反向 import 上层；`infrastructure/`、`common/`、`utils/`、`middleware/` 是各层共用的底座，可被四层依赖。
+- **分层纪律**：controllers 不得 import mappers（用 grep 可查），数据读写一律经 service 转手；service 不 import express 的 `req` / `res`，HTTP 细节留在控制器。
+- `utils/` 下**不导出 Router 的纯工具**（如 `pagination.ts`）被多个控制器 import 属复用，不算横向依赖；判据是「这个文件是否导出了 Router」。
+- 依赖一律显式注入：`AppDependencies` 定义在 `configuration/dependencies.ts`，控制器只 import 该类型，不反向依赖 `app.ts`。
 - 模块内不 import 单例、不直接读 `process.env`，配置只经 `configuration/config` 获取。
 - 新增依赖项时同步 `AppDependencies` 与 `index.ts` 的装配代码。
 
 ### 文件与目录组织
 
 - **`src/` 下源码模块单文件上限 250 行**（含注释）；`__vitest__/` 用例按被测模块组织，不受此限。超限按关注点拆进同名子目录，子目录的 `index.ts` 只做聚合导出。
-- 父目录原本只有这一个文件时直接平铺，不建同名子目录（如 `rag/store.ts` 拆出的文件落在 `rag/` 下）；父目录已有其他模块并存时子目录才有区分意义（如 `llm/tools/`、`configuration/config/`、`conversation/store/`）。
+- 父目录原本只有这一个文件时直接平铺，不建同名子目录（如 `services/knowledge/store.ts` 拆出的文件落在 `services/knowledge/` 下）；父目录已有其他模块并存时子目录才有区分意义（如 `services/llm/tools/`、`services/llm/context/`、`configuration/config/`、`mappers/conversation/`、`mappers/knowledge/`、`mappers/apiLog/`）。
+- `services/` 下的模块另按**业务领域**归类收进子目录（`admin/`、`conversation/`、`health/`、`knowledge/`、`llm/`、`logging/`），这是**归类**而非拆分；没有同域伙伴的领域保持平铺（`auth.ts`、`files.ts`），不为单个文件建夹。
 - 拆分以「关注点」为单位，抽走可独立成模块的辅助函数与类型定义；**不把一个 class 切成多个互相转发的 class**。
-- `routes/` 按访问者分层：客户端接口进 `routes/client/`，管理端进 `routes/admin/`，一个模块一个文件，模块内部只写相对路径；根目录只留 `index.ts`（注册表）与 `pagination.ts`（两端共用纯工具）。
+- `controllers/` 按访问者分层：客户端接口进 `controllers/client/`，管理端进 `controllers/admin/`，一个模块一个文件，模块内部只写相对路径；根目录只留 `index.ts`（注册表）。
 - 管理端各模块**各自挂一遍 `adminGuard`**，并把更具体的路径登记在 `/api/admin` 之前，避免同一次请求重复鉴权与审计。
-- 目录导入在 NodeNext 下必须写全：`../routes/admin/users.js`、`./rag/index.js`。
+- 目录导入在 NodeNext 下必须写全：`../controllers/admin/users.js`、`./services/knowledge/index.js`。
 
 ## 2. 新增接口的标准动作
 
-1. 在 `routes/client/<name>.ts`（管理端为 `routes/admin/<name>.ts`）导出 `create<Name>Router(deps)` 工厂，路由体内只做参数校验、状态码与调用下层，不写业务编排。工厂签名用 `Pick<AppDependencies, 'a' | 'b'>` 只声明本模块真正用到的依赖。
-2. 在 `routes/index.ts` 追加一行 `app.use('/api/<name>', [requireAuth,] create<Name>Router(...))`。**挂载前缀与模块内路径只能有一处写模块名**：挂在 `/api/admin/logs` 的模块内部就写 `/` 与 `/:id`，两处都写会拼出 `/api/admin/logs/logs` 这类 404 路径。
-3. 鉴权策略在 `registerRoutes` 集中声明，不在单个路由内部重复校验。
-4. 需要新能力时先在 `services/` 或对应领域目录实现，再在路由调用。
-5. 补 `src/__vitest__/` 用例。
+1. 在 `controllers/client/<name>.ts`（管理端为 `controllers/admin/<name>.ts`）导出 `create<Name>Router(deps)` 工厂，路由体内只做参数校验、状态码与调用 service，不写业务编排，也不直连 mapper。工厂签名用 `Pick<AppDependencies, 'a' | 'b'>` 只声明本模块真正用到的依赖。
+2. 业务编排写在 `services/<name>.ts`（领域内聚时放 `services/<domain>/<name>.ts`），service 只依赖 mapper 与 entities，不 import express 的 `req` / `res`；多个控制器共用同一份编排时提取为 service，避免各自复制。
+3. 数据读写写在 `mappers/<name>.ts`（或 `mappers/<domain>/<name>.ts`），只做 SQL 与行映射、不做业务判断；跨层共享的数据形状放 `entities/<name>.ts`。
+4. 在 `controllers/index.ts` 追加一行 `app.use('/api/<name>', [requireAuth,] create<Name>Router(...))`。**挂载前缀与模块内路径只能有一处写模块名**：挂在 `/api/admin/logs` 的模块内部就写 `/` 与 `/:id`，两处都写会拼出 `/api/admin/logs/logs` 这类 404 路径。
+5. 鉴权策略在 `registerRoutes` 集中声明，不在单个控制器内部重复校验。
+6. 补 `src/__vitest__/` 用例。
 
 ## 3. HTTP 约定
 
@@ -73,7 +74,7 @@ apps/agent-server/src/
 
 ## 5. SSE 流式对话
 
-- 编排集中在 `services/chatStream.ts` 的 `streamChatReply()`：落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话；`routes/chat.ts` 只负责参数校验（400）与会话归属校验（404）。
+- 编排集中在 `services/conversation/chatStream.ts` 的 `streamChatReply()`：落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话；`controllers/client/chat.ts` 只负责参数校验（400）与会话归属校验（404）。
 - 落库提问必须在 `flushHeaders()` 之前完成，落库失败才能按普通请求返回 500。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
 - 事件格式 `data: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `file` / `context` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
@@ -87,25 +88,24 @@ apps/agent-server/src/
 ## 6. 数据层
 
 - 消息元数据（`tools` / `attachments` / `sources`）与正文分开成列随消息一起落库，空值写 `null` 而非 `[]`，切换历史会话时按原样回读即可还原标签。
-- 使用 `mysql2/promise`；连接池由 `db/pool.ts` 创建，建库建表由 `db/schema/` 的 `ensureDatabase` / `ensureTables` 负责，存量表补列由 `ensureColumns` 负责，存量角色迁移由 `migrateUserRoles` 负责，`ensureSchema` 作为启动编排入口。
+- 使用 `pg`（连接池由 `infrastructure/db/pool.ts` 创建）；建库建表由 `infrastructure/db/schema/` 的 `ensureDatabase` / `ensureTables` 负责，存量角色迁移由 `migrateUserRoles` 负责，`ensureSchema` 作为启动编排入口。
 - 建表语句全部 `CREATE TABLE IF NOT EXISTS`，可重复执行；字符集 utf8mb4，时间列用 `DATETIME(3)`，必要处建联合索引与级联外键。
-- `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表，新增列必须在 `ensureColumns` 里做条件迁移（先查 `information_schema` 判断列是否存在，再决定是否 `ALTER`），整段必须幂等。
-- 查 `information_schema` 时**必须给列起别名**（`SELECT column_name AS name`）：结果对象的键跟着大写定义名走，按小写 `column_name` 取值恒为 `undefined`，会把「列已存在」误判成「不存在」进而重复 `ALTER` 报 `Duplicate column name`。
-- 查询一律参数化（`?` 占位），禁止字符串拼接 SQL；动态标识符用 `mysql.escapeId`。
+- `CREATE TABLE IF NOT EXISTS` 不会修改已存在的表；新增列直接写进建表语句即可（PG 的 `ADD COLUMN IF NOT EXISTS` 让建表自身幂等），无需旧版那套「查 `information_schema` 再条件补列」的逻辑（原 `columns.ts` 已随之删除，见 docs/adr/0012 B4）。
+- 查询一律参数化（`$n` 绑定参数），禁止字符串拼接 SQL；动态标识符（库名 / 表名）经白名单校验后拼入，不引入通用转义。
 - 时间在应用层生成后写入，读取时统一转回 ISO 字符串。
 - 启动时惰性清理过期会话：事务内先删过期记录，再保留每个用户最新一条。
-- 知识库向量走独立适配器（`KnowledgeVectorStore`，见 docs/adr/0012）：生产默认 PostgreSQL + pgvector（`knowledge_documents` / `knowledge_chunks` 两表，向量列 `vector(N)` + HNSW 余弦索引），LanceDB 适配器保留为回退路径（`VECTOR_STORE_PROVIDER=lance`）；建表 `CREATE TABLE IF NOT EXISTS` 幂等，片段外键 `ON DELETE CASCADE` 承担级联删除。
-- 可见性过滤一律参数化：PG 侧走绑定参数（`$n`），LanceDB 侧只拼入白名单校验过的值（UUID、整数 `userId`）。
+- 知识库向量走独立适配器（`KnowledgeVectorStore`，见 docs/adr/0012）：只有 PostgreSQL + pgvector 一个适配器（`PgVectorStore`，`knowledge_documents` / `knowledge_chunks` 两表，向量列 `vector(N)` + HNSW 余弦索引）；建表 `CREATE TABLE IF NOT EXISTS` 幂等，片段外键 `ON DELETE CASCADE` 承担级联删除。
+- 可见性过滤一律走绑定参数（`$n`），不拼接字符串。
 - PG 的 `COUNT(*)` 读回字符串，适配器出口必须收敛成数字；时间列读回 `Date` 时要统一还原为 ISO 串。
 - 向量模型或维度变化时必须显式报错，不允许按较短维度截断计算相似度。
 
 ## 7. LLM 与工具
 
-- 智能体由 `createAgent` + `streamMode: 'messages'` 构建，系统提示词统一维护在 `llm/prompt.ts`。
-- 工具实现在 `llm/tools/`（按关注点分文件），必须自校验入参并在非法时抛出中文错误；知识库检索按调用者可见性过滤，结果需带「来源」标注。
+- 智能体由 `createAgent` + `streamMode: 'messages'` 构建，系统提示词统一维护在 `services/llm/prompt.ts`。
+- 工具实现在 `services/llm/tools/`（按关注点分文件），必须自校验入参并在非法时抛出中文错误；知识库检索按调用者可见性过滤，结果需带「来源」标注。
 - 模型与嵌入 provider 由 `configuration/config/` 决定（deepseek 走 `ChatOpenAI`，其余走 `ChatOllama`），业务代码不做 provider 判断。
-- 文件类工具（`list_files` / `read_file` / `write_file`）只认本轮附件：附件 ID 由路由层校验后经 `configurable.fileIds` 注入。
-- 图片附件交给 `llm/vision.ts` 的视觉模型转述成文字后再回填对话模型；未配置视觉模型时必须返回可读提示，不允许模型凭文件名猜测。
+- 文件类工具（`list_files` / `read_file` / `write_file`）只认本轮附件：附件 ID 由控制器层校验后经 `configurable.fileIds` 注入。
+- 图片附件交给 `services/llm/vision.ts` 的视觉模型转述成文字后再回填对话模型；未配置视觉模型时必须返回可读提示，不允许模型凭文件名猜测。
 - 本轮附件在作答前由 `AgentService` 预读成文本注入对话（图片走视觉模型、其余走解析器），`read_file` 退为复核手段——不要依赖模型自行决定是否调用读文件工具。
 - 网络类异常统一转成可读提示（如 `fetch failed` → 「无法连接对话模型服务」）。
 
@@ -144,7 +144,7 @@ apps/agent-server/src/
 ## 11. 自检清单
 
 - `pnpm --filter @repo/agent-server run test` 与 `run build` 通过。
-- 新接口已登记到 `routes/index.ts`，鉴权策略与所属前缀正确。
+- 新接口已登记到 `controllers/index.ts`，鉴权策略与所属前缀正确。
 - 错误响应为中文文案且状态码符合第 3 章的约定。
 - 状态码取自 `HTTP_STATUS`、固定文案取自 `ERROR_MESSAGE`，未新增字面量数字与手抄文案。
 - 涉及 SQL 的改动全部参数化并带 `user_id` 过滤。

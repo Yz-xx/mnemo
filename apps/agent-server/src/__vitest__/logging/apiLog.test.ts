@@ -1,7 +1,8 @@
-import type { DbPool } from '../../db/pool.js';
-import type { ApiLogEntry } from '../../logging/store.js';
+import type { ApiLogEntry } from '../../entities/apiLog.js';
+import type { DbPool } from '../../infrastructure/db/pool.js';
 import { describe, expect, it } from 'vitest';
-import { ApiLogStore, buildFilters } from '../../logging/store.js';
+import { buildFilters } from '../../mappers/apiLog/query.js';
+import { ApiLogStore } from '../../mappers/apiLog/store.js';
 
 /** 一条最小日志：批量用例只关心落库时机与批次行数，字段给齐即可 */
 function entry(requestId: string): ApiLogEntry {

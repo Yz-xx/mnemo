@@ -3,7 +3,7 @@ import {
   describeAddFailure,
   describeUpdateFailure,
   parseDocumentInput,
-} from '../../services/knowledge.js';
+} from '../../services/knowledge/index.js';
 
 describe('文档入库入参整理', () => {
   it('内容缺失或全为空白时判为非法，并给出可读提示', () => {

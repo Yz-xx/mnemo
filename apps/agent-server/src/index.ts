@@ -1,15 +1,6 @@
-import type { DbPool } from './db/pool.js';
-import type { Logger } from '@repo/logger';
-import { once } from 'node:events';
 import http from 'node:http';
 import { createLogger } from '@repo/logger';
 import { createApp } from './app.js';
-import { AuditLogStore } from './audit/store.js';
-import { createPasswordCipher } from './auth/passwordCipher.js';
-import { SessionStore } from './auth/sessionStore.js';
-import { UserStore } from './auth/userStore/index.js';
-import { createCircuitBreaker } from './concurrency/circuitBreaker.js';
-import { createBoundedGate } from './concurrency/gate.js';
 import {
   describeChatModel,
   describeEmbeddingEndpoint,
@@ -17,17 +8,30 @@ import {
   loadConfig,
   SERVICE_NAME,
 } from './configuration/config/index.js';
-import { createConversationLock } from './conversation/lock.js';
-import { ConversationStore } from './conversation/store/index.js';
-import { createDbPool } from './db/pool.js';
-import { ensureSchema } from './db/schema/index.js';
-import { FileStore } from './files/store/index.js';
-import { AgentService } from './llm/agent.js';
-import { createEmbeddings } from './llm/model.js';
-import { ApiLogStore } from './logging/store.js';
+import { createPasswordCipher } from './infrastructure/auth/passwordCipher.js';
+import { createCircuitBreaker } from './infrastructure/concurrency/circuitBreaker.js';
+import { createBoundedGate } from './infrastructure/concurrency/gate.js';
+import { createConversationLock } from './infrastructure/concurrency/lock.js';
+import { createDbPool, createPgPool } from './infrastructure/db/pool.js';
+import { ensureSchema } from './infrastructure/db/schema/index.js';
+import { installShutdownHandlers } from './infrastructure/lifecycle.js';
+import {
+  createMetrics,
+  METRIC,
+  startEventLoopSampler,
+} from './infrastructure/observability/index.js';
+import { ApiLogStore } from './mappers/apiLog/store.js';
+import { AuditLogStore } from './mappers/auditLog.js';
+import { ConversationStore } from './mappers/conversation/conversations.js';
+import { FileStore } from './mappers/file/fileStore.js';
+import { PgVectorStore } from './mappers/knowledge/pgStore.js';
+import { SessionStore } from './mappers/session.js';
+import { UserStore } from './mappers/user/store.js';
 import { createConcurrencyGuard } from './middleware/concurrencyGuard.js';
-import { createMetrics, METRIC, startEventLoopSampler } from './observability/index.js';
-import { KnowledgeStore } from './rag/index.js';
+import { bootstrapSuperAdmin } from './services/admin/adminBootstrap.js';
+import { KnowledgeStore } from './services/knowledge/index.js';
+import { AgentService } from './services/llm/agent.js';
+import { createEmbeddings } from './services/llm/model.js';
 
 // 配置与日志先于其它依赖建立：建库、连接池等启动环节失败时也能留下可排查的记录
 const config = loadConfig();
@@ -50,79 +54,6 @@ const stopEventLoopSampler = startEventLoopSampler({
     metrics.gauge(METRIC.EVENT_LOOP_MAX, sample.maxMs);
   },
 });
-
-/**
- * 超管自举：仅当库中没有任何后台侧账号时创建一枚超管（已存在则原样跳过，不覆盖）。
- * 未配置凭据时告警而非静默跳过——否则新库部署完才发现没人能进管理后台（见 docs/adr/0006）。
- */
-async function bootstrapSuperAdmin(
-  users: UserStore,
-  credentials: { username: string; password: string },
-  logger: Logger,
-): Promise<void> {
-  if (!credentials.username || !credentials.password) {
-    logger.warn('未配置初始超管凭据，跳过自举；库中若无后台账号将进不去管理后台', {
-      hint: '需设置 INITIAL_ADMIN_USERNAME 与 INITIAL_ADMIN_PASSWORD',
-    });
-    return;
-  }
-  const result = await users.ensureSuperAdmin(credentials.username, credentials.password);
-  if (result === 'created') {
-    logger.info('已创建初始超级管理员', { username: credentials.username });
-  } else if (result === 'username-taken') {
-    logger.error('超管自举失败：用户名已被客户端账号占用', { username: credentials.username });
-  }
-}
-
-/**
- * 运行期兜底与优雅停机。
- * - 崩溃：未捕获的异常与拒绝记一条日志后退出，交由进程守护重启，不让进程带着未知状态继续对外服务；
- * - 停机：先停止接单、断开空闲 keep-alive 连接，等在途请求收尾（超过宽限即强制断开），
- *   最后关闭数据库连接池、向量库连接并停止指标采样。停机因此比现在慢，等待上限由 SHUTDOWN_GRACE_MS 约定。
- */
-function installShutdownHandlers(
-  server: http.Server,
-  pool: DbPool,
-  knowledge: KnowledgeStore,
-  apiLogs: ApiLogStore,
-  stopSampling: () => void,
-): void {
-  let stopping = false;
-
-  /** 优雅停机：置位后停止接单、等在途请求收尾，再关池并停采样；重复触发直接返回 */
-  const shutdown = async (reason: string): Promise<void> => {
-    if (stopping) return;
-    stopping = true;
-    logger.info('开始优雅停机', { reason, graceMs: config.concurrency.shutdownGraceMs });
-    server.close();
-    server.closeIdleConnections();
-    // 宽限到点仍未收尾的连接直接断开，避免停机无限期挂住
-    const forceTimer = setTimeout(() => {
-      logger.warn('停机宽限已到，强制断开剩余连接');
-      server.closeAllConnections();
-    }, config.concurrency.shutdownGraceMs);
-    await once(server, 'close');
-    clearTimeout(forceTimer);
-    // 在途响应已收尾、finish 回调也已入队：此时刷空缓冲，确保停机前日志落尽
-    await apiLogs.flush();
-    // 再关掉对外连接并停止指标采样
-    await pool.end();
-    await knowledge.close();
-    stopSampling();
-    logger.info('已停机', { reason });
-  };
-
-  process.on('SIGTERM', () => void shutdown('SIGTERM'));
-  process.on('SIGINT', () => void shutdown('SIGINT'));
-  process.on('unhandledRejection', (reason) => {
-    logger.error('未处理的 Promise 拒绝，进程即将退出', { error: reason });
-    process.exit(1);
-  });
-  process.on('uncaughtException', (error) => {
-    logger.error('未捕获异常，进程即将退出', { error });
-    process.exit(1);
-  });
-}
 
 /** 组合根：集中完成依赖装配，路由层只依赖抽象出来的实例 */
 async function bootstrap(): Promise<void> {
@@ -159,9 +90,11 @@ async function bootstrap(): Promise<void> {
     embeddingEndpoint: describeEmbeddingEndpoint(config),
   };
   const knowledge = new KnowledgeStore(
-    config.dataDir,
     createEmbeddings(config),
     knowledgeOptions,
+    // 向量存储适配器：向量库与关系库共用同一 PG 实例，但另建一张池——
+    // 向量库要按连接装载 hnsw 会话参数，与关系库池隔离才不会互相污染会话态（见 docs/adr/0012）
+    new PgVectorStore(createPgPool(config.postgres), knowledgeOptions),
     {
       gate: createBoundedGate(config.concurrency.retrieval, {
         logger,
@@ -177,10 +110,6 @@ async function bootstrap(): Promise<void> {
       metrics,
       logger,
     },
-    // 适配器按配置开关选（见 docs/adr/0012）：VECTOR_STORE_PROVIDER 改回 lance 即回退本地库
-    config.vectorStore,
-    // 向量库与关系库共用同一 PG 实例，连接参数一并注入（pgvector 适配器据此另建自己的池）
-    config.postgres,
   );
   // 视觉读取器用默认实现（第 4 参传 undefined 走默认值），日志与指标作为第 5、6 参注入
   const agent = new AgentService(config, knowledge, files, undefined, logger, metrics);
@@ -231,7 +160,15 @@ async function bootstrap(): Promise<void> {
     if (prunedSessions > 0) logger.info('已清理历史登录会话', { count: prunedSessions });
   });
 
-  installShutdownHandlers(server, pool, knowledge, apiLogs, stopEventLoopSampler);
+  installShutdownHandlers({
+    server,
+    flushApiLogs: () => apiLogs.flush(),
+    closePool: () => pool.end(),
+    closeKnowledge: () => knowledge.close(),
+    stopSampling: stopEventLoopSampler,
+    graceMs: config.concurrency.shutdownGraceMs,
+    logger,
+  });
 }
 
 bootstrap().catch((error: unknown) => {

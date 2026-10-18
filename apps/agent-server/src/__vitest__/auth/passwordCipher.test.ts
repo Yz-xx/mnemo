@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPasswordCipher } from '../../auth/passwordCipher.js';
+import { createPasswordCipher } from '../../infrastructure/auth/passwordCipher.js';
 
 describe('口令传输密文', () => {
   const cipher = createPasswordCipher();

@@ -1,12 +1,12 @@
 import type { AppConfig, GateConfig } from '../../configuration/config/index.js';
-import type { FileStore } from '../../files/store/index.js';
-import type { KnowledgeStore } from '../../rag/index.js';
+import type { FileStore } from '../../mappers/file/fileStore.js';
+import type { KnowledgeStore } from '../../services/knowledge/index.js';
 import { HumanMessage } from '@langchain/core/messages';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CircuitOpenError } from '../../concurrency/circuitBreaker.js';
-import { AgentService } from '../../llm/agent.js';
-import { ModelOverloadedError } from '../../llm/modelGovernance.js';
-import { DISABLED_VISION } from '../../llm/vision.js';
+import { CircuitOpenError } from '../../infrastructure/concurrency/circuitBreaker.js';
+import { AgentService } from '../../services/llm/agent.js';
+import { ModelOverloadedError } from '../../services/llm/modelGovernance.js';
+import { DISABLED_VISION } from '../../services/llm/vision.js';
 
 /**
  * 替身开关：hold 让模型调用挂住（用来占住额度），fail 让模型调用直接失败（用来喂熔断）；
@@ -41,7 +41,7 @@ vi.mock('langchain', async (importOriginal) => {
   };
 });
 
-vi.mock('../../llm/model.js', () => ({
+vi.mock('../../services/llm/model.js', () => ({
   // 摘要走 model.invoke：同样可挂住，用来占住摘要闸门
   createChatModel: () => ({
     invoke: () =>

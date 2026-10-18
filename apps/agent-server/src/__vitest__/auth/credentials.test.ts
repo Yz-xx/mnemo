@@ -1,6 +1,6 @@
-import type { PasswordCipher } from '../../auth/passwordCipher.js';
+import type { PasswordCipher } from '../../infrastructure/auth/passwordCipher.js';
 import { describe, expect, it } from 'vitest';
-import { parseCredentials } from '../../auth/credentials.js';
+import { parseCredentials } from '../../infrastructure/auth/credentials.js';
 
 /** 替身：`enc:` 前缀视为可解密的密文，其余一律判为解不开（模拟密文被篡改） */
 const cipher: PasswordCipher = {

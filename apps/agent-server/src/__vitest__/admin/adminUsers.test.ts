@@ -1,13 +1,14 @@
-import type { AdminActor } from '../../auth/actor.js';
-import type { UserPatch, UserRecord, UserStore } from '../../auth/userStore/index.js';
-import type { AdminUserDeps } from '../../services/adminUsers.js';
+import type { UserPatch, UserRecord } from '../../entities/user.js';
+import type { AdminActor } from '../../infrastructure/auth/actor.js';
+import type { UserStore } from '../../mappers/user/store.js';
+import type { AdminUserDeps } from '../../services/admin/adminUsers.js';
 import { describe, expect, it } from 'vitest';
 import {
   removeUser,
   removeUsers,
   updateUser,
   updateUsersStatus,
-} from '../../services/adminUsers.js';
+} from '../../services/admin/adminUsers.js';
 
 const SELF = 1;
 const OTHER = 2;

@@ -1,6 +1,6 @@
-import type { DbPool } from '../../db/pool.js';
+import type { DbPool } from '../../infrastructure/db/pool.js';
 import { describe, expect, it } from 'vitest';
-import { UserStore } from '../../auth/userStore/index.js';
+import { UserStore } from '../../mappers/user/store.js';
 
 /**
  * 超管自举的回归：只在库里没有任何后台侧账号时创建，已有则原样跳过。

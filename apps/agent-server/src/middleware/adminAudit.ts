@@ -1,7 +1,7 @@
-import type { AuditLogStore } from '../audit/store.js';
+import type { AuditLogStore } from '../mappers/auditLog.js';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { currentAdmin } from '../auth/middleware.js';
-import { hasContent, summarize } from '../logging/summarize.js';
+import { hasContent, summarize } from '../mappers/apiLog/summarize.js';
+import { currentAdmin } from './auth.js';
 import { requestLogger } from './requestLog.js';
 
 /** 需要留档的写方法：读操作不记，否则审计页会被 GET 淹没 */

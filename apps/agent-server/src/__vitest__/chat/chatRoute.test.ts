@@ -1,5 +1,4 @@
 import type { AppConfig } from '../../configuration/config/index.js';
-import type { ConversationStore } from '../../conversation/store/index.js';
 import type {
   AppendResult,
   Conversation,
@@ -8,9 +7,11 @@ import type {
   MessageMeta,
   MessageRole,
   StoredMessage,
-} from '../../conversation/types.js';
-import type { FileStore, StoredFile } from '../../files/store/index.js';
-import type { AgentService } from '../../llm/agent.js';
+} from '../../entities/conversation.js';
+import type { StoredFile } from '../../entities/file.js';
+import type { ConversationStore } from '../../mappers/conversation/conversations.js';
+import type { FileStore } from '../../mappers/file/fileStore.js';
+import type { AgentService } from '../../services/llm/agent.js';
 import type { Logger } from '@repo/logger';
 import type { AgentStreamEvent, ChatStreamEvent } from '@repo/reusable';
 import type { Request, Response } from 'express';
@@ -19,12 +20,12 @@ import { SystemMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '@repo/logger';
 import { HTTP_STATUS } from '@repo/reusable';
-import { ConversationBusyError } from '../../conversation/lock.js';
-import { handleChatMessage } from '../../routes/client/chat.js';
+import { handleChatMessage } from '../../controllers/client/chat.js';
+import { ConversationBusyError } from '../../infrastructure/concurrency/lock.js';
 
 const USER_ID = 1;
 
-/** 内存版会话存储：替代真实 MySQL，只实现路由层会调用的方法 */
+/** 内存版会话存储：替代真实 PostgreSQL，只实现路由层会调用的方法 */
 class FakeConversations {
   private readonly records = new Map<string, Conversation>();
 

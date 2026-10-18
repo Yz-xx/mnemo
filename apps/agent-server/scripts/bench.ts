@@ -14,7 +14,7 @@
  * 可调环境变量：BENCH_BASE_URL / BENCH_CONCURRENCY / BENCH_REQUESTS / BENCH_CRUD_REQUESTS
  */
 import process from 'node:process';
-import { METRIC } from '../src/observability/metricNames.js';
+import { METRIC } from '../src/infrastructure/observability/metricNames.js';
 
 const BASE_URL = (process.env.BENCH_BASE_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const CONCURRENCY = Number(process.env.BENCH_CONCURRENCY ?? 8);

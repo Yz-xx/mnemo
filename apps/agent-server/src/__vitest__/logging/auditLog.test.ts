@@ -1,5 +1,6 @@
-import type { AuditLogEntry, AuditLogStore } from '../../audit/store.js';
-import type { AdminActor } from '../../auth/actor.js';
+import type { AuditLogEntry } from '../../entities/auditLog.js';
+import type { AdminActor } from '../../infrastructure/auth/actor.js';
+import type { AuditLogStore } from '../../mappers/auditLog.js';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';

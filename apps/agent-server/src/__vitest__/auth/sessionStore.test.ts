@@ -1,6 +1,6 @@
-import type { DbPool } from '../../db/pool.js';
+import type { DbPool } from '../../infrastructure/db/pool.js';
 import { describe, expect, it } from 'vitest';
-import { SessionStore } from '../../auth/sessionStore.js';
+import { SessionStore } from '../../mappers/session.js';
 
 /** 会话行：与 user_sessions 的读取列一致 */
 interface FakeSession {

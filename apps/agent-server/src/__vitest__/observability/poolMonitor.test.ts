@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { createMetrics, METRIC, monitorPool } from '../../observability/index.js';
+import { createMetrics, METRIC, monitorPool } from '../../infrastructure/observability/index.js';
 
 /**
  * 假连接池：pg 只 emit `acquire`，没有与 `enqueue` 配对的事件，

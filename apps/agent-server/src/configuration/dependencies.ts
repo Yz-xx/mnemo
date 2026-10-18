@@ -1,17 +1,17 @@
-import type { AuditLogStore } from '../audit/store.js';
-import type { PasswordCipher } from '../auth/passwordCipher.js';
-import type { SessionStore } from '../auth/sessionStore.js';
-import type { UserStore } from '../auth/userStore/index.js';
-import type { ConversationLock } from '../conversation/lock.js';
-import type { ConversationStore } from '../conversation/store/index.js';
-import type { DbPool } from '../db/pool.js';
-import type { FileStore } from '../files/store/index.js';
-import type { AgentService } from '../llm/agent.js';
-import type { ApiLogStore } from '../logging/store.js';
-import type { ConcurrencyGuard } from '../middleware/concurrencyGuard.js';
-import type { MetricsRegistry } from '../observability/index.js';
-import type { KnowledgeStore } from '../rag/index.js';
 import type { AppConfig } from './config/index.js';
+import type { PasswordCipher } from '../infrastructure/auth/passwordCipher.js';
+import type { ConversationLock } from '../infrastructure/concurrency/lock.js';
+import type { DbPool } from '../infrastructure/db/pool.js';
+import type { MetricsRegistry } from '../infrastructure/observability/index.js';
+import type { ApiLogStore } from '../mappers/apiLog/store.js';
+import type { AuditLogStore } from '../mappers/auditLog.js';
+import type { ConversationStore } from '../mappers/conversation/conversations.js';
+import type { FileStore } from '../mappers/file/fileStore.js';
+import type { SessionStore } from '../mappers/session.js';
+import type { UserStore } from '../mappers/user/store.js';
+import type { ConcurrencyGuard } from '../middleware/concurrencyGuard.js';
+import type { KnowledgeStore } from '../services/knowledge/index.js';
+import type { AgentService } from '../services/llm/agent.js';
 import type { Logger } from '@repo/logger';
 
 /**

@@ -18,7 +18,7 @@ alwaysApply: true
 ```text
 my-monorepo/
 ├── apps/
-│   ├── agent-server/  Express 5 + LangChain 智能体服务（MySQL 持久化）
+│   ├── agent-server/  Express 5 + LangChain 智能体服务（PostgreSQL 持久化）
 │   ├── agent-client/  Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
 │   └── admin-web/     后台管理网站（Vue 3 + Vite + TypeScript，自建 UI 组件）
 ├── packages/

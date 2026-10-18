@@ -1,13 +1,14 @@
 import type { AppConfig } from '../../configuration/config/index.js';
-import type { FileStore, StreamedUpload } from '../../files/store/index.js';
+import type { StreamedUpload } from '../../entities/file.js';
+import type { FileStore } from '../../mappers/file/fileStore.js';
 import type { Request, Response } from 'express';
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HTTP_STATUS } from '@repo/reusable';
-import { detectUploadType, detectUploadTypeFromFile } from '../../files/type.js';
-import { handleUploadFile } from '../../routes/client/files.js';
+import { handleUploadFile } from '../../controllers/client/files.js';
+import { detectUploadType, detectUploadTypeFromFile } from '../../infrastructure/files/type.js';
 import { TEST_ROOT } from '../helpers/fakeEmbeddings.js';
 
 /** 最小 PNG 文件头：magic bytes 前 8 字节 + IHDR 块标识，足以判定为图片 */
@@ -37,7 +38,7 @@ function writeTempFile(name: string, content: Buffer): string {
   return filePath;
 }
 
-/** 内存版文件存储：替代真实落盘与 MySQL，只实现上传链路会调用的方法 */
+/** 内存版文件存储：替代真实落盘与 PostgreSQL，只实现上传链路会调用的方法 */
 class FakeFiles {
   readonly saved: (StreamedUpload & { bytes: Buffer })[] = [];
 

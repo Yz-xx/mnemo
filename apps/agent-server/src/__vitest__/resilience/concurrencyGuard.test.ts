@@ -5,7 +5,7 @@ import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import { HTTP_STATUS } from '@repo/reusable';
-import { retryAfterSeconds } from '../../concurrency/gate.js';
+import { retryAfterSeconds } from '../../infrastructure/concurrency/gate.js';
 import { createConcurrencyGuard } from '../../middleware/concurrencyGuard.js';
 
 /** 假响应：闸门只用到 close/finish 事件与几个写出方法，这里给最小实现 */

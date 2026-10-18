@@ -1,16 +1,16 @@
 import type { ContextConfig } from '../../configuration/config/index.js';
-import type { StoredMessage } from '../../conversation/types.js';
-import type { Summarizer } from '../../llm/context/index.js';
+import type { StoredMessage } from '../../entities/conversation.js';
+import type { Summarizer } from '../../services/llm/context/index.js';
 import { SystemMessage } from '@langchain/core/messages';
 import { describe, expect, it, vi } from 'vitest';
+import { governContext } from '../../services/conversation/contextGovernance.js';
 import {
   assembleContext,
   buildSummaryPrompt,
   normalizeSummary,
   planContext,
   SUMMARY_MAX_TOKENS,
-} from '../../llm/context/index.js';
-import { governContext } from '../../services/contextGovernance.js';
+} from '../../services/llm/context/index.js';
 
 /** 窗口预算 100：触发阈值 70，触发后保留预算 40 */
 const CONFIG: ContextConfig = {

@@ -1,6 +1,9 @@
 import type { Logger } from '@repo/logger';
 import { describe, expect, it } from 'vitest';
-import { CircuitOpenError, createCircuitBreaker } from '../../concurrency/circuitBreaker.js';
+import {
+  CircuitOpenError,
+  createCircuitBreaker,
+} from '../../infrastructure/concurrency/circuitBreaker.js';
 
 /** 静默日志替身：熔断开合会记 info / warn，用例不关心日志内容 */
 const logger = { info: () => undefined, warn: () => undefined } as unknown as Logger;

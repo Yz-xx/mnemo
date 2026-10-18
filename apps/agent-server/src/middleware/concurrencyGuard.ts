@@ -1,10 +1,10 @@
-import type { BoundedGate } from '../concurrency/gate.js';
 import type { ConcurrencyConfig } from '../configuration/config/index.js';
+import type { BoundedGate } from '../infrastructure/concurrency/gate.js';
 import type { Logger } from '@repo/logger';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { HTTP_STATUS } from '@repo/reusable';
-import { createBoundedGate, retryAfterSeconds } from '../concurrency/gate.js';
-import { ERROR_MESSAGE } from '../configuration/messages.js';
+import { ERROR_MESSAGE } from '../common/messages.js';
+import { createBoundedGate, retryAfterSeconds } from '../infrastructure/concurrency/gate.js';
 
 /**
  * 闸门档位：健康检查不入闸门（过载时必须永远可答），其余三类各占一份配额。

@@ -1,11 +1,17 @@
-import type { RetrievalGovernance } from '../../rag/retrieval.js';
-import type { KnowledgeStoreOptions, KnowledgeVectorStore } from '../../rag/vectorStore.js';
+import type {
+  KnowledgeStoreOptions,
+  KnowledgeVectorStore,
+} from '../../mappers/knowledge/vectorStore.js';
+import type { RetrievalGovernance } from '../../services/knowledge/retrieval.js';
 import type { Logger } from '@repo/logger';
 import { describe, expect, it } from 'vitest';
-import { CircuitOpenError, createCircuitBreaker } from '../../concurrency/circuitBreaker.js';
-import { createBoundedGate } from '../../concurrency/gate.js';
-import { createMetrics, METRIC } from '../../observability/index.js';
-import { callEmbedding, retrieveChunks, runRetrieval } from '../../rag/retrieval.js';
+import {
+  CircuitOpenError,
+  createCircuitBreaker,
+} from '../../infrastructure/concurrency/circuitBreaker.js';
+import { createBoundedGate } from '../../infrastructure/concurrency/gate.js';
+import { createMetrics, METRIC } from '../../infrastructure/observability/index.js';
+import { callEmbedding, retrieveChunks, runRetrieval } from '../../services/knowledge/retrieval.js';
 import { FakeEmbeddings } from '../helpers/fakeEmbeddings.js';
 
 /** 静默日志替身：降级与熔断开合都会记 warn，用例不关心日志内容 */

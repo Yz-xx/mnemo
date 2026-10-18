@@ -9,8 +9,9 @@ import { HTTP_STATUS } from '@repo/reusable';
 const { Pool } = vi.hoisted(() => ({ Pool: vi.fn() }));
 vi.mock('pg', () => ({ default: { Pool }, Pool, types: { setTypeParser: vi.fn() } }));
 
-const { createDbPool, createPgPool, DbOverloadedError } = await import('../../db/pool.js');
-const { createMetrics } = await import('../../observability/index.js');
+const { createDbPool, createPgPool, DbOverloadedError } =
+  await import('../../infrastructure/db/pool.js');
+const { createMetrics } = await import('../../infrastructure/observability/index.js');
 
 /** 过载错误的实例类型：DbOverloadedError 是动态导入的值，取类型须经 InstanceType */
 type DbOverloadedFailure = InstanceType<typeof DbOverloadedError>;

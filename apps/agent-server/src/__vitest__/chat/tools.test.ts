@@ -1,25 +1,25 @@
-import type { ParseRunner } from '../../files/parseGovernance.js';
-import type { FileStore, StoredFile } from '../../files/store/index.js';
-import type { GeneratedFileRef } from '../../llm/tools/index.js';
-import type { VisionReader } from '../../llm/vision.js';
+import type { StoredFile } from '../../entities/file.js';
+import type { ParseRunner } from '../../infrastructure/files/parseGovernance.js';
+import type { FileStore } from '../../mappers/file/fileStore.js';
+import type { GeneratedFileRef } from '../../services/llm/tools/index.js';
+import type { VisionReader } from '../../services/llm/vision.js';
 import type { BaseMessage } from '@langchain/core/messages';
 import type { LogSink } from '@repo/logger';
-import fs from 'node:fs';
-import path from 'node:path';
 import { AIMessage, ToolMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { createAgent } from 'langchain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createLogger } from '@repo/logger';
-import { ERROR_MESSAGE } from '../../configuration/messages.js';
-import { ParseOverloadedError } from '../../files/parseGovernance.js';
-import { createToolBudget } from '../../llm/context/index.js';
-import { createTools } from '../../llm/tools/index.js';
-import { DISABLED_VISION, VISION_DISABLED_MESSAGE } from '../../llm/vision.js';
-import { KnowledgeStore } from '../../rag/index.js';
-import { FakeEmbeddings, TEST_ROOT } from '../helpers/fakeEmbeddings.js';
+import { ERROR_MESSAGE } from '../../common/messages.js';
+import { ParseOverloadedError } from '../../infrastructure/files/parseGovernance.js';
+import { KnowledgeStore } from '../../services/knowledge/index.js';
+import { createToolBudget } from '../../services/llm/context/index.js';
+import { createTools } from '../../services/llm/tools/index.js';
+import { DISABLED_VISION, VISION_DISABLED_MESSAGE } from '../../services/llm/vision.js';
+import { FakeEmbeddings } from '../helpers/fakeEmbeddings.js';
 import { PASSTHROUGH_PARSE } from '../helpers/fakeParse.js';
+import { FakeVectorStore } from '../helpers/fakeVectorStore.js';
 
 const OPTIONS = {
   chunkSize: 60,
@@ -30,15 +30,10 @@ const OPTIONS = {
   embeddingEndpoint: 'http://127.0.0.1:11434',
 };
 
-/** 单测固定走嵌入式 LanceDB：工具用例与本地库绑定，不依赖 PostgreSQL（见 docs/adr/0012 阶段 3） */
-const VECTOR = { provider: 'lance' } as const;
-
-let dataDir: string;
 let store: KnowledgeStore;
 
 beforeEach(async () => {
-  dataDir = fs.mkdtempSync(path.join(TEST_ROOT, 'tools-'));
-  store = new KnowledgeStore(dataDir, new FakeEmbeddings(), OPTIONS, undefined, VECTOR);
+  store = new KnowledgeStore(new FakeEmbeddings(), OPTIONS, new FakeVectorStore(OPTIONS));
   await store.add({
     title: '公共手册',
     content: '苹果和香蕉都是全局共享资料。',
@@ -55,7 +50,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await store.close();
-  fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
 /** 组装只检索一次的智能体：把工具输出回显为最终回答，便于断言工具拿到的检索结果 */

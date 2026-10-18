@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ConversationBusyError, createConversationLock } from '../../conversation/lock.js';
+import {
+  ConversationBusyError,
+  createConversationLock,
+} from '../../infrastructure/concurrency/lock.js';
 
 /** 等待若干毫秒：用于让「上一轮」占住会话 */
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

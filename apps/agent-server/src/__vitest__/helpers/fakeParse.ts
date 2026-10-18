@@ -1,4 +1,4 @@
-import type { ParseRunner } from '../../files/parseGovernance.js';
+import type { ParseRunner } from '../../infrastructure/files/parseGovernance.js';
 
 /**
  * 直通解析器：测试里只关心「解析被闸门包住」的调用形态、不关心水位时用它。

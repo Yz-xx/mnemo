@@ -6,16 +6,16 @@ import { createServer } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HTTP_STATUS } from '@repo/reusable';
-import { createAdminAuditRouter } from '../../routes/admin/audit.js';
-import { createAdminConversationsRouter } from '../../routes/admin/conversations.js';
-import { createAdminFilesRouter } from '../../routes/admin/files.js';
-import { createAdminKnowledgeRouter } from '../../routes/admin/knowledge.js';
-import { createAdminLogsRouter } from '../../routes/admin/logs.js';
-import { createAdminUsersRouter } from '../../routes/admin/users.js';
+import { createAdminAuditRouter } from '../../controllers/admin/audit.js';
+import { createAdminConversationsRouter } from '../../controllers/admin/conversations.js';
+import { createAdminFilesRouter } from '../../controllers/admin/files.js';
+import { createAdminKnowledgeRouter } from '../../controllers/admin/knowledge.js';
+import { createAdminLogsRouter } from '../../controllers/admin/logs.js';
+import { createAdminUsersRouter } from '../../controllers/admin/users.js';
 
 /**
  * 管理端路由挂载自检。
- * 模块路由内部只写相对路径，前缀由 routes/index.ts 的 app.use 提供——两边都写了模块名
+ * 模块路由内部只写相对路径，前缀由 controllers/index.ts 的 app.use 提供——两边都写了模块名
  * 就会拼出 /api/admin/logs/logs 这类路径，前端一律 404，而类型检查与直接调用处理函数的
  * 单测都发现不了，只有真实请求走一遍 express 匹配才暴露。这里为此留一道回归。
  */

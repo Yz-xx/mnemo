@@ -1,10 +1,4 @@
-import type {
-  AppConfig,
-  EmbeddingProvider,
-  LlmProvider,
-  LogConfig,
-  VectorStoreProvider,
-} from './env.js';
+import type { AppConfig, EmbeddingProvider, LlmProvider, LogConfig } from './env/index.js';
 
 /** 当前对话模型名称，用于健康检查与界面展示 */
 export function describeChatModel(config: AppConfig): string {
@@ -71,9 +65,6 @@ export interface AdminSystemConfig {
     database: string;
     passwordConfigured: boolean;
   };
-  vectorStore: {
-    provider: VectorStoreProvider;
-  };
 }
 
 /** 组装管理端系统配置视图：字段全部取自 AppConfig，不额外引入运行期状态，便于直接断言 */
@@ -118,9 +109,6 @@ export function describeSystemConfig(config: AppConfig): AdminSystemConfig {
       user: config.postgres.user,
       database: config.postgres.database,
       passwordConfigured: config.postgres.password !== '',
-    },
-    vectorStore: {
-      provider: config.vectorStore.provider,
     },
   };
 }
