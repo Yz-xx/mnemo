@@ -29,6 +29,7 @@ import { SessionStore } from './mappers/session.js';
 import { UserStore } from './mappers/user/store.js';
 import { createConcurrencyGuard } from './middleware/concurrencyGuard.js';
 import { bootstrapSuperAdmin } from './services/admin/adminBootstrap.js';
+import { createRoundRegistry } from './services/conversation/roundRegistry.js';
 import { KnowledgeStore } from './services/knowledge/index.js';
 import { AgentService } from './services/llm/agent.js';
 import { createEmbeddings } from './services/llm/model.js';
@@ -116,6 +117,16 @@ async function bootstrap(): Promise<void> {
   // 并发治理：分档闸门与会话级串行锁都是进程内状态，重启即清零（见 docs/adr/0010）
   const guard = createConcurrencyGuard(config.concurrency, logger);
   const chatLock = createConversationLock(config.concurrency.chat.queueTimeoutMs);
+  // 在途轮次注册表（见 docs/adr/0015）：轮次与请求生命周期解耦，客户端断开后生成继续在后台跑完，
+  // 重连凭序号从断点续读；注册表另担「后台续生成上限」与「已结束轮次日志 TTL 回收」两件事
+  const rounds = createRoundRegistry({
+    roundMaxDurationMs: config.concurrency.chatMaxDurationMs,
+    roundTtlMs: config.concurrency.sseRoundTtlMs,
+    detachedMaxRounds: config.concurrency.sseDetachedMaxRounds,
+    maxLogFrames: config.concurrency.sseReplayMaxEvents,
+    metrics,
+    logger,
+  });
 
   // 超管自举：库中没有任何后台侧账号时建一枚，保证新库启动后立刻能进管理后台
   await bootstrapSuperAdmin(users, config.initialAdmin, logger);
@@ -131,6 +142,7 @@ async function bootstrap(): Promise<void> {
     apiLogs,
     auditLogs,
     conversations,
+    rounds,
     files,
     knowledge,
     users,
@@ -162,6 +174,7 @@ async function bootstrap(): Promise<void> {
 
   installShutdownHandlers({
     server,
+    abortRounds: () => rounds.abortAll('shutdown'),
     flushApiLogs: () => apiLogs.flush(),
     closePool: () => pool.end(),
     closeKnowledge: () => knowledge.close(),

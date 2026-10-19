@@ -16,7 +16,7 @@
 | `DataTable`   | 泛型表格（`generic="T extends object"`），列由 `ColumnSpec` 数组描述，单元格默认取同名字段、可用同名具名插槽覆盖；`selectable` 打开行选择并经 `v-model:selected-keys` 双向绑定，表头复选框只作用于当前页，已选是否跨页保留由调用方决定 |
 | `SearchBar`   | 关键词输入 + 查询按钮，输入即同步 `v-model:keyword`，回车或点按钮都触发 `search`；搜索图标经 `#icon` 插槽传入，默认插槽用于放「新建」一类的页面级操作                                                                                  |
 | `ModalDialog` | 弹窗骨架（遮罩、标题栏、内容插槽、底部取消与确认），点遮罩 / Esc / 右上角 × 均可关闭，`loading` 期间锁关闭；关闭图标经 `#close-icon` 插槽传入                                                                                          |
-| `BatchBar`    | 批量操作条：展示已选条数，动作按钮由默认插槽提供，「取消选择」图标经 `#clear-icon` 插槽传入                                                                                                                                            |
+| `BatchBar`    | 批量操作条（工具栏行内联形态）：放进页面工具栏那一行，与搜索框、页面按钮同为 32px 高，选中状态切换不改变行高故不会推移下方表格；展示已选条数，动作按钮由默认插槽提供，「取消选择」图标经 `#clear-icon` 插槽传入                        |
 
 图标一律经具名插槽由消费方传入，组件库**不自带也不依赖任何图标库**（见 [components-design.md](../../.trae/rules/components-design.md) 第 4 节）——`SearchBar` / `ModalDialog` / `BatchBar` 因此不锁死消费方的图标方案。
 

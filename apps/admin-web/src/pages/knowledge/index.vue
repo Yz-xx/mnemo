@@ -19,28 +19,30 @@ const { filter, table, selection, dialog, view } = useKnowledgePage();
       >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
-      <button class="knowledge__create" type="button" @click="dialog.openCreate">
-        <Plus :size="15" />
-        <span>新增全局文档</span>
-      </button>
+      <div class="knowledge__toolbar-actions">
+        <!-- 批量条并入工具栏行：行高固定，出现/消失不会把下方表格推下去 -->
+        <BatchBar
+          v-if="selection.selectedKeys.length > 0"
+          :count="selection.selectedKeys.length"
+          @clear="selection.clearSelection"
+        >
+          <template #clear-icon><X :size="13" /></template>
+          <button
+            class="knowledge__link knowledge__link--danger"
+            type="button"
+            @click="selection.openBatchDelete"
+          >
+            批量删除
+          </button>
+        </BatchBar>
+        <button class="knowledge__create" type="button" @click="dialog.openCreate">
+          <Plus :size="15" />
+          <span>新增全局文档</span>
+        </button>
+      </div>
     </div>
 
     <p v-if="table.errorMsg" class="knowledge__error">{{ table.errorMsg }}</p>
-
-    <BatchBar
-      v-if="selection.selectedKeys.length > 0"
-      :count="selection.selectedKeys.length"
-      @clear="selection.clearSelection"
-    >
-      <template #clear-icon><X :size="13" /></template>
-      <button
-        class="knowledge__link knowledge__link--danger"
-        type="button"
-        @click="selection.openBatchDelete"
-      >
-        批量删除
-      </button>
-    </BatchBar>
 
     <DataTable
       v-model:selected-keys="selection.selectedKeys"

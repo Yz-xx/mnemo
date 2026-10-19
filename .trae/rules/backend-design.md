@@ -74,12 +74,18 @@ apps/agent-server/src/
 
 ## 5. SSE 流式对话
 
-- 编排集中在 `services/conversation/chatStream.ts` 的 `streamChatReply()`：落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话；`controllers/client/chat.ts` 只负责参数校验（400）与会话归属校验（404）。
-- 落库提问必须在 `flushHeaders()` 之前完成，落库失败才能按普通请求返回 500。
+一轮对话是一个**轮次任务（round task）**，与 HTTP 连接解耦（断点续传，决策依据见 `docs/adr/0015-sse-resumable-stream.md`）：`services/conversation/chatStream.ts` 的 `startChatRound()` 先占轮次号再落库提问，随后把 `chatRoundTask.ts` 的 `runChatRoundTask()` 丢到后台跑完；HTTP 响应降级为该轮次**事件日志**的一个只读订阅者。`controllers/client/chat.ts` 只做参数校验（400）、会话与附件归属校验（404）与订阅写回。
+
+- **轮次与订阅者**：`RoundRegistry` 按 `roundId` 持有在途轮次；`ChatRound` 分配单调递增 `seq`、`publish()` 广播、`subscribe(fromSeq)` 先**同步**取「断点之后的日志快照 + 挂实时队列」（两步之间不得有 `await`），再依次 yield 快照与实时帧。订阅是只读的，**不拥有中止轮次的权力**。
+- **幂等键**：`roundId` 由客户端生成并随 `POST /api/chat` 提交；服务端发现同号轮次已存在且归属一致时不新建、不重复落库，直接订阅既有轮次。缺失或非 UUID 时服务端自行生成，旧客户端不受影响。
+- **断开只退订，停止走显式接口**：`roundPipe.ts` 的 `res.on('close')` 只 `subscription.abort()` 退订，**不触达轮次的中止**；会话锁包住整轮（`done`），但不盖住重连订阅。显式中止只经 `POST /api/chat/rounds/:roundId/stop` 的 `round.abort('user')`；重连走只读的 `GET /api/chat/rounds/:roundId/stream?lastEventId=N`（不存在或过 TTL 一律 404）。两个处理器按 `handleChatMessage` 的可测试形态导出。
+- 落库提问必须在响应头写出之前完成，落库失败才能按普通请求返回 500。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
-- 事件格式 `data: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `file` / `context` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
+- 事件帧格式 `id: <seq>\ndata: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `file` / `context` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
 - `conversation` 事件必须在首个 token / tool 之前补推，使「有产出才保留」与「客户端已知晓会话 ID」严格对齐。
-- 中断必须监听 `res.on('close')`（`req` 的 `close` 会误中断），并用 `res.writableEnded` 排除正常结束；中断时通过 `AbortController` 停止模型推理。客户端主动中断不再回推 `error`；`finally` 中统一 `res.end()`。
+- **异常收尾一律以 `error` 结束，只有自然完成才 `done`**：因超时、停机、脱离轮次上限、用户停止而中止的轮次必须推 `error`（含中止原因），客户端据此判定「需回落 `getConversation`」而非「读完了」；`finally` 中统一 `res.end()`。
+- 轮次任务脱离请求生命周期后**必须顶层自吞异常**（`runChatRoundTask` 的 `try/catch/finally` 与 `startChatRound` 的 `.catch`）：逃逸的拒绝会触发进程级 `unhandledRejection` 直接退出。
+- 轮次侧治理：单轮超时定时器挂在轮次（`roundMaxDurationMs`），随轮次结束清除；后台续生成轮次数超过 `SSE_DETACHED_MAX_ROUNDS` 时中止最老一轮；停机对全部在途轮次 `abort('shutdown')`；已收尾轮次日志保留 `SSE_ROUND_TTL_MS`，帧数上限 `SSE_REPLAY_MAX_EVENTS`。
 - 仅在答复正文非空时落库；中断与失败路径同样要把已产出的部分回复落库（用「本轮是否已落库」标志防重复写入，落库失败只 warn）。
 - 新建会话在本轮既未正常收尾、也没有任何产出时必须连同刚写入的提问一起删除；已开始产出内容的会话即便被中断也保留；已推送 `done` 的会话（含空回复）一律保留。
 - 工具产出的结构化结果（导出文件、检索来源）经 `configurable` 上的收集器交回 Agent 层，再由 Agent 转成事件推送——这类信息服务端能确定地摆好，不要指望模型在正文里自述。
@@ -148,6 +154,6 @@ apps/agent-server/src/
 - 错误响应为中文文案且状态码符合第 3 章的约定。
 - 状态码取自 `HTTP_STATUS`、固定文案取自 `ERROR_MESSAGE`，未新增字面量数字与手抄文案。
 - 涉及 SQL 的改动全部参数化并带 `user_id` 过滤。
-- 流式相关改动仍满足「res 监听中断、有正文才落库、finally 关闭响应」。
+- 流式相关改动仍满足「断开只退订不中止轮次、有正文才落库、finally 关闭响应」。
 - 新增配置项已在两份 env 文件与 `apps/agent-server/README.md` 配置表中同步。
 - 日志统一走注入的 `Logger`，未新增裸 `console.*`；新增失败路径已带原始 `error` 字段。

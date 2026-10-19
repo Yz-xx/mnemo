@@ -1,6 +1,6 @@
-// 聊天流的协议层：把 SSE 事件序列合并进助手消息。
+// 聊天流的协议层：把带序号的 SSE 帧合并进助手消息。
 // 不持有任何响应式状态、不感知会话层的字段，只吃流与消息、把副作用经回调交回调用方。
-import type { ChatStreamEvent } from '../api/client';
+import type { ChatStreamFrame } from '../api/client';
 import type { ChatMessage } from '../types';
 
 /** 新建一条消息：id 与时间戳在此生成 */
@@ -19,8 +19,10 @@ export function createMessage(
   };
 }
 
-/** 消费流式事件时需要回传给会话层的副作用 */
+/** 消费流式帧时需要回传给会话层的副作用 */
 interface ChatStreamHandlers {
+  /** 每消费一帧回报其序号：断线重连时据此上报断点，服务端只重放之后的帧 */
+  onSeq: (seq: number) => void;
   /** 本轮开始有产出，后端确认该会话会被保留，携带会话 ID */
   onConversation: (conversationId: string) => void;
   /** 本轮结束，携带后端确认的会话 ID */
@@ -30,15 +32,18 @@ interface ChatStreamHandlers {
 }
 
 /**
- * 逐条消费 SSE 事件并合并进助手消息：token 累加正文，tool 追加为执行轨迹；
+ * 逐帧消费 SSE 帧并合并进助手消息：token 累加正文，tool 追加为执行轨迹；
  * 会话级副作用（记住会话 ID、切换会话、报错提示）通过回调交回调用方，保持此处逻辑纯粹。
+ * 帧序号经 onSeq 回报调用方，续传时才接得上——这是「已消费到哪」的唯一来源。
  */
 export async function consumeChatStream(
-  stream: AsyncIterable<ChatStreamEvent>,
+  stream: AsyncIterable<ChatStreamFrame>,
   message: ChatMessage,
   handlers: ChatStreamHandlers,
 ): Promise<void> {
-  for await (const event of stream) {
+  for await (const frame of stream) {
+    handlers.onSeq(frame.seq);
+    const event = frame.event;
     if (event.type === 'token') {
       message.content += event.content;
     } else if (event.type === 'thinking') {

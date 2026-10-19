@@ -22,8 +22,15 @@ import { createLogger } from '@repo/logger';
 import { HTTP_STATUS } from '@repo/reusable';
 import { handleChatMessage } from '../../controllers/client/chat.js';
 import { ConversationBusyError } from '../../infrastructure/concurrency/lock.js';
+import { createMetrics } from '../../infrastructure/observability/index.js';
+import { createRoundRegistry } from '../../services/conversation/roundRegistry.js';
 
 const USER_ID = 1;
+/** 合法轮次 ID（标准 UUID）：非法值会被路由自行生成，故用例必须给合规值才能命中幂等分支 */
+const ROUND_ID = '11111111-1111-4111-8111-111111111111';
+
+/** 测试用静默日志：注册表只在极端分支（后台续生成超限）才写一行警告 */
+const TEST_LOGGER = createLogger({ name: 'chat-route-test', level: 'error', stdio: false });
 
 /** 内存版会话存储：替代真实 PostgreSQL，只实现路由层会调用的方法 */
 class FakeConversations {
@@ -120,7 +127,7 @@ class FakeConversations {
   }
 }
 
-/** 路由层的假响应：继承 EventEmitter 以接收 streamChatReply 注册的 close 监听 */
+/** 路由层的假响应：继承 EventEmitter 以接收事件流注册的 close / drain 监听 */
 class FakeHttpResponse extends EventEmitter {
   readonly events: ChatStreamEvent[] = [];
   readonly locals: { userId: number; log: Logger };
@@ -130,10 +137,7 @@ class FakeHttpResponse extends EventEmitter {
 
   constructor() {
     super();
-    this.locals = {
-      userId: USER_ID,
-      log: createLogger({ name: 'chat-route-test', level: 'error', stdio: false }),
-    };
+    this.locals = { userId: USER_ID, log: TEST_LOGGER };
   }
 
   setHeader(): this {
@@ -144,10 +148,13 @@ class FakeHttpResponse extends EventEmitter {
     // 无真实 socket，SSE 头部仅需存在该方法
   }
 
-  /** 收集 SSE 帧，供用例断言前端会收到哪些事件 */
+  /** 收集 SSE 帧：每帧形如 `id: <seq>\ndata: {...}\n\n`，此处只取 data 行供断言 */
   write(chunk: string): boolean {
-    const payload = chunk.replace(/^data: /, '').trim();
-    if (payload) this.events.push(JSON.parse(payload) as ChatStreamEvent);
+    for (const line of chunk.split('\n')) {
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (payload) this.events.push(JSON.parse(payload) as ChatStreamEvent);
+    }
     return true;
   }
 
@@ -231,6 +238,10 @@ const CONFIG = {
     chatMaxDurationMs: 180000,
     sseDrainTimeoutMs: 30000,
     shutdownGraceMs: 15000,
+    // 轮次事件日志的保留时长与帧数上限：均由注册表在装配时读取
+    sseRoundTtlMs: 60000,
+    sseDetachedMaxRounds: 4,
+    sseReplayMaxEvents: 100,
     model: { maxInFlight: 2, softLimit: 1, queueLimit: 8, queueTimeoutMs: 20000 },
     summary: { maxInFlight: 1, softLimit: 1, queueLimit: 0, queueTimeoutMs: 3000 },
     retrieval: { maxInFlight: 4, softLimit: 2, queueLimit: 8, queueTimeoutMs: 3000 },
@@ -245,18 +256,33 @@ const passthroughLock = {
   run: <T>(_conversationId: string, task: () => Promise<T>): Promise<T> => task(),
 };
 
-/** 假依赖集合：会话存储、文件存储与智能体均为替身，用于隔离数据库与模型服务 */
+/**
+ * 假依赖集合：会话存储、文件存储与智能体均为替身，用于隔离数据库与模型服务。
+ * 轮次注册表按传入配置装配——单轮超时与日志保留都取自它，故改配置的用例须走此入口。
+ */
 function fakeDeps(
   conversations: FakeConversations,
   agent: AgentService,
   files: FakeFiles = new FakeFiles(),
+  config: AppConfig = CONFIG,
 ): Parameters<typeof handleChatMessage>[0] {
+  const metrics = createMetrics();
+  const rounds = createRoundRegistry({
+    roundMaxDurationMs: config.concurrency.chatMaxDurationMs,
+    roundTtlMs: config.concurrency.sseRoundTtlMs,
+    detachedMaxRounds: config.concurrency.sseDetachedMaxRounds,
+    maxLogFrames: config.concurrency.sseReplayMaxEvents,
+    metrics,
+    logger: TEST_LOGGER,
+  });
   return {
     agent,
     conversations: conversations as unknown as ConversationStore,
     files: files as unknown as FileStore,
-    config: CONFIG,
+    config,
     chatLock: passthroughLock,
+    rounds,
+    metrics,
   };
 }
 
@@ -264,6 +290,7 @@ function fakeRequest(body: {
   message: string;
   conversationId?: string;
   fileIds?: unknown;
+  roundId?: string;
 }): Request {
   return { body } as unknown as Request;
 }
@@ -284,24 +311,28 @@ describe('handleChatMessage', () => {
     await expect(conversations.list()).resolves.toEqual([]);
   });
 
-  it('生成中途被中断时同样删除新建会话', async () => {
+  it('客户端断开只退订本轮订阅，生成仍在后台跑完并落库', async () => {
+    // 首帧写出后才断开：确保订阅已建立，断开的是订阅而非本轮生成
+    class CloseAfterFirstWrite extends FakeHttpResponse {
+      private written = false;
+
+      write(chunk: string): boolean {
+        const ok = super.write(chunk);
+        if (!this.written) {
+          this.written = true;
+          this.emit('close');
+        }
+        return ok;
+      }
+    }
+
     const conversations = new FakeConversations();
-    const res = new FakeHttpResponse();
-    // 生成途中客户端断开：首次取值时触发 close 让中断信号生效，再抛错结束本轮
-    const agent = {
-      stream(): AsyncIterable<AgentStreamEvent> {
-        return {
-          [Symbol.asyncIterator]() {
-            return {
-              next(): Promise<IteratorResult<AgentStreamEvent>> {
-                res.emit('close');
-                return Promise.reject(new Error('生成被中断'));
-              },
-            };
-          },
-        };
-      },
-    } as unknown as AgentService;
+    const res = new CloseAfterFirstWrite();
+    // 断开信号只落在订阅上，绝不往上传给轮次：本轮照常推完两段正文
+    const agent = fakeAgent([
+      { type: 'token', content: '正在' },
+      { type: 'token', content: '进行中' },
+    ]);
 
     await handleChatMessage(
       fakeDeps(conversations, agent),
@@ -309,54 +340,52 @@ describe('handleChatMessage', () => {
       res as unknown as Response,
     );
 
-    // 中断不回推错误事件，会话与提问一并清理
-    expect(res.events).toEqual([]);
-    await expect(conversations.list()).resolves.toEqual([]);
-  });
-
-  it('中断前已有产出时保留会话，并留下提问与部分回复', async () => {
-    const conversations = new FakeConversations();
-    const res = new FakeHttpResponse();
-    // 先推一段正文（用户已看到内容），再模拟客户端断开并中断本轮
-    const agent = {
-      stream(): AsyncIterable<AgentStreamEvent> {
-        return {
-          [Symbol.asyncIterator]() {
-            let step = 0;
-            return {
-              next(): Promise<IteratorResult<AgentStreamEvent>> {
-                step += 1;
-                if (step === 1) {
-                  return Promise.resolve({
-                    done: false,
-                    value: { type: 'token', content: '正在' },
-                  });
-                }
-                res.emit('close');
-                return Promise.reject(new Error('生成被中断'));
-              },
-            };
-          },
-        };
-      },
-    } as unknown as AgentService;
-
-    await handleChatMessage(
-      fakeDeps(conversations, agent),
-      fakeRequest({ message: '你好' }),
-      res as unknown as Response,
-    );
-
+    // 断开没有掐断生成：整段回复照常落库，会话一并保留
     const [summary] = await conversations.list();
     const saved = await conversations.get(USER_ID, summary.id);
-    // 首个产出时就补推会话 ID，客户端因此在中断后仍能接着这条会话发消息
-    expect(res.events).toEqual([
-      { type: 'conversation', conversationId: summary.id },
-      { type: 'token', content: '正在' },
-    ]);
-    // 用户主动停止只是不再继续生成：已看到的正文与刚发出的提问都要留在历史里
+    expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.at(-1)?.content).toBe('正在进行中');
+    // 首帧送出去后订阅即断开，后续帧（含 done）不再回推给这个响应
+    expect(res.events.map((event) => event.type)).toEqual(['conversation']);
+  });
+
+  it('中间被停止时已有产出保留会话与部分回复，error 帧说明原因', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+    // 首帧推出的信号：让用例确定中断监听器已注册之后再发起停止
+    let notifyStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    // 推出一段正文（用户已看到）后停在中断信号上，再抛错走「主动停止」收尾路径
+    const agent = {
+      async *stream(_messages: unknown, options: { signal: AbortSignal }) {
+        yield { type: 'token' as const, content: '正在' };
+        notifyStarted();
+        await new Promise<void>((resolve) => {
+          options.signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+        throw new Error('本轮已中断');
+      },
+    } as unknown as AgentService;
+
+    const deps = fakeDeps(conversations, agent);
+    const pending = handleChatMessage(
+      deps,
+      fakeRequest({ message: '你好', roundId: ROUND_ID }),
+      res as unknown as Response,
+    );
+    // 到此刻首帧已推给订阅者、中断监听器已注册，再模拟客户端点「停止」
+    await started;
+    deps.rounds.get(USER_ID, ROUND_ID)?.abort('user');
+    await pending;
+
+    // 用户主动停止：已看到的正文与提问都留在历史里，界面另有 error 说明本轮被掐断
+    const [summary] = await conversations.list();
+    const saved = await conversations.get(USER_ID, summary.id);
     expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     expect(saved?.messages.at(-1)?.content).toBe('正在');
+    expect(res.events).toContainEqual({ type: 'error', message: '本轮已停止生成' });
   });
 
   it('回复为空但请求正常结束时保留会话', async () => {
@@ -394,6 +423,26 @@ describe('handleChatMessage', () => {
       conversationId: summary.id,
       title: '在吗',
     });
+  });
+
+  it('同号轮次重复 POST 时直接订阅既有轮次，不重复落库与生成', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+    const deps = fakeDeps(conversations, fakeAgent([]));
+    // 预置一轮已收尾的轮次：等价于「首次 POST 已跑完，客户端拿同一 roundId 重试」
+    const round = deps.rounds.create(USER_ID, ROUND_ID);
+    round.publish({ type: 'done', conversationId: 'c-已存在', title: '已有会话' });
+    round.finish();
+
+    await handleChatMessage(
+      deps,
+      fakeRequest({ message: '你好', roundId: ROUND_ID }),
+      res as unknown as Response,
+    );
+
+    // 重放既有轮次的事件日志即可，没有新建会话、也没有再落一条用户消息
+    expect(res.events).toEqual([{ type: 'done', conversationId: 'c-已存在', title: '已有会话' }]);
+    await expect(conversations.list()).resolves.toEqual([]);
   });
 
   it('检索来源既推给客户端，也随回复落库以便历史回看', async () => {
@@ -551,17 +600,16 @@ describe('handleChatMessage', () => {
       },
     } as unknown as AgentService;
 
-    await handleChatMessage(
-      {
-        ...fakeDeps(conversations, agent),
-        // 窗口取 1000：触发阈值 700、保留预算 400，只装得下最新一轮提问
-        config: {
-          llm: {
-            context: { windowTokens: 1000, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 },
-          },
-          concurrency: CONFIG.concurrency,
-        } as unknown as AppConfig,
+    // 窗口取 1000：触发阈值 700、保留预算 400，只装得下最新一轮提问
+    const config = {
+      llm: {
+        context: { windowTokens: 1000, triggerRatio: 0.7, keepRatio: 0.4, toolRatio: 0.3 },
       },
+      concurrency: CONFIG.concurrency,
+    } as unknown as AppConfig;
+
+    await handleChatMessage(
+      fakeDeps(conversations, agent, new FakeFiles(), config),
       fakeRequest({ message: '再问', conversationId: id }),
       res as unknown as Response,
     );
@@ -641,7 +689,7 @@ describe('handleChatMessage', () => {
     } as unknown as AgentService;
 
     await handleChatMessage(
-      { ...fakeDeps(conversations, agent), config },
+      fakeDeps(conversations, agent, new FakeFiles(), config),
       fakeRequest({ message: '在吗' }),
       res as unknown as Response,
     );
@@ -654,7 +702,7 @@ describe('handleChatMessage', () => {
     expect(res.events).toContainEqual({ type: 'error', message: '本轮对话超时，已中断' });
   });
 
-  it('慢客户端写不下去时中断本轮，不在内存里无限堆积', async () => {
+  it('慢客户端写不下去时只退订本轮订阅，生成继续并正常落库', async () => {
     const conversations = new FakeConversations();
     const res = new SlowHttpResponse();
     // 背压等待上限压到 10ms：write 恒失败且永不 drain，等价于客户端不再读取
@@ -662,22 +710,26 @@ describe('handleChatMessage', () => {
       ...CONFIG,
       concurrency: { ...CONFIG.concurrency, sseDrainTimeoutMs: 10 },
     } as unknown as AppConfig;
-    let aborted = false;
-    const agent = {
-      async *stream(_messages: unknown, options: { signal: AbortSignal }) {
-        yield { type: 'token' as const, content: '一' };
-        // 推下一个事件前，背压超时已把本轮中断
-        aborted = options.signal.aborted;
-      },
-    } as unknown as AgentService;
 
     await handleChatMessage(
-      { ...fakeDeps(conversations, agent), config },
+      fakeDeps(
+        conversations,
+        fakeAgent([
+          { type: 'token', content: '一' },
+          { type: 'token', content: '二' },
+        ]),
+        new FakeFiles(),
+        config,
+      ),
       fakeRequest({ message: '在吗' }),
       res as unknown as Response,
     );
 
-    expect(aborted).toBe(true);
+    // 慢客户端被摘除订阅后不再收帧，但生成照常跑完：回答完整落库
+    const [summary] = await conversations.list();
+    const saved = await conversations.get(USER_ID, summary.id);
+    expect(saved?.messages.at(-1)?.content).toBe('一二');
+    expect(res.events).toEqual([]);
     // 本轮在有限时间内收尾，不会因为客户端不读而永久挂住
     expect(res.writableEnded).toBe(true);
   });

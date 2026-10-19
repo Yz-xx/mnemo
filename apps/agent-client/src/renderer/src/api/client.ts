@@ -5,9 +5,9 @@ import type {
   ConversationSummary,
   KnowledgeDocument,
 } from '../types';
-import type { ChatStreamEvent } from '@repo/reusable';
+import type { ChatStreamEvent, ChatStreamFrame } from '@repo/reusable';
 import type { BaseUrlLike, HttpClient } from '@repo/shared';
-import { encryptPassword, isUnauthorized, parseSSEStream } from '@repo/reusable';
+import { encryptPassword, isNotFound, isUnauthorized, parseSSEStream } from '@repo/reusable';
 import { createHttpClient } from '@repo/shared';
 
 // 渲染进程只有本模块依赖 @repo/*（见 desktop-design 第 2 章）：其余模块要用共享能力
@@ -17,14 +17,16 @@ export { SESSION_EXPIRED_MESSAGE } from '@repo/reusable';
 export { toErrorMessage } from '@repo/shared';
 
 // 共享能力统一从本模块转发，调用方不直接引 @repo/*
-export type { ChatStreamEvent };
-export { isUnauthorized };
+export type { ChatStreamEvent, ChatStreamFrame };
+export { isUnauthorized, isNotFound };
 
 export interface SendChatPayload {
   conversationId?: string;
   message: string;
   /** 本轮随提问一起交给智能体读取的附件 ID；服务端会校验其归属当前用户 */
   fileIds?: string[];
+  /** 客户端生成的轮次 ID：既作本轮的幂等键，也是断线后重连续传的定位锚 */
+  roundId?: string;
 }
 
 /** 服务端健康信息，用于界面展示当前模型与知识库状态 */
@@ -134,11 +136,11 @@ export class AgentApi {
     return this.api.delete<void>(`/api/knowledge/documents/${id}`);
   }
 
-  /** 逐块读取 SSE 响应，解析为结构化事件流 */
+  /** 逐块读取 SSE 响应，解析为带序号的帧流（序号供断线续传定位断点） */
   async *streamChat(
     payload: SendChatPayload,
     signal?: AbortSignal,
-  ): AsyncGenerator<ChatStreamEvent> {
+  ): AsyncGenerator<ChatStreamFrame> {
     // 通用客户端只把未消费的流交出来：SSE 的分帧属对话协议，由 parseSSEStream 承担
     const stream = await this.api.request<ReadableStream<Uint8Array>>({
       url: '/api/chat',
@@ -148,5 +150,29 @@ export class AgentApi {
       signal,
     });
     yield* parseSSEStream(stream);
+  }
+
+  /**
+   * 断点续传：按轮次 ID 与已消费到的最大序号重连，服务端只重放该序号之后的帧。
+   * 轮次不存在或已过期时返回 404（isNotFound 判定），由调用方降级为重新拉取整条会话。
+   */
+  async *resumeChat(
+    roundId: string,
+    lastEventId: number,
+    signal?: AbortSignal,
+  ): AsyncGenerator<ChatStreamFrame> {
+    const stream = await this.api.request<ReadableStream<Uint8Array>>({
+      url: `/api/chat/rounds/${roundId}/stream`,
+      method: 'GET',
+      params: { lastEventId },
+      responseType: 'stream',
+      signal,
+    });
+    yield* parseSSEStream(stream);
+  }
+
+  /** 停止本轮生成：服务端中止后会在流里补推一条 error 帧，客户端据此停止重连 */
+  stopRound(roundId: string): Promise<void> {
+    return this.api.post<void>(`/api/chat/rounds/${roundId}/stop`);
   }
 }

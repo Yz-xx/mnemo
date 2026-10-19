@@ -8,6 +8,11 @@ import { once } from 'node:events';
  */
 export interface ShutdownTargets {
   server: http.Server;
+  /**
+   * 中止全部在途轮次（见 docs/adr/0015 决策 10）：停机时立即掐断生成，
+   * 让脱离请求生命周期的后台任务尽快收尾，而不是干等宽限到点。
+   */
+  abortRounds: (reason: string) => void;
   /** 刷空接口日志缓冲：在途响应收尾后调用，确保停机前日志落尽 */
   flushApiLogs: () => Promise<void>;
   /** 关闭数据库连接池 */
@@ -28,8 +33,16 @@ export interface ShutdownTargets {
  *   最后关闭数据库连接池、向量库连接并停止指标采样。停机因此比现在慢，等待上限由 SHUTDOWN_GRACE_MS 约定。
  */
 export function installShutdownHandlers(targets: ShutdownTargets): void {
-  const { server, flushApiLogs, closePool, closeKnowledge, stopSampling, graceMs, logger } =
-    targets;
+  const {
+    server,
+    abortRounds,
+    flushApiLogs,
+    closePool,
+    closeKnowledge,
+    stopSampling,
+    graceMs,
+    logger,
+  } = targets;
   let stopping = false;
 
   /** 优雅停机：置位后停止接单、等在途请求收尾，再关池并停采样；重复触发直接返回 */
@@ -39,6 +52,8 @@ export function installShutdownHandlers(targets: ShutdownTargets): void {
     logger.info('开始优雅停机', { reason, graceMs });
     server.close();
     server.closeIdleConnections();
+    // 立即中止全部在途轮次：它们已脱离请求生命周期，不掐断就会一直耗算力到宽限到点
+    abortRounds('shutdown');
     // 宽限到点仍未收尾的连接直接断开，避免停机无限期挂住
     const forceTimer = setTimeout(() => {
       logger.warn('停机宽限已到，强制断开剩余连接');

@@ -1,11 +1,16 @@
 // 组件样式必须完整包在 repo-components 层内：
 // 消费方任意未分层规则都能覆盖它，无需更高特异性或 !important
 @layer repo-components {
+  // 定位约定：批量条是「工具栏行内联」元素，消费方把它放进页面工具栏那一行。
+  // 高度锁死 32px 与搜索框、页面按钮齐平：选中状态切换只改变该行的横向排布，
+  // 行高恒定，下方表格不会被推移（早先是表格前的独立块级元素，一出现就把表格整体下压）。
   .ui-batch-bar {
     display: flex;
+    flex: none;
     align-items: center;
     gap: 12px;
-    padding: 8px 14px;
+    height: 32px;
+    padding: 0 12px;
     background-color: var(--ui-bg-active);
     border: 1px solid var(--ui-border);
     border-radius: var(--ui-radius);
@@ -20,8 +25,7 @@
     &__actions {
       display: flex;
       align-items: center;
-      gap: 14px;
-      margin-left: auto;
+      gap: 12px;
     }
 
     &__clear {

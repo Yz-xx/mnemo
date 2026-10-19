@@ -11,6 +11,8 @@ export const ERROR_MESSAGE = {
   SESSION_EXPIRED: SESSION_EXPIRED_MESSAGE,
   /** 会话不存在或不属于当前用户：统一按“不存在”处理，不区分两种原因 */
   CONVERSATION_NOT_FOUND: '会话不存在',
+  /** 轮次不存在、已过期或不属于当前用户：续传与停止两个入口共用，不区分原因 */
+  ROUND_NOT_FOUND: '本轮对话不存在或已结束',
   /** 用户名冲突：注册与管理员新建用户共用（第 3 章归入“参数非法”） */
   USERNAME_TAKEN: '该用户名已被注册',
   /**

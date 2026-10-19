@@ -39,20 +39,20 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 
 ## 四、渲染进程状态流
 
-`useChat.ts` 集中管理会话状态（`connection / health / conversations / activeId / messages / streaming / loadingConversation / errorMessage / attachments`）与全部请求动作：
+`useChat.ts` 作为聚合入口，把会话状态与请求动作按关注点拆给四个子 composable——`useChatConnection`（连接与健康）、`useChatSession`（会话列表与切换）、`useChatMessages`（消息、流式消费与断点重连）、`useChatAttachments`（附件与导出），对外仍聚合出同一组状态（`connection / health / conversations / activeId / messages / streaming / loadingConversation / errorMessage / attachments`）与请求动作：
 
 - **附件与导出**：发送前先经 `client.ts` 的 `uploadFile()` 上传附件，再带 `fileIds` 请求 `POST /api/chat`；`consumeChatStream()` 的 `file` 分支把导出文件写进该条助手消息的 `files`，`saveGeneratedFile()` 通过 `downloadFile(fileId)` 取回字节并经主进程 `saveFile` 落盘；
-- **流式渲染**：先把用户消息与一条空助手消息入列，`token` 事件直接追加到这条消息上，因此首字到达即渲染，不需要重排列表；事件消费由模块级 `consumeChatStream()` 承担，会话级副作用（记住会话 ID、切换会话、报错提示）以回调交回 composable，便于单独测试。`conversation` 事件在首个产出之前到达，此时后端已确定这条会话会被保留，`activeId` 先记下来——用户中途点“停止”后仍能接着这条会话继续发；
+- **流式渲染**：先把用户消息与一条空助手消息入列，`token` 事件直接追加到这条消息上，因此首字到达即渲染，不需要重排列表；事件消费由纯函数层 `chatStream.ts` 的 `consumeChatStream()` 承担（入参是 `ChatStreamFrame`，按帧序号记录断点），会话级副作用（记住会话 ID、切换会话、报错提示）以回调交回 composable，便于单独测试。`conversation` 事件在首个产出之前到达，此时后端已确定这条会话会被保留，`activeId` 先记下来——用户中途点“停止”后仍能接着这条会话继续发；
 - **推理链**：`thinking` 事件（仅在开启 `LLM_THINKING` 的模型上出现）累积到该条消息的 `thinking`，在正文之前渲染成可折叠的“思考过程”面板，正文首个 token 到达即自动收起；
 - **工具轨迹**：`tool` 事件映射为“调用工具 xxx”“完成 xxx”标签，追加到该条消息的 `steps`；
 - **检索来源**：`source` 事件把命中的知识库文档名累积到该条消息的 `sources`，在工具轨迹下方渲染成“来源《文档名》”标签；来源由服务端在检索工具结束时确定地给出，不依赖模型在正文里标注出处；
 - **上下文治理提示**：`context` 事件只在服务端真的裁掉历史时到达，把 `trimmedMessages` / `summarized` 记在该条消息的 `context` 上，渲染成正文下方的一枚虚线标签（“已将 N 条更早的对话压缩为摘要”或“已丢弃 N 条更早的对话”）；它与 `thinking` 一样不落库，历史回看不还原；
-- **中断语义**：`AbortController` 保存在闭包局部变量中再另存引用——用户点“停止”会把外层引用置空，局部引用仍能判断“这次流是否被主动中断”，从而不把中断当成错误提示；
+- **断线续传与停止**：`roundId` 与 `AbortController` 由 `useChatMessages.ts` 持有。连接中途断开只退订订阅——服务端轮次继续在后台生成，客户端按 `RECONNECT_DELAYS_MS`（500 / 1000 / 2000 / 4000 ms）退避重连 `resumeChat(roundId, lastSeq)`，读到 `error`、404 或重试耗尽则降级为拉取已落库内容；用户点“停止”先调 `stopRound(roundId)` 显式中止本轮、再中止本地流，因此“主动停止”不会被当成错误提示；
 - **空回复回滚**：流结束后若助手消息仍无内容（例如模型直接失败），就把这条占位消息移除，避免留下空气泡；
 - **连接状态**：`canSend` 要求后端在线且当前不在流式中，因此 `connection === 'offline'` 时输入区自动禁用。
 - **登录态联动**：请求经 `api/session.ts` 暴露的**唯一 `AgentApi` 实例**发出，地址与令牌在请求发起时才取值，因此登录/登出、切换后端地址都无需重建客户端；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
 
-`api/client.ts` 负责 HTTP 与 SSE 解析：请求头拼装、错误归一化、超时与流式发送收在 `@repo/shared` 的通用客户端 `createHttpClient`（取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器、并把业务方法转发给它；非 2xx 抛出携带状态码的 `HttpError`，登录失效用 `@repo/reusable` 的 `isUnauthorized` 判定（契约外的码按 500 处理）；`ChatStreamEvent`（SSE 事件类型）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@repo/reusable`，`toErrorMessage` 取自 `@repo/shared`，它是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；附件下载走 `responseType: 'blob'`，SSE 走 `responseType: 'stream'` 拿到未消费的字节流后由 `@repo/reusable` 的 `parseSSEStream` 按空行切分事件（**最后一段可能被截断，保留到下一轮再拼接**），`Authorization: Bearer <token>` 由客户端按 `getToken` 自动附加。
+`api/client.ts` 负责 HTTP 与 SSE 解析：请求头拼装、错误归一化、超时与流式发送收在 `@repo/shared` 的通用客户端 `createHttpClient`（取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器、并把业务方法转发给它；非 2xx 抛出携带状态码的 `HttpError`，登录失效用 `@repo/reusable` 的 `isUnauthorized` 判定（契约外的码按 500 处理）；`ChatStreamEvent` / `ChatStreamFrame`（SSE 事件与带序号的一帧）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@repo/reusable`，`toErrorMessage` 取自 `@repo/shared`，它是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；附件下载走 `responseType: 'blob'`，SSE 走 `responseType: 'stream'` 拿到未消费的字节流后由 `@repo/reusable` 的 `parseSSEStream` 按空行切分、读 `id:` 行取序号，产出 `ChatStreamFrame`（**最后一段可能被截断，保留到下一轮再拼接**），`Authorization: Bearer <token>` 由客户端按 `getToken` 自动附加；`streamChat` 返回 `AsyncGenerator<ChatStreamFrame>`，本模块另暴露 `resumeChat(roundId, lastEventId)`（断点重连）与 `stopRound(roundId)`（显式停止）两个方法。
 
 ## 五、登录态与启动门禁
 

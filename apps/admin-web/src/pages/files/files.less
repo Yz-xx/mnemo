@@ -24,6 +24,14 @@
     letter-spacing: var(--tracking-mono);
   }
 
+  // 搜索框与批量条同行，行高由两者共同决定且恒定，选择状态切换不推移下方表格
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   &__error {
     margin: 0;
     padding: 10px 14px;

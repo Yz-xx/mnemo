@@ -95,6 +95,12 @@ export interface ConcurrencyConfig {
   circuitFailureThreshold: number;
   /** 依赖熔断：打开后冷却多久再放一个探测（毫秒） */
   circuitCooldownMs: number;
+  /** 已结束轮次的事件日志保留时长（毫秒）：期间允许客户端重连续传，过后即回收 */
+  sseRoundTtlMs: number;
+  /** 允许同时后台续生成的轮次上限：超过即中止最老的脱离轮次，防止无人回读的算力堆积 */
+  sseDetachedMaxRounds: number;
+  /** 单轮事件日志的帧数上限：超过即丢弃最老帧，兜住重放窗口与内存 */
+  sseReplayMaxEvents: number;
 }
 
 /** HTTP 层超时与连接回收：防止半死连接永久占用连接与额度 */

@@ -295,7 +295,10 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `CONCURRENCY_CRUD_QUEUE_LIMIT`                                 | `64`                        | 普通读写档排队长度上限                                                                          |
 | `CONCURRENCY_CRUD_QUEUE_TIMEOUT_MS`                            | `5000`                      | 普通读写档排队等待上限（毫秒）                                                                  |
 | `CHAT_MAX_DURATION_MS`                                         | `180000`                    | 单轮对话最长时长（毫秒），到点中断并按已产出收尾                                                |
-| `SSE_DRAIN_TIMEOUT_MS`                                         | `30000`                     | SSE 背压：写缓冲满后等待 `drain` 的上限（毫秒），超时按慢客户端断开                             |
+| `SSE_DRAIN_TIMEOUT_MS`                                         | `30000`                     | SSE 背压：写缓冲满后等待 `drain` 的上限（毫秒），超时按慢客户端退订（本轮生成继续）             |
+| `SSE_ROUND_TTL_MS`                                             | `60000`                     | 断点续传：已收尾轮次的事件日志保留时长（毫秒），期间客户端可凭序号重连补齐                      |
+| `SSE_DETACHED_MAX_ROUNDS`                                      | `16`                        | 断点续传：允许同时后台续生成的轮次上限，超出即中止最老一轮                                      |
+| `SSE_REPLAY_MAX_EVENTS`                                        | `2000`                      | 断点续传：单轮事件日志保留的帧数上限，超出即丢弃最老帧（重放窗口右移）                          |
 | `SHUTDOWN_GRACE_MS`                                            | `15000`                     | 优雅停机：停止接单后等待在途请求收尾的上限（毫秒）                                              |
 | `API_LOG_BATCH_SIZE`                                           | `50`                        | 接口日志批量刷写：缓冲攒到该条数即落库                                                          |
 | `API_LOG_FLUSH_INTERVAL_MS`                                    | `1000`                      | 接口日志批量刷写：未攒够一批时的定时刷写间隔（毫秒），停机时会落尽                              |

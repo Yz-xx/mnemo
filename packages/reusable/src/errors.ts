@@ -14,3 +14,13 @@ import { HTTP_STATUS, toHttpStatusCode } from './http.js';
 export function isUnauthorized(error: unknown): boolean {
   return isHttpError(error) && toHttpStatusCode(error.status) === HTTP_STATUS.UNAUTHORIZED;
 }
+
+/**
+ * 是否为「资源不存在」错误：客户端据此把断点续传失败（轮次已过期）降级为重新拉取整条会话。
+ *
+ * 同样经 `toHttpStatusCode` 收敛：只有契约定下的 404 才算「不存在」，
+ * 契约外的状态码一律按 500 处理，避免代理注入的 404 被误当成「轮次没了」。
+ */
+export function isNotFound(error: unknown): boolean {
+  return isHttpError(error) && toHttpStatusCode(error.status) === HTTP_STATUS.NOT_FOUND;
+}

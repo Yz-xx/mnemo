@@ -102,6 +102,12 @@ export function loadConfig(): AppConfig {
       // 熔断默认值：连续 5 次失败即快速失败 30 秒，之后放一个探测（决策 16）
       circuitFailureThreshold: toNumber(process.env.CIRCUIT_FAILURE_THRESHOLD, 5),
       circuitCooldownMs: toNumber(process.env.CIRCUIT_COOLDOWN_MS, 30000),
+      // 断点续传：已结束轮次的日志保留一分钟，够弱网客户端重连；过后即回收
+      sseRoundTtlMs: toNumber(process.env.SSE_ROUND_TTL_MS, 60000),
+      // 后台续生成上限：无订阅者的轮次最多 16 个，防止断开后算力无声堆积
+      sseDetachedMaxRounds: toCount(process.env.SSE_DETACHED_MAX_ROUNDS, 16),
+      // 重放窗口：单轮最多保留 2000 帧，超出丢最老帧（早期帧丢失不影响最终正文）
+      sseReplayMaxEvents: toCount(process.env.SSE_REPLAY_MAX_EVENTS, 2000),
     },
     // 接口请求日志：攒批刷写替掉「每请求一条 INSERT」，把单轮基线压下来（见 docs/adr/0010 决策 13）
     apiLog: {

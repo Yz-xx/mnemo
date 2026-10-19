@@ -9,8 +9,8 @@ import type { Response } from 'express';
 export interface EventStream {
   /** 写出 SSE 响应头：禁用缓存与缓冲，保证增量内容即时到达客户端 */
   open(): void;
-  /** 推送一个事件；返回 false 表示已判定为慢客户端（本轮应由调用方中断） */
-  send(event: ChatStreamEvent): Promise<boolean>;
+  /** 推送一个事件（携带帧序号）；返回 false 表示已判定为慢客户端（本轮应由调用方中断） */
+  send(event: ChatStreamEvent, seq: number): Promise<boolean>;
 }
 
 /** 建一个绑定到该响应的 SSE 写出器；drainTimeoutMs 为背压等待上限 */
@@ -44,10 +44,11 @@ export function createEventStream(res: Response, drainTimeoutMs: number): EventS
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
     },
-    async send(event: ChatStreamEvent): Promise<boolean> {
+    async send(event: ChatStreamEvent, seq: number): Promise<boolean> {
       // 响应已结束：不再写入，也不算慢客户端
       if (res.writableEnded) return true;
-      return writeChunk(`data: ${JSON.stringify(event)}\n\n`);
+      // 带 `id:` 行写出：客户端据此记录断点，重连时上报已消费到的最大序号
+      return writeChunk(`id: ${seq}\ndata: ${JSON.stringify(event)}\n\n`);
     },
   };
 }

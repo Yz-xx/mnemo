@@ -22,24 +22,25 @@ const { filter, table, selection, detail, dialog } = useConversationsPage();
       >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
+
+      <!-- 批量条并入工具栏行：行高固定，出现/消失不会把下方表格推下去 -->
+      <BatchBar
+        v-if="selection.selectedKeys.length > 0"
+        :count="selection.selectedKeys.length"
+        @clear="selection.clearSelection"
+      >
+        <template #clear-icon><X :size="13" /></template>
+        <button
+          class="conversations__link conversations__link--danger"
+          type="button"
+          @click="dialog.batchOpen = true"
+        >
+          批量删除
+        </button>
+      </BatchBar>
     </div>
 
     <p v-if="table.errorMsg" class="conversations__error">{{ table.errorMsg }}</p>
-
-    <BatchBar
-      v-if="selection.selectedKeys.length > 0"
-      :count="selection.selectedKeys.length"
-      @clear="selection.clearSelection"
-    >
-      <template #clear-icon><X :size="13" /></template>
-      <button
-        class="conversations__link conversations__link--danger"
-        type="button"
-        @click="dialog.batchOpen = true"
-      >
-        批量删除
-      </button>
-    </BatchBar>
 
     <DataTable
       v-model:selected-keys="selection.selectedKeys"

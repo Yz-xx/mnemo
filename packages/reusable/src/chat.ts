@@ -37,3 +37,15 @@ export type ChatStreamEvent =
   | { type: 'context'; trimmedMessages: number; summarized: boolean }
   | { type: 'done'; conversationId: string; title: string }
   | { type: 'error'; message: string };
+
+/**
+ * 一帧对话流：事件本体 + 服务端分配的单调递增序号（从 1 开始）。
+ * 序号是断点续传的定位锚：客户端重连时上报已消费到的最大序号，服务端据此只重放其后的帧，
+ * 既不漏也不重。单独包一层而非给每个事件加字段，是因为序号属传输层——它由服务端按输出
+ * 顺序分配、与事件语义无关，拼进事件里会让落库、日志等处凭空多出一个无意义的字段。
+ */
+export interface ChatStreamFrame {
+  /** 单调递增序号，从 1 开始 */
+  seq: number;
+  event: ChatStreamEvent;
+}

@@ -10,6 +10,7 @@ import type { FileStore } from '../mappers/file/fileStore.js';
 import type { SessionStore } from '../mappers/session.js';
 import type { UserStore } from '../mappers/user/store.js';
 import type { ConcurrencyGuard } from '../middleware/concurrencyGuard.js';
+import type { RoundRegistry } from '../services/conversation/roundRegistry.js';
 import type { KnowledgeStore } from '../services/knowledge/index.js';
 import type { AgentService } from '../services/llm/agent.js';
 import type { Logger } from '@repo/logger';
@@ -35,6 +36,8 @@ export interface AppDependencies {
   /** 操作审计：adminAudit 中间件写入，管理端「操作审计」页读取 */
   auditLogs: AuditLogStore;
   conversations: ConversationStore;
+  /** 在途轮次注册表：断点续传据此取轮次、停机据此中止全部（见 docs/adr/0015） */
+  rounds: RoundRegistry;
   files: FileStore;
   knowledge: KnowledgeStore;
   users: UserStore;

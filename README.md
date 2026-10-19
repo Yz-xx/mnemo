@@ -18,45 +18,20 @@ my-monorepo/
 ├── apps/
 │   ├── agent-server/         # 智能体后端服务（Express + LangChain）
 │   │   ├── src/
-│   │   │   ├── index.ts              # 组合根：装配依赖、启动清理会话并监听端口
-│   │   │   ├── app.ts                # createApp：组装中间件、注册路由与错误兜底
-│   │   │   ├── configuration/        # 配置与契约（config.ts 超 250 行后目录化）
-│   │   │   │   ├── config/           # env.ts 环境变量 → AppConfig、systemView.ts 只读视图、index.ts 聚合
-│   │   │   │   ├── dependencies.ts   # AppDependencies：路由层依赖契约（避免反向依赖）
-│   │   │   │   ├── errors.ts         # 依赖服务连接错误翻译（toErrorMessage 在 @repo/shared）
-│   │   │   │   └── messages.ts       # 对外固定文案常量表（ERROR_MESSAGE）
-│   │   │   ├── middleware/
-│   │   │   │   ├── cors.ts           # 跨域放行（桌面端 file:// 场景）
-│   │   │   │   ├── upload.ts         # 附件上传中间件（multer 内存解析 + 单文件）
-│   │   │   │   ├── requestLog.ts     # 请求级日志（requestId + 入参出参摘要）
-│   │   │   │   └── errorHandler.ts   # 兜底错误处理
-│   │   │   ├── auth/
-│   │   │   │   ├── credentials.ts    # 用户名/密码格式校验
-│   │   │   │   ├── userStore/        # 用户表读写与角色定义（types / rows / store 按关注点分文件）
-│   │   │   │   ├── sessionStore.ts   # 登录会话表（签发 / 校验 / 单端登录清理）
-│   │   │   │   ├── sessionUser.ts    # 登录响应组装（客户端与后台两个入口共用）
-│   │   │   │   ├── actor.ts          # 管理端身份与超管判据
-│   │   │   │   └── middleware.ts     # Bearer 令牌鉴权中间件
-│   │   │   ├── db/
-│   │   │   │   ├── pool.ts           # PostgreSQL 连接池
-│   │   │   │   └── schema/           # 启动自动建库建表（tables / columns / roles 按关注点分文件）
-│   │   │   ├── llm/
-│   │   │   │   ├── model.ts          # 对话模型 / 向量模型工厂
-│   │   │   │   ├── agent.ts          # AgentService：ReAct 智能体与流式桥接
-│   │   │   │   ├── prompt.ts         # system prompt 原文
-│   │   │   │   ├── vision.ts         # 图片理解：多模态模型转述图片
-│   │   │   │   └── tools/            # 六个工具：index（聚合）/ assemble（装配）/ knowledge / files / utility / runtime
-│   │   │   ├── files/                # 文件能力：上传存储 / 类型判定 / 解析 / 生成
-│   │   │   │   ├── store.ts          # 上传存储：落盘字节 + files 表元数据
-│   │   │   │   ├── type.ts           # magic bytes 判定上传类型
-│   │   │   │   ├── parser.ts         # 正文解析（docx / xlsx / pdf）
-│   │   │   │   └── generate.ts       # 导出生成（docx / xlsx / pdf）
-│   │   │   ├── rag/                  # 知识库：切分 + 向量化 + pgvector 近邻检索（按关注点分文件）
-│   │   │   ├── conversation/store/   # 会话与消息持久化（PostgreSQL，按用户隔离，按关注点分文件）
-│   │   │   ├── services/
-│   │   │   │   ├── chatStream.ts     # SSE 流式回复编排（推送事件 + 落库）
-│   │   │   │   └── knowledge.ts      # 文档入库编排（计时 + 日志）
-│   │   │   ├── routes/               # client/ 客户端接口、admin/ 管理端接口，index.ts 为注册表
+│   │   │   ├── index.ts              # 组合根：读配置 → 建库表 → 建连接池 → 装配四层 → createApp → listen
+│   │   │   ├── app.ts                # createApp：通用中间件 → 注册路由 → 错误兜底三段骨架
+│   │   │   ├── controllers/          # 接口层：client/ 客户端接口、admin/ 管理端接口；index.ts 为注册表
+│   │   │   ├── services/             # 业务逻辑层：按领域分 admin/ conversation/ health/ knowledge/ llm/ logging/
+│   │   │   │   ├── conversation/     # 轮次任务编排：round / roundRegistry / roundPipe / chatRoundTask / chatStream
+│   │   │   │   ├── llm/              # AgentService、模型与流式桥接；tools/ 六个工具、context/ 窗口预算
+│   │   │   │   └── knowledge/        # 知识库：切分 + 向量化 + 检索编排
+│   │   │   ├── mappers/              # 数据操作层：只做 SQL 读写与行映射（apiLog / conversation / file / knowledge / user）
+│   │   │   ├── entities/             # 实体层：跨层共享的数据形状（纯类型定义）
+│   │   │   ├── configuration/        # config/（env 读取、默认值与只读运行视图）、dependencies.ts
+│   │   │   ├── infrastructure/       # auth/、concurrency/、db/、files/、observability/、lifecycle.ts
+│   │   │   ├── common/               # errors.ts、messages.ts
+│   │   │   ├── utils/                # pagination.ts、batchIds.ts、uuid.ts
+│   │   │   ├── middleware/           # cors / requestLog / adminAudit / upload（diskStorage 落临时文件）/ errorHandler
 │   │   │   └── __vitest__/           # 单元测试（vitest 运行，不参与编译）
 │   │   ├── .env.development          # 开发环境配置（pnpm dev 加载）
 │   │   ├── .env.production           # 生产环境配置（pnpm start 加载）
@@ -69,7 +44,11 @@ my-monorepo/
 │   │       │   ├── window.ts         # 主窗口创建
 │   │       │   └── ipc.ts            # IPC 处理器注册
 │   │       ├── preload/              # 预加载层：contextBridge 白名单 API
-│   │       └── renderer/             # 渲染进程：Vue 3 界面与状态
+│   │       └── renderer/src/         # 渲染进程：Vue 3 界面与状态
+│   │           ├── api/              # client（唯一 HTTP / SSE 入口，含断点重连）/ session / bridge
+│   │           ├── composables/      # useChat 及其拆出：chatStream / useChatMessages / useChatSession / useChatConnection
+│   │           ├── components/       # 目录化组件：LoginView / SessionSidebar / ChatWindow / MessageItem / KnowledgePanel / SettingsDrawer
+│   │           └── styles/           # theme / motion / base / controls 公共样式
 │   └── admin-web/            # 后台管理网站（Vue 3 + 自动路由 + pinia + echarts，自建 UI 组件）
 │       ├── src/
 │       │   ├── main.ts               # 入口：装 pinia / router，恢复登录态并注入 401 处理
@@ -79,9 +58,12 @@ my-monorepo/
 │       │   ├── stores/auth.ts        # 登录态 store（token 落 localStorage）
 │       │   ├── layouts/AdminLayout.vue  # 顶栏 + 可收起侧边栏 + 内容区
 │       │   ├── pages/                # 文件式路由页：index（总览）/ users / knowledge / conversations
-│       │   │                         #   / files / logs / audit / tools / config / login / 占位页
-│       │   ├── components/           # 3 个业务弹窗 + 消息趋势图（通用组件已迁至 @repo/components）
-│       │   └── styles/               # base.less + tokens.less（固定亮色令牌）
+│       │   │                         #   / files / logs / audit / tools / config / login 等，超 200 行拆为 <目录>/index.vue + 同名 .ts/.less
+│       │   ├── composables/          # usePagedList 等共享组合式函数（列表分页取数）
+│       │   ├── components/           # 4 个业务组件：UserFormDialog / KnowledgeFormDialog / KnowledgeContentDialog / MessageTrendChart
+│       │   ├── utils/                # 通用小工具（纯函数）
+│       │   ├── styles/               # base.less + tokens.less（固定亮色令牌）
+│       │   └── __vitest__/           # 单元测试（独立 tsconfig，不参与编译产物）
 │       └── typed-router.d.ts         # 自动路由生成的路由类型（入库并登记 tsconfig include）
 ├── packages/
 │   ├── shared/               # 跨端通用工具库（与业务无关：字符串 / 通用函数 / 字节与时间格式化）
@@ -135,12 +117,12 @@ my-monorepo/
 
 1. 未登录时先渲染 `LoginView`；登录/注册成功后后端签发令牌（UUID），桌面端把令牌写入 `settings.json` 的 `authToken`，之后所有请求都带上 `Authorization: Bearer <token>`。
 2. 用户在 `ChatWindow` 输入内容；若附带附件，`useChat.sendMessage` 先经 `uploadFile()` 上传拿到 `fileId`，随后立即把用户消息与一条**空的助手消息**插入列表（占位，用于承载流式 token）。
-3. `AgentApi.streamChat` 以 `POST /api/chat` 建立连接，用 `AbortController` 支持随时停止。
+3. `AgentApi.streamChat` 以 `POST /api/chat` 建立轮次，随请求提交客户端生成的 `roundId`（兼作重发时的幂等键），服务端逐帧回推带 `id` 序号的 SSE。
 4. 后端鉴权中间件由令牌解析出 `userId`，把用户消息写入该用户名下的会话（首次提问时自动创建会话并以首条消息生成标题）。
 5. `AgentService` 把历史消息还原为 LangChain 消息对象，交给 `agent.stream(..., { streamMode: 'messages' })`。
 6. 智能体按需调用工具：需要事实 → 检索/时间/计算；每次工具调用会被转成 `tool` 事件推给前端，形成消息下方的“调用工具 xxx / 完成 xxx”标签；当调用 `write_file` 产出导出文件时，流末尾会追加 `file` 事件下发，客户端据此下载并经主进程落盘。
 7. 模型增量输出被转成 `token` 事件，前端逐字追加渲染；流结束后后端把完整答复落库，再下发 `done`（携带 `conversationId` 与 `title`）。
-8. 前端收到 `done` 后记录会话 ID 并刷新会话列表；若中途被用户中断，`signal` 会同步取消模型调用，避免继续消耗算力。
+8. 前端收到 `done` 后记录会话 ID 并刷新会话列表。连接中断只退订本次订阅、轮次在后台继续生成，客户端按退避重连 `GET /api/chat/rounds/:roundId/stream?lastEventId=N` 从断点续读（重试耗尽则回退为拉取已落库内容）；用户点「停止」则调 `POST /api/chat/rounds/:roundId/stop` 显式中止本轮。
 9. 任一请求返回 **401**（令牌过期或被新登录顶掉）时，桌面端清空本地登录态并回到登录页。
 
 ---

@@ -25,4 +25,14 @@ export const METRIC = {
   EVENT_LOOP_P50: 'eventLoop.p50Ms',
   EVENT_LOOP_P99: 'eventLoop.p99Ms',
   EVENT_LOOP_MAX: 'eventLoop.maxMs',
+  /** 当前在途轮次总数（含后台续生成） */
+  SSE_ROUNDS_ACTIVE: 'sse.roundsActive',
+  /** 当前已无订阅者、仍在后台续生成的轮次数 */
+  SSE_ROUNDS_DETACHED: 'sse.roundsDetached',
+  /** 断点续传重连成功次数 */
+  SSE_RESUMES: 'sse.resumes',
+  /** 断点续传重连失败次数（轮次不存在 / 已过期 / 归属不符） */
+  SSE_RESUME_FAILED: 'sse.resumeFailed',
+  /** 重连时累计重放的帧数 */
+  SSE_REPLAYED_FRAMES: 'sse.replayedFrames',
 } as const;

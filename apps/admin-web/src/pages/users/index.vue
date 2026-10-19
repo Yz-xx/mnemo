@@ -18,45 +18,47 @@ const { filter, table, selection, dialog, cells } = useUsersPage();
       >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
-      <button class="users__create" type="button" @click="dialog.openCreate">
-        <Plus :size="15" />
-        <span>新建用户</span>
-      </button>
+      <div class="users__toolbar-actions">
+        <!-- 批量条并入工具栏行：行高固定，出现/消失不会把下方表格推下去 -->
+        <BatchBar
+          v-if="selection.selectedKeys.length > 0"
+          :count="selection.selectedKeys.length"
+          @clear="selection.clearSelection"
+        >
+          <template #clear-icon><X :size="13" /></template>
+          <button
+            class="users__link"
+            type="button"
+            :disabled="selection.mutating"
+            @click="selection.batchStatus('banned')"
+          >
+            批量停用
+          </button>
+          <button
+            class="users__link"
+            type="button"
+            :disabled="selection.mutating"
+            @click="selection.batchStatus('active')"
+          >
+            批量启用
+          </button>
+          <button
+            class="users__link users__link--danger"
+            type="button"
+            :disabled="selection.mutating"
+            @click="selection.openBatchDelete"
+          >
+            批量删除
+          </button>
+        </BatchBar>
+        <button class="users__create" type="button" @click="dialog.openCreate">
+          <Plus :size="15" />
+          <span>新建用户</span>
+        </button>
+      </div>
     </div>
 
     <p v-if="table.errorMsg" class="users__error">{{ table.errorMsg }}</p>
-
-    <BatchBar
-      v-if="selection.selectedKeys.length > 0"
-      :count="selection.selectedKeys.length"
-      @clear="selection.clearSelection"
-    >
-      <template #clear-icon><X :size="13" /></template>
-      <button
-        class="users__link"
-        type="button"
-        :disabled="selection.mutating"
-        @click="selection.batchStatus('banned')"
-      >
-        批量停用
-      </button>
-      <button
-        class="users__link"
-        type="button"
-        :disabled="selection.mutating"
-        @click="selection.batchStatus('active')"
-      >
-        批量启用
-      </button>
-      <button
-        class="users__link users__link--danger"
-        type="button"
-        :disabled="selection.mutating"
-        @click="selection.openBatchDelete"
-      >
-        批量删除
-      </button>
-    </BatchBar>
 
     <DataTable
       v-model:selected-keys="selection.selectedKeys"
