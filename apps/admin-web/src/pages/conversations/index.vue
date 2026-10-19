@@ -4,65 +4,50 @@ import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/comp
 import { formatTime } from '@repo/shared';
 import { useConversationsPage } from './conversations';
 
-const {
-  PAGE_SIZE,
-  columns,
-  ROLE_LABEL,
-  keyword,
-  detail,
-  detailLoading,
-  pendingDelete,
-  confirmingBatch,
-  submitting,
-  selectedKeys,
-  clearSelection,
-  closeDetail,
-  openDetail,
-  confirmDelete,
-  confirmBatchDelete,
-  rows,
-  total,
-  page,
-  loading,
-  errorMsg,
-  handleSearch,
-  handlePage,
-} = useConversationsPage();
+const { filter, table, selection, detail, dialog } = useConversationsPage();
 </script>
 
 <template>
   <div class="conversations">
     <header class="conversations__head reveal" :style="{ '--reveal-index': 0 }">
       <p class="conversations__lede">全部账号的对话记录，可展开核查消息内容</p>
-      <p class="conversations__stamp">共 {{ total }} 条</p>
+      <p class="conversations__stamp">共 {{ table.total }} 条</p>
     </header>
 
     <div class="conversations__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索会话标题" @search="handleSearch">
+      <SearchBar
+        v-model:keyword="filter.keyword"
+        placeholder="搜索会话标题"
+        @search="filter.handleSearch"
+      >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
     </div>
 
-    <p v-if="errorMsg" class="conversations__error">{{ errorMsg }}</p>
+    <p v-if="table.errorMsg" class="conversations__error">{{ table.errorMsg }}</p>
 
-    <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+    <BatchBar
+      v-if="selection.selectedKeys.length > 0"
+      :count="selection.selectedKeys.length"
+      @clear="selection.clearSelection"
+    >
       <template #clear-icon><X :size="13" /></template>
       <button
         class="conversations__link conversations__link--danger"
         type="button"
-        @click="confirmingBatch = true"
+        @click="dialog.batchOpen = true"
       >
         批量删除
       </button>
     </BatchBar>
 
     <DataTable
-      v-model:selected-keys="selectedKeys"
+      v-model:selected-keys="selection.selectedKeys"
       selectable
-      :columns="columns"
-      :rows="rows"
+      :columns="table.columns"
+      :rows="table.rows"
       :row-key="(row) => row.id"
-      :loading="loading"
+      :loading="table.loading"
       empty-text="没有匹配的会话"
     >
       <template #title="{ row }">
@@ -79,11 +64,11 @@ const {
       </template>
       <template #actions="{ row }">
         <div class="conversations__actions">
-          <button class="conversations__link" type="button" @click="openDetail(row)">查看</button>
+          <button class="conversations__link" type="button" @click="detail.open(row)">查看</button>
           <button
             class="conversations__link conversations__link--danger"
             type="button"
-            @click="pendingDelete = row"
+            @click="dialog.target = row"
           >
             删除
           </button>
@@ -92,33 +77,37 @@ const {
     </DataTable>
 
     <PageBar
-      :page="page"
-      :page-size="PAGE_SIZE"
-      :total="total"
-      :disabled="loading"
-      @update:page="handlePage"
+      :page="table.page"
+      :page-size="table.PAGE_SIZE"
+      :total="table.total"
+      :disabled="table.loading"
+      @update:page="table.handlePage"
     />
 
     <ModalDialog
-      v-if="detailLoading || detail"
+      v-if="detail.loading || detail.content"
       title="会话详情"
       width="640px"
       confirm-text="关闭"
       :cancel-text="null"
-      @close="closeDetail()"
-      @confirm="closeDetail()"
+      @close="detail.close()"
+      @confirm="detail.close()"
     >
       <template #close-icon><X :size="16" /></template>
-      <p v-if="detailLoading" class="conversations__hint">加载中…</p>
-      <div v-else-if="detail" class="conversations__detail">
+      <p v-if="detail.loading" class="conversations__hint">加载中…</p>
+      <div v-else-if="detail.content" class="conversations__detail">
         <p class="conversations__meta">
-          {{ detail.ownerName ?? `#${detail.userId}` }} · 共 {{ detail.messages.length }} 条消息 ·
-          {{ formatTime(detail.updatedAt) }}
+          {{ detail.content.ownerName ?? `#${detail.content.userId}` }} · 共
+          {{ detail.content.messages.length }} 条消息 · {{ formatTime(detail.content.updatedAt) }}
         </p>
         <ol class="conversations__messages">
-          <li v-for="message in detail.messages" :key="message.id" class="conversations__message">
+          <li
+            v-for="message in detail.content.messages"
+            :key="message.id"
+            class="conversations__message"
+          >
             <span class="conversations__role" :class="`conversations__role--${message.role}`">
-              {{ ROLE_LABEL[message.role] }}
+              {{ detail.ROLE_LABEL[message.role] }}
             </span>
             <p class="conversations__content">{{ message.content }}</p>
             <p v-if="message.sources?.length" class="conversations__tags">
@@ -136,32 +125,33 @@ const {
     </ModalDialog>
 
     <ModalDialog
-      v-if="pendingDelete"
+      v-if="dialog.target"
       title="删除会话"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="pendingDelete = null"
-      @confirm="confirmDelete"
+      :loading="dialog.submitting"
+      @close="dialog.target = null"
+      @confirm="dialog.confirmDelete"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="conversations__confirm">
-        确定删除会话「{{ pendingDelete.title }}」？其全部消息会一并清除，操作不可撤销。
+        确定删除会话「{{ dialog.target.title }}」？其全部消息会一并清除，操作不可撤销。
       </p>
     </ModalDialog>
 
     <ModalDialog
-      v-if="confirmingBatch"
+      v-if="dialog.batchOpen"
       title="批量删除会话"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="confirmingBatch = false"
-      @confirm="confirmBatchDelete"
+      :loading="dialog.submitting"
+      @close="dialog.batchOpen = false"
+      @confirm="dialog.confirmBatch"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="conversations__confirm">
-        确定删除选中的 {{ selectedKeys.length }} 条会话？其全部消息会一并清除，操作不可撤销。
+        确定删除选中的
+        {{ selection.selectedKeys.length }} 条会话？其全部消息会一并清除，操作不可撤销。
       </p>
     </ModalDialog>
   </div>

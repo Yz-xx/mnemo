@@ -46,7 +46,9 @@ alwaysApply: false
 - composable 内部状态用 `ref` / `computed`，需要跨组件共享时用模块级单例（参考 `useAuth`），对外只暴露只读状态与操作函数。
 - 父子通信走 props 与 emit，子组件不直接改父级状态。
 - 模板类名遵循 BEM（`块__元素`、`块--修饰`）；`components/` 下的组件以目录组织（`Xxx/{index.ts, Xxx.vue, Xxx.less, useXxx.ts}`），私有样式写同目录 `Xxx.less` 并由 `.vue` 以 `<style src="./Xxx.less" lang="less" scoped>` 引入；根组件 `App.vue` 例外，保持单文件与内联 scoped 样式块。
-- `pages/` 下超过 200 行的页面按同一口径拆：`<目录>/index.vue` 只留模板与 `useXxxPage()` 的绑定解构，逻辑进同目录 `<目录>.ts`（导出 `useXxxPage()`，把模板引用到的绑定一并返回），样式进同目录 `<目录>.less`；根目录两页的 `.ts`/`.less` 与 `.vue` 并排命名（总览页 `overview.ts`、登录页 `login.ts`）。页面**不设 `index.ts` 导出**——路由由 `.vue` 生成、页面不被别处 import。
+- `pages/` 下超过 200 行的页面按同一口径拆：`<目录>/index.vue` 只留模板与 `useXxxPage()` 的分组解构，逻辑进同目录 `<目录>.ts`（导出 `useXxxPage()`），其余关注点进同目录 `useXxx<关注点>.ts`（导出子 hook）；样式进同目录 `<目录>.less`；根目录两页的 `.ts`/`.less` 与 `.vue` 并排命名（总览页 `overview.ts`、登录页 `login.ts`）。页面**不设 `index.ts` 导出**——路由由 `.vue` 生成、页面不被别处 import。
+- **hook 出口收敛到约 5 个绑定**：页面入口 `useXxxPage()`（以及被 `.vue` 直接消费的 hook）顶层只返回 ≤5 个分组；硬判据就是 `<script setup>` 里 `const { a, b, ... } = useXxx()` 的顶层绑定数。超出就按关注点拆成同目录子 hook 分组返回：子 hook 各持有自己关注点的状态、只暴露该关注点用到的绑定，**彼此不互相 import**，共享状态与回调由入口创建后经参数注入。子 hook 是拆出来的内部关注点，键数随该关注点实际需要（一个关注点内不得混入无关绑定；某组明显臃肿就说明关注点还能再切一刀）。入口把子 hook 收成 ≤5 个分组（如 `filter` / `table` / `selection` / `dialog` / `cells`），模板按组访问（`table.rows`、`dialog.kind`），层级不超过两层；模板用得到的常量放进对应分组，纯函数与常量仍留模块顶层。
+- 分组对象**必须用 `reactive()` 包**：嵌套在普通对象里的 `ref` 在模板中不会被解包，不包就会把 ref 对象本身交给模板。参考实现见 `apps/admin-web/src/pages/users/`（入口 + `useUsersDialog.ts` + `useUsersSelection.ts`）。
 - 页面私有状态（含 `usePagedList` 建出的 ref）必须留在 `useXxxPage()` 内部：写在模块顶层会脱离组件实例，`onMounted` 失效、状态还会跨路由进出被复用。模块顶层只放静态常量与纯函数。
 - 列表渲染必须写 `:key`；模板中出现多套条件分支时抽子组件，不堆叠 `v-if`。
 - 需要即时反映的流式数据（token 追加）通过独立 `ref` 承载，避免整列表重建。

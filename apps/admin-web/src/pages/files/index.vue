@@ -6,57 +6,50 @@ import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/comp
 import { formatTime } from '@repo/shared';
 import { useFilesPage } from './files';
 
-const {
-  PAGE_SIZE,
-  columns,
-  keyword,
-  page,
-  rows,
-  total,
-  loading,
-  errorMsg,
-  pendingDelete,
-  confirmingBatch,
-  submitting,
-  selectedKeys,
-  formatBytes,
-  handleSearch,
-  handlePage,
-  clearSelection,
-  confirmDelete,
-  confirmBatchDelete,
-} = useFilesPage();
+const { filter, table, selection, dialog, cells } = useFilesPage();
 </script>
 
 <template>
   <div class="files">
     <header class="files__head reveal" :style="{ '--reveal-index': 0 }">
       <p class="files__lede">全部账号上传的文件，删除会同时清理服务端存放的原始字节</p>
-      <p class="files__stamp">共 {{ total }} 个</p>
+      <p class="files__stamp">共 {{ table.total }} 个</p>
     </header>
 
     <div class="files__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索文件名" @search="handleSearch">
+      <SearchBar
+        v-model:keyword="filter.keyword"
+        placeholder="搜索文件名"
+        @search="filter.handleSearch"
+      >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
     </div>
 
-    <p v-if="errorMsg" class="files__error">{{ errorMsg }}</p>
+    <p v-if="table.errorMsg" class="files__error">{{ table.errorMsg }}</p>
 
-    <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+    <BatchBar
+      v-if="selection.selectedKeys.length > 0"
+      :count="selection.selectedKeys.length"
+      @clear="selection.clearSelection"
+    >
       <template #clear-icon><X :size="13" /></template>
-      <button class="files__link files__link--danger" type="button" @click="confirmingBatch = true">
+      <button
+        class="files__link files__link--danger"
+        type="button"
+        @click="selection.openBatchDelete"
+      >
         批量删除
       </button>
     </BatchBar>
 
     <DataTable
-      v-model:selected-keys="selectedKeys"
+      v-model:selected-keys="selection.selectedKeys"
       selectable
-      :columns="columns"
-      :rows="rows"
+      :columns="table.columns"
+      :rows="table.rows"
       :row-key="(row) => row.id"
-      :loading="loading"
+      :loading="table.loading"
       empty-text="没有匹配的文件"
     >
       <template #name="{ row }">
@@ -66,7 +59,7 @@ const {
         <span class="files__badge">{{ row.ext.toUpperCase() }}</span>
       </template>
       <template #size="{ row }">
-        <span class="files__mono">{{ formatBytes(row.size) }}</span>
+        <span class="files__mono">{{ cells.formatBytes(row.size) }}</span>
       </template>
       <template #owner="{ row }">
         <span class="files__mono">{{ row.ownerName ?? `#${row.userId}` }}</span>
@@ -75,48 +68,54 @@ const {
         <span class="files__mono">{{ formatTime(row.createdAt) }}</span>
       </template>
       <template #actions="{ row }">
-        <button class="files__link files__link--danger" type="button" @click="pendingDelete = row">
+        <button
+          class="files__link files__link--danger"
+          type="button"
+          @click="dialog.askDelete(row)"
+        >
           删除
         </button>
       </template>
     </DataTable>
 
     <PageBar
-      :page="page"
-      :page-size="PAGE_SIZE"
-      :total="total"
-      :disabled="loading"
-      @update:page="handlePage"
+      :page="table.page"
+      :page-size="table.PAGE_SIZE"
+      :total="table.total"
+      :disabled="table.loading"
+      @update:page="table.handlePage"
     />
 
     <ModalDialog
-      v-if="pendingDelete"
+      v-if="dialog.pendingDelete"
       title="删除文件"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="pendingDelete = null"
-      @confirm="confirmDelete"
+      :loading="dialog.submitting"
+      @close="dialog.closeDialog"
+      @confirm="dialog.confirmDelete"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="files__confirm">
-        确定删除文件「{{ pendingDelete.name }}」？服务端存放的原始字节会一并清除，操作不可撤销。
+        确定删除文件「{{
+          dialog.pendingDelete.name
+        }}」？服务端存放的原始字节会一并清除，操作不可撤销。
       </p>
     </ModalDialog>
 
     <ModalDialog
-      v-if="confirmingBatch"
+      v-if="dialog.confirmingBatch"
       title="批量删除文件"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="confirmingBatch = false"
-      @confirm="confirmBatchDelete"
+      :loading="dialog.submitting"
+      @close="dialog.closeDialog"
+      @confirm="dialog.confirmBatchDelete"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="files__confirm">
         确定删除选中的
-        {{ selectedKeys.length }} 个文件？服务端存放的原始字节会一并清除，操作不可撤销。
+        {{ selection.selectedKeys.length }} 个文件？服务端存放的原始字节会一并清除，操作不可撤销。
       </p>
     </ModalDialog>
   </div>

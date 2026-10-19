@@ -6,78 +6,54 @@ import KnowledgeContentDialog from '@/components/KnowledgeContentDialog';
 import KnowledgeFormDialog from '@/components/KnowledgeFormDialog';
 import { useKnowledgePage } from './knowledge';
 
-const {
-  PAGE_SIZE,
-  SCOPE_LABEL,
-  columns,
-  keyword,
-  page,
-  rows,
-  total,
-  loading,
-  errorMsg,
-  dialog,
-  selected,
-  submitting,
-  formError,
-  selectedKeys,
-  viewContent,
-  viewEditing,
-  viewSaving,
-  viewError,
-  handleSearch,
-  handlePage,
-  clearSelection,
-  openCreate,
-  askDelete,
-  openBatchDelete,
-  openView,
-  startEdit,
-  closeDialog,
-  handleCreate,
-  confirmDelete,
-  confirmBatchDelete,
-  handleUpdateDocument,
-} = useKnowledgePage();
+const { filter, table, selection, dialog, view } = useKnowledgePage();
 </script>
 
 <template>
   <div class="knowledge">
     <div class="knowledge__toolbar">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索文档标题" @search="handleSearch">
+      <SearchBar
+        v-model:keyword="filter.keyword"
+        placeholder="搜索文档标题"
+        @search="filter.handleSearch"
+      >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
-      <button class="knowledge__create" type="button" @click="openCreate">
+      <button class="knowledge__create" type="button" @click="dialog.openCreate">
         <Plus :size="15" />
         <span>新增全局文档</span>
       </button>
     </div>
 
-    <p v-if="errorMsg" class="knowledge__error">{{ errorMsg }}</p>
+    <p v-if="table.errorMsg" class="knowledge__error">{{ table.errorMsg }}</p>
 
-    <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+    <BatchBar
+      v-if="selection.selectedKeys.length > 0"
+      :count="selection.selectedKeys.length"
+      @clear="selection.clearSelection"
+    >
       <template #clear-icon><X :size="13" /></template>
       <button
         class="knowledge__link knowledge__link--danger"
         type="button"
-        @click="openBatchDelete"
+        @click="selection.openBatchDelete"
       >
         批量删除
       </button>
     </BatchBar>
 
     <DataTable
-      v-model:selected-keys="selectedKeys"
+      v-model:selected-keys="selection.selectedKeys"
       selectable
-      :columns="columns"
-      :rows="rows"
+      :columns="table.columns"
+      :rows="table.rows"
       :row-key="(row) => row.id"
-      :loading="loading"
+      :loading="table.loading"
       empty-text="没有匹配的文档"
     >
       <template #scope="{ row }">
         <span class="knowledge__badge" :class="`knowledge__badge--${row.scope}`">
-          {{ SCOPE_LABEL[row.scope] }}
+          {{ table.SCOPE_LABEL[row.scope] }}
         </span>
       </template>
       <template #owner="{ row }">
@@ -88,11 +64,11 @@ const {
       <template #createdAt="{ row }">{{ formatTime(row.createdAt) }}</template>
       <template #actions="{ row }">
         <div class="knowledge__actions">
-          <button class="knowledge__link" type="button" @click="openView(row)">查看</button>
+          <button class="knowledge__link" type="button" @click="view.open(row)">查看</button>
           <button
             class="knowledge__link knowledge__link--danger"
             type="button"
-            @click="askDelete(row)"
+            @click="dialog.askDelete(row)"
           >
             删除
           </button>
@@ -101,59 +77,60 @@ const {
     </DataTable>
 
     <PageBar
-      :page="page"
-      :page-size="PAGE_SIZE"
-      :total="total"
-      :disabled="loading"
-      @update:page="handlePage"
+      :page="table.page"
+      :page-size="table.PAGE_SIZE"
+      :total="table.total"
+      :disabled="table.loading"
+      @update:page="table.handlePage"
     />
 
     <KnowledgeFormDialog
-      v-if="dialog === 'create'"
-      :loading="submitting"
-      :error="formError"
-      @close="closeDialog"
-      @submit="handleCreate"
+      v-if="dialog.kind === 'create'"
+      :loading="dialog.submitting"
+      :error="dialog.formError"
+      @close="dialog.closeDialog"
+      @submit="dialog.handleCreate"
     />
 
     <KnowledgeContentDialog
-      v-if="dialog === 'view' && viewContent"
-      :initial="viewContent"
-      :editing="viewEditing"
-      :loading="viewSaving"
-      :error="viewError"
-      @close="closeDialog"
-      @edit="startEdit"
-      @submit="handleUpdateDocument"
+      v-if="dialog.kind === 'view' && view.content"
+      :initial="view.content"
+      :editing="view.editing"
+      :loading="view.saving"
+      :error="view.error"
+      @close="dialog.closeDialog"
+      @edit="view.startEdit"
+      @submit="view.update"
     />
 
     <ModalDialog
-      v-if="dialog === 'delete'"
+      v-if="dialog.kind === 'delete'"
       title="删除文档"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="closeDialog"
-      @confirm="confirmDelete"
+      :loading="dialog.submitting"
+      @close="dialog.closeDialog"
+      @confirm="dialog.confirmDelete"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="knowledge__confirm">
-        确定删除文档「{{ selected?.title }}」？其全部向量片段会一并清除，操作不可撤销。
+        确定删除文档「{{ dialog.selected?.title }}」？其全部向量片段会一并清除，操作不可撤销。
       </p>
     </ModalDialog>
 
     <ModalDialog
-      v-if="dialog === 'batch-delete'"
+      v-if="dialog.kind === 'batch-delete'"
       title="批量删除文档"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="closeDialog"
-      @confirm="confirmBatchDelete"
+      :loading="dialog.submitting"
+      @close="dialog.closeDialog"
+      @confirm="dialog.confirmBatchDelete"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="knowledge__confirm">
-        确定删除选中的 {{ selectedKeys.length }} 篇文档？其全部向量片段会一并清除，操作不可撤销。
+        确定删除选中的
+        {{ selection.selectedKeys.length }} 篇文档？其全部向量片段会一并清除，操作不可撤销。
       </p>
     </ModalDialog>
   </div>

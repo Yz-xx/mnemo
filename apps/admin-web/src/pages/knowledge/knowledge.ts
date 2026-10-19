@@ -1,14 +1,11 @@
-import type { AdminKnowledgeContent, AdminKnowledgeDocument, KnowledgeScope } from '@/api/types';
-import { computed, onMounted, ref } from 'vue';
-import {
-  batchDeleteKnowledgeDocuments,
-  createGlobalDocument,
-  deleteKnowledgeDocument,
-  fetchKnowledgeContent,
-  listKnowledgeDocuments,
-  updateKnowledgeDocument,
-} from '@/api';
+import type { KnowledgeDialogKind } from './useKnowledgeDialog';
+import type { AdminKnowledgeDocument, KnowledgeScope } from '@/api/types';
+import { onMounted, reactive, ref } from 'vue';
+import { listKnowledgeDocuments } from '@/api';
 import { usePagedList } from '@/composables/usePagedList';
+import { useKnowledgeDialog } from './useKnowledgeDialog';
+import { useKnowledgeSelection } from './useKnowledgeSelection';
+import { useKnowledgeView } from './useKnowledgeView';
 
 /** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
 const PAGE_SIZE = 20;
@@ -27,189 +24,95 @@ const columns = [
 /**
  * 知识库管理：管理视角的文档列表（含各用户的私有文档）+ 新增全局文档 + 单条与批量删除 + 内容查看与编辑。
  * 文档存在向量库而非关系表，后端在内存里过滤与分页，前端按同一套翻页交互处理。
+ * 出口按关注点收敛成 filter / table / selection / dialog / view 五组，模板按组取用。
  */
 export function useKnowledgePage() {
   const keyword = ref('');
 
-  /** 已勾选行的键：翻页、搜索或重新取数后由 load 清空，不做跨页保留 */
-  const selectedKeys = ref<Array<string | number>>([]);
-  /** 批量接口要的文档 ID：行键本身就是字符串 ID */
-  const selectedIds = computed(() => selectedKeys.value.map(String));
+  // 勾选随列表内容失效，故 selection 先建，好让 usePagedList 的 onReset 直接引用它的清空动作
+  const selection = useKnowledgeSelection();
 
-  const {
-    rows,
-    total,
-    page,
-    loading,
-    errorMsg,
-    load,
-    search: handleSearch,
-    goPage: handlePage,
-  } = usePagedList<AdminKnowledgeDocument>({
+  const { rows, total, loading, errorMsg, paging } = usePagedList<AdminKnowledgeDocument>({
     pageSize: PAGE_SIZE,
     fetcher: ({ page, pageSize }) =>
       listKnowledgeDocuments({ keyword: keyword.value.trim(), page, pageSize }),
     errorFallback: '加载文档列表失败',
     // 选择随列表内容失效：翻页、搜索、重新取数后都不保留已勾选项
-    onReset: () => {
-      selectedKeys.value = [];
-    },
+    onReset: () => selection.clearSelection(),
   });
 
-  /** 当前弹窗：同一时刻只可能开一个 */
-  const dialog = ref<'create' | 'delete' | 'batch-delete' | 'view' | null>(null);
+  // 弹窗 kind 与已选文档是两个子 hook 共用的状态：由入口创建后注入，子 hook 之间不互相 import
+  const dialogKind = ref<KnowledgeDialogKind | null>(null);
   const selected = ref<AdminKnowledgeDocument | null>(null);
-  const submitting = ref(false);
-  const formError = ref('');
 
-  /** 查看弹窗的内容与编辑态由页面托管：弹窗组件保持纯展示，保存成功后父级回灌新内容 */
-  const viewContent = ref<AdminKnowledgeContent | null>(null);
-  const viewEditing = ref(false);
-  const viewSaving = ref(false);
-  const viewError = ref('');
-
-  function clearSelection(): void {
-    selectedKeys.value = [];
-  }
-
-  function openCreate(): void {
-    formError.value = '';
-    dialog.value = 'create';
-  }
-
-  function askDelete(row: AdminKnowledgeDocument): void {
-    selected.value = row;
-    dialog.value = 'delete';
-  }
-
-  function openBatchDelete(): void {
-    dialog.value = 'batch-delete';
-  }
-
-  function closeDialog(): void {
-    dialog.value = null;
-    selected.value = null;
-    viewContent.value = null;
-    viewEditing.value = false;
-    viewError.value = '';
-  }
-
-  async function openView(row: AdminKnowledgeDocument): Promise<void> {
-    try {
-      viewContent.value = await fetchKnowledgeContent(row.id);
-      viewEditing.value = false;
-      viewError.value = '';
-      selected.value = row;
-      dialog.value = 'view';
-    } catch (e) {
-      // 拉取失败不开弹窗，错误落在列表顶部的提示区
-      errorMsg.value = (e as Error).message || '加载文档内容失败';
-    }
-  }
-
-  function startEdit(): void {
-    viewEditing.value = true;
-    viewError.value = '';
-  }
-
-  async function handleUpdateDocument(input: { title: string; content: string }): Promise<void> {
-    const target = selected.value;
-    if (!target) return;
-    viewSaving.value = true;
-    viewError.value = '';
-    try {
-      await updateKnowledgeDocument(target.id, input);
-      // 保存成功：回灌最新内容（组件 watch 会据此重置表单）并退出编辑态，随后刷新列表行
-      viewContent.value = await fetchKnowledgeContent(target.id);
-      viewEditing.value = false;
-      await load();
-    } catch (e) {
-      // 保留编辑态与已填内容，便于排查后直接重试
-      viewError.value = (e as Error).message || '保存文档失败';
-    } finally {
-      viewSaving.value = false;
-    }
-  }
-
-  async function handleCreate(input: { title: string; content: string }): Promise<void> {
-    submitting.value = true;
-    formError.value = '';
-    try {
-      await createGlobalDocument(input);
-      closeDialog();
-      page.value = 1;
-      await load();
-    } catch (e) {
-      // 保留弹窗与已填内容，便于改完环境后直接重试
-      formError.value = (e as Error).message || '文档入库失败';
-    } finally {
-      submitting.value = false;
-    }
-  }
-
-  async function confirmDelete(): Promise<void> {
-    const target = selected.value;
-    if (!target) return;
-    submitting.value = true;
-    try {
-      await deleteKnowledgeDocument(target.id);
-      closeDialog();
-      await load();
-    } catch (e) {
-      errorMsg.value = (e as Error).message || '删除文档失败';
-      closeDialog();
-    } finally {
-      submitting.value = false;
-    }
-  }
-
-  async function confirmBatchDelete(): Promise<void> {
-    submitting.value = true;
-    try {
-      await batchDeleteKnowledgeDocuments(selectedIds.value);
-      closeDialog();
-      await load();
-    } catch (e) {
-      errorMsg.value = (e as Error).message || '批量删除文档失败';
-      closeDialog();
-    } finally {
-      submitting.value = false;
-    }
-  }
-
-  onMounted(() => void load());
-
-  return {
-    PAGE_SIZE,
-    SCOPE_LABEL,
-    columns,
-    keyword,
-    page,
-    rows,
-    total,
-    loading,
-    errorMsg,
-    dialog,
+  // 查看 hook 先建：它只操作注入的已选文档 ref，开窗（切 kind）经回调交回入口
+  const view = useKnowledgeView({
     selected,
-    submitting,
-    formError,
-    selectedKeys,
-    viewContent,
-    viewEditing,
-    viewSaving,
-    viewError,
-    handleSearch,
-    handlePage,
-    clearSelection,
-    openCreate,
-    askDelete,
-    openBatchDelete,
-    openView,
-    startEdit,
+    openViewDialog: () => {
+      dialogKind.value = 'view';
+    },
+    reload: paging.load,
+    errorMsg,
+  });
+
+  /** 关闭任一弹窗：收掉共享的 kind 与已选文档，再复位查看态 */
+  function closeDialog(): void {
+    dialogKind.value = null;
+    selected.value = null;
+    view.resetView();
+  }
+
+  const dialog = useKnowledgeDialog({
+    dialog: dialogKind,
+    selected,
     closeDialog,
-    handleCreate,
-    confirmDelete,
-    confirmBatchDelete,
-    handleUpdateDocument,
+    search: paging.search,
+    reload: paging.load,
+    errorMsg,
+    selectedIds: selection.selectedIds,
+  });
+
+  onMounted(() => void paging.load());
+
+  // 分组包一层 reactive：嵌套在普通对象里的 ref 在模板中不会被解包，包过 reactive 才会
+  return {
+    filter: reactive({ keyword, handleSearch: paging.search }),
+    table: reactive({
+      PAGE_SIZE,
+      SCOPE_LABEL,
+      columns,
+      rows,
+      page: paging.page,
+      total,
+      loading,
+      errorMsg,
+      handlePage: paging.goPage,
+    }),
+    selection: reactive({
+      selectedKeys: selection.selectedKeys,
+      clearSelection: selection.clearSelection,
+      openBatchDelete: dialog.openBatchDelete,
+    }),
+    dialog: reactive({
+      kind: dialogKind,
+      selected,
+      submitting: dialog.submitting,
+      formError: dialog.formError,
+      openCreate: dialog.openCreate,
+      askDelete: dialog.askDelete,
+      closeDialog,
+      handleCreate: dialog.handleCreate,
+      confirmDelete: dialog.confirmDelete,
+      confirmBatchDelete: dialog.confirmBatchDelete,
+    }),
+    view: reactive({
+      content: view.viewContent,
+      editing: view.viewEditing,
+      saving: view.viewSaving,
+      error: view.viewError,
+      open: view.openView,
+      startEdit: view.startEdit,
+      update: view.handleUpdateDocument,
+    }),
   };
 }

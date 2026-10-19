@@ -1,5 +1,5 @@
 import type { AuthUser } from '../types';
-import { ref } from 'vue';
+import { reactive, ref } from 'vue';
 import { readSettings, saveSettings } from '../api/bridge';
 import { toErrorMessage } from '../api/client';
 import { agentApi, setBackendUrl, setToken, token } from '../api/session';
@@ -71,7 +71,14 @@ async function clear(): Promise<void> {
   await persist('');
 }
 
-/** 登录态：用户信息与提交状态是模块级单例，与 api/session 的令牌同源，供各组件共享同一份 */
+/**
+ * 登录态：用户信息与提交状态是模块级单例，与 api/session 的令牌同源，供各组件共享同一份。
+ * 出口按关注点收敛成 session / form 两组；分组用 reactive 包一层，嵌套 ref 才会在模板里解包，
+ * JS 侧（useChat / useLoginView）读写到的仍是同一份底层状态，单例语义不变。
+ */
 export function useAuth() {
-  return { token, user, submitting, errorMessage, restore, submit, logout, clear };
+  return {
+    session: reactive({ token, user, restore, logout, clear }),
+    form: reactive({ submitting, errorMessage, submit }),
+  };
 }

@@ -12,16 +12,21 @@ export interface PagedListOptions<T> {
   onReset?: () => void;
 }
 
-/** 分页列表对页面暴露的接口：页面读状态、调动作，错误文案的展示交给页面模板 */
-export interface PagedList<T> {
-  rows: Ref<T[]>;
-  total: Ref<number>;
+/** 页码与取数动作：与列表状态分开放，页面按组取用，免得接口越摊越宽 */
+export interface PagedListPaging {
   page: Ref<number>;
-  loading: Ref<boolean>;
-  errorMsg: Ref<string>;
   load: () => Promise<void>;
   search: () => Promise<void>;
   goPage: (next: number) => Promise<void>;
+}
+
+/** 分页列表对页面暴露的接口：页面读状态、翻页取数，错误文案的展示交给页面模板 */
+export interface PagedList<T> {
+  rows: Ref<T[]>;
+  total: Ref<number>;
+  loading: Ref<boolean>;
+  errorMsg: Ref<string>;
+  paging: PagedListPaging;
 }
 
 /**
@@ -71,5 +76,5 @@ export function usePagedList<T>(options: PagedListOptions<T>): PagedList<T> {
     await load();
   }
 
-  return { rows, total, page, loading, errorMsg, load, search, goPage };
+  return { rows, total, loading, errorMsg, paging: { page, load, search, goPage } };
 }

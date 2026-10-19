@@ -5,101 +5,86 @@ import { formatTime } from '@repo/shared';
 import UserFormDialog from '@/components/UserFormDialog';
 import { useUsersPage } from './users';
 
-const {
-  PAGE_SIZE,
-  ROLE_LABEL,
-  STATUS_LABEL,
-  columns,
-  keyword,
-  isSuperAdmin,
-  roleOptions,
-  page,
-  rows,
-  total,
-  loading,
-  errorMsg,
-  dialog,
-  selected,
-  submitting,
-  formError,
-  mutating,
-  selectedKeys,
-  isSelf,
-  handleSearch,
-  handlePage,
-  changeRole,
-  toggleStatus,
-  clearSelection,
-  batchStatus,
-  openCreate,
-  askDelete,
-  openBatchDelete,
-  closeDialog,
-  handleCreate,
-  confirmDelete,
-  confirmBatchDelete,
-} = useUsersPage();
+const { filter, table, selection, dialog, cells } = useUsersPage();
 </script>
 
 <template>
   <div class="users">
     <div class="users__toolbar">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索用户名" @search="handleSearch">
+      <SearchBar
+        v-model:keyword="filter.keyword"
+        placeholder="搜索用户名"
+        @search="filter.handleSearch"
+      >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
-      <button class="users__create" type="button" @click="openCreate">
+      <button class="users__create" type="button" @click="dialog.openCreate">
         <Plus :size="15" />
         <span>新建用户</span>
       </button>
     </div>
 
-    <p v-if="errorMsg" class="users__error">{{ errorMsg }}</p>
+    <p v-if="table.errorMsg" class="users__error">{{ table.errorMsg }}</p>
 
-    <BatchBar v-if="selectedKeys.length > 0" :count="selectedKeys.length" @clear="clearSelection">
+    <BatchBar
+      v-if="selection.selectedKeys.length > 0"
+      :count="selection.selectedKeys.length"
+      @clear="selection.clearSelection"
+    >
       <template #clear-icon><X :size="13" /></template>
-      <button class="users__link" type="button" :disabled="mutating" @click="batchStatus('banned')">
+      <button
+        class="users__link"
+        type="button"
+        :disabled="selection.mutating"
+        @click="selection.batchStatus('banned')"
+      >
         批量停用
       </button>
-      <button class="users__link" type="button" :disabled="mutating" @click="batchStatus('active')">
+      <button
+        class="users__link"
+        type="button"
+        :disabled="selection.mutating"
+        @click="selection.batchStatus('active')"
+      >
         批量启用
       </button>
       <button
         class="users__link users__link--danger"
         type="button"
-        :disabled="mutating"
-        @click="openBatchDelete"
+        :disabled="selection.mutating"
+        @click="selection.openBatchDelete"
       >
         批量删除
       </button>
     </BatchBar>
 
     <DataTable
-      v-model:selected-keys="selectedKeys"
+      v-model:selected-keys="selection.selectedKeys"
       selectable
-      :columns="columns"
-      :rows="rows"
+      :columns="table.columns"
+      :rows="table.rows"
       :row-key="(row) => row.id"
-      :loading="loading"
+      :loading="table.loading"
       empty-text="没有匹配的用户"
     >
       <!-- 普通管理员管不到后台账号（列表里也不会有），行内只读展示即可 -->
       <template #role="{ row }">
         <select
-          v-if="isSuperAdmin"
+          v-if="cells.isSuperAdmin"
           class="users__select"
           :value="row.role"
-          :disabled="isSelf(row) || mutating"
-          @change="changeRole(row, $event)"
+          :disabled="cells.isSelf(row) || selection.mutating"
+          @change="cells.changeRole(row, $event)"
         >
-          <option v-for="option in roleOptions" :key="option.value" :value="option.value">
+          <option v-for="option in cells.roleOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>
-        <span v-else>{{ ROLE_LABEL[row.role] }}</span>
+        <span v-else>{{ cells.ROLE_LABEL[row.role] }}</span>
       </template>
       <template #status="{ row }">
         <span class="users__badge" :class="`users__badge--${row.status}`">
-          {{ STATUS_LABEL[row.status] }}
+          {{ cells.STATUS_LABEL[row.status] }}
         </span>
       </template>
       <template #createdAt="{ row }">{{ formatTime(row.createdAt) }}</template>
@@ -108,16 +93,16 @@ const {
           <button
             class="users__link"
             type="button"
-            :disabled="isSelf(row) || mutating"
-            @click="toggleStatus(row)"
+            :disabled="cells.isSelf(row) || selection.mutating"
+            @click="cells.toggleStatus(row)"
           >
             {{ row.status === 'active' ? '停用' : '启用' }}
           </button>
           <button
             class="users__link users__link--danger"
             type="button"
-            :disabled="isSelf(row) || mutating"
-            @click="askDelete(row)"
+            :disabled="cells.isSelf(row) || selection.mutating"
+            @click="dialog.askDelete(row)"
           >
             删除
           </button>
@@ -126,52 +111,53 @@ const {
     </DataTable>
 
     <PageBar
-      :page="page"
-      :page-size="PAGE_SIZE"
-      :total="total"
-      :disabled="loading"
-      @update:page="handlePage"
+      :page="table.page"
+      :page-size="table.PAGE_SIZE"
+      :total="table.total"
+      :disabled="table.loading"
+      @update:page="table.handlePage"
     />
 
     <UserFormDialog
-      v-if="dialog === 'create'"
-      :loading="submitting"
-      :error="formError"
-      :options="roleOptions"
-      @close="closeDialog"
-      @submit="handleCreate"
+      v-if="dialog.kind === 'create'"
+      :loading="dialog.submitting"
+      :error="dialog.formError"
+      :options="cells.roleOptions"
+      @close="dialog.closeDialog"
+      @submit="dialog.handleCreate"
     />
 
     <ModalDialog
-      v-if="dialog === 'delete'"
+      v-if="dialog.kind === 'delete'"
       title="删除用户"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="closeDialog"
-      @confirm="confirmDelete"
+      :loading="dialog.submitting"
+      @close="dialog.closeDialog"
+      @confirm="dialog.confirmDelete"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="users__confirm">
         确定删除用户「{{
-          selected?.username
+          dialog.selected?.username
         }}」？其登录会话、对话记录与上传文件会一并清理，操作不可撤销。
       </p>
     </ModalDialog>
 
     <ModalDialog
-      v-if="dialog === 'batch-delete'"
+      v-if="dialog.kind === 'batch-delete'"
       title="批量删除用户"
       confirm-text="删除"
       danger
-      :loading="submitting"
-      @close="closeDialog"
-      @confirm="confirmBatchDelete"
+      :loading="dialog.submitting"
+      @close="dialog.closeDialog"
+      @confirm="dialog.confirmBatchDelete"
     >
       <template #close-icon><X :size="16" /></template>
       <p class="users__confirm">
         确定删除选中的
-        {{ selectedKeys.length }} 个账号？其登录会话、对话记录与上传文件会一并清理，操作不可撤销。
+        {{ selection.selectedKeys.length }}
+        个账号？其登录会话、对话记录与上传文件会一并清理，操作不可撤销。
       </p>
     </ModalDialog>
   </div>

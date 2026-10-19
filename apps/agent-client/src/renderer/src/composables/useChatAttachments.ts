@@ -6,7 +6,7 @@ import { isUnauthorized, toErrorMessage } from '../api/client';
 import { agentApi } from '../api/session';
 
 /** 本轮取走的已就绪附件：文件名用于展示，服务端 ID 用于随消息提交 */
-interface ReadyAttachments {
+export interface ReadyAttachments {
   names: string[];
   fileIds: string[];
 }

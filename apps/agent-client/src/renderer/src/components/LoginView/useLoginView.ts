@@ -1,105 +1,50 @@
-import type { AuthMode } from '../../composables/useAuth';
-import type { ComputedRef, Ref } from 'vue';
-import { computed, onMounted, ref, watch } from 'vue';
-import { DEFAULT_BACKEND_URL, readSettings, saveSettings } from '../../api/bridge';
-import { AgentApi } from '../../api/client';
-import { setBackendUrl } from '../../api/session';
+import { computed, reactive } from 'vue';
 import { useAuth } from '../../composables/useAuth';
+import { useLoginEndpoint } from './useLoginEndpoint';
+import { useLoginForm } from './useLoginForm';
+import { MODE_LIST, MODE_TEXT, useLoginMode } from './useLoginMode';
 
-const MODE_TEXT: Record<AuthMode, { title: string; action: string; hint: string }> = {
-  login: { title: '登录', action: '登录', hint: '登录后即可开始与智能体对话' },
-  register: { title: '注册', action: '创建账号', hint: '创建一个账号，对话记录将保存到服务端' },
-};
+/**
+ * 登录页的装配：表单、模式、服务地址三组出口。
+ * 提交锁与报错位来自模块级单例 useAuth，经 computed 桥接进表单组，
+ * 模板读到的仍是同一份底层状态，行为不变。
+ */
+export function useLoginView() {
+  const auth = useAuth();
 
-// 标签页的渲染顺序固定在此，模板无需再做类型断言
-const MODE_LIST: AuthMode[] = ['login', 'register'];
-
-interface LoginViewControls {
-  submitting: Ref<boolean>;
-  errorMessage: Ref<string>;
-  mode: Ref<AuthMode>;
-  username: Ref<string>;
-  password: Ref<string>;
-  endpoint: Ref<string>;
-  reachable: Ref<boolean | null>;
-  current: ComputedRef<{ title: string; action: string; hint: string }>;
-  canSubmit: ComputedRef<boolean>;
-  MODE_TEXT: typeof MODE_TEXT;
-  MODE_LIST: AuthMode[];
-  saveEndpoint: () => Promise<void>;
-  handleSubmit: () => Promise<void>;
-}
-
-/** 登录页的表单状态与提交：地址落盘、连通性探测与登录/注册的编排都收敛在这里 */
-export function useLoginView(): LoginViewControls {
-  const { submitting, errorMessage, submit } = useAuth();
-
-  const mode = ref<AuthMode>('login');
-  const username = ref('');
-  const password = ref('');
-  const endpoint = ref(DEFAULT_BACKEND_URL);
-  // 已落盘的地址，用于避免每次提交都重复写设置；登录逻辑读取的正是这份设置
-  const savedEndpoint = ref(DEFAULT_BACKEND_URL);
-  const reachable = ref<boolean | null>(null);
-
-  const current = computed(() => MODE_TEXT[mode.value]);
-  // 与后端 credentials 的校验规则保持一致，避免明显不合法的输入白跑一次请求
-  const canSubmit = computed(
-    () => username.value.trim().length >= 2 && password.value.length >= 6 && !submitting.value,
-  );
-
-  /** 探测后端可用性，让地址填错在提交前就能被发现 */
-  async function checkEndpoint(): Promise<void> {
-    try {
-      await new AgentApi(endpoint.value).health();
-      reachable.value = true;
-    } catch {
-      reachable.value = false;
-    }
-  }
-
-  /** 地址变更时持久化并重新探测；全局会话与登录请求读取的都是同一份设置 */
-  async function saveEndpoint(): Promise<void> {
-    const url = endpoint.value.trim() || DEFAULT_BACKEND_URL;
-    endpoint.value = url;
-    if (url === savedEndpoint.value) return;
-    savedEndpoint.value = url;
-    setBackendUrl(url);
-    await saveSettings({ backendUrl: url });
-    await checkEndpoint();
-  }
-
-  async function handleSubmit(): Promise<void> {
-    if (!canSubmit.value) return;
-    // 先落盘地址，保证登录请求发往用户当前填写的服务
-    await saveEndpoint();
-    await submit(mode.value, username.value, password.value);
-  }
-
-  // 切换登录/注册时清掉上一次的报错，避免残留信息造成困惑
-  watch(mode, () => {
-    errorMessage.value = '';
+  const authMode = useLoginMode({
+    clearError: () => {
+      auth.form.errorMessage = '';
+    },
+  });
+  const endpoint = useLoginEndpoint();
+  const form = useLoginForm({
+    mode: authMode.mode,
+    isSubmitting: () => auth.form.submitting,
+    submit: (mode, username, password) => auth.form.submit(mode, username, password),
+    saveEndpoint: endpoint.saveEndpoint,
   });
 
-  onMounted(async () => {
-    endpoint.value = (await readSettings()).backendUrl;
-    savedEndpoint.value = endpoint.value;
-    await checkEndpoint();
-  });
-
+  // 分组包一层 reactive：嵌套在普通对象里的 ref 在模板中不会被解包，包过 reactive 才会
   return {
-    submitting,
-    errorMessage,
-    mode,
-    username,
-    password,
-    endpoint,
-    reachable,
-    current,
-    canSubmit,
-    MODE_TEXT,
-    MODE_LIST,
-    saveEndpoint,
-    handleSubmit,
+    form: reactive({
+      username: form.username,
+      password: form.password,
+      canSubmit: form.canSubmit,
+      handleSubmit: form.handleSubmit,
+      submitting: computed(() => auth.form.submitting),
+      errorMessage: computed(() => auth.form.errorMessage),
+    }),
+    mode: reactive({
+      active: authMode.mode,
+      current: authMode.current,
+      MODE_TEXT,
+      MODE_LIST,
+    }),
+    endpoint: reactive({
+      url: endpoint.endpoint,
+      reachable: endpoint.reachable,
+      saveEndpoint: endpoint.saveEndpoint,
+    }),
   };
 }

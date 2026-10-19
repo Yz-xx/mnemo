@@ -7,58 +7,46 @@ import { DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
 import { useLogsPage } from './logs';
 
-const {
-  PAGE_SIZE,
-  METHOD_OPTIONS,
-  STATUS_OPTIONS,
-  columns,
-  keyword,
-  method,
-  statusKind,
-  page,
-  rows,
-  total,
-  loading,
-  errorMsg,
-  detail,
-  detailFields,
-  statusKindOf,
-  handleSearch,
-  handlePage,
-} = useLogsPage();
+const { filter, table, detail, cells } = useLogsPage();
 </script>
 
 <template>
   <div class="logs">
     <header class="logs__head reveal" :style="{ '--reveal-index': 0 }">
       <p class="logs__lede">每次请求的路径、状态与耗时，按时间倒序留档</p>
-      <p class="logs__stamp">共 {{ total }} 条</p>
+      <p class="logs__stamp">共 {{ table.total }} 条</p>
     </header>
 
     <div class="logs__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索请求路径" @search="handleSearch">
+      <SearchBar
+        v-model:keyword="filter.keyword"
+        placeholder="搜索请求路径"
+        @search="filter.handleSearch"
+      >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
       <div class="logs__filters">
-        <select v-model="method" class="logs__select" @change="handleSearch">
+        <select v-model="filter.method" class="logs__select" @change="filter.handleSearch">
           <option value="">全部方法</option>
-          <option v-for="item in METHOD_OPTIONS" :key="item" :value="item">{{ item }}</option>
+          <option v-for="item in filter.METHOD_OPTIONS" :key="item" :value="item">
+            {{ item }}
+          </option>
         </select>
-        <select v-model="statusKind" class="logs__select" @change="handleSearch">
-          <option v-for="item in STATUS_OPTIONS" :key="item.value" :value="item.value">
+        <select v-model="filter.statusKind" class="logs__select" @change="filter.handleSearch">
+          <option v-for="item in filter.STATUS_OPTIONS" :key="item.value" :value="item.value">
             {{ item.label }}
           </option>
         </select>
       </div>
     </div>
 
-    <p v-if="errorMsg" class="logs__error">{{ errorMsg }}</p>
+    <p v-if="table.errorMsg" class="logs__error">{{ table.errorMsg }}</p>
 
     <DataTable
-      :columns="columns"
-      :rows="rows"
+      :columns="table.columns"
+      :rows="table.rows"
       :row-key="(row) => row.id"
-      :loading="loading"
+      :loading="table.loading"
       empty-text="没有匹配的接口日志"
     >
       <template #createdAt="{ row }">
@@ -71,7 +59,7 @@ const {
         <span class="logs__path" :title="row.path">{{ row.path }}</span>
       </template>
       <template #status="{ row }">
-        <span class="logs__status" :class="`logs__status--${statusKindOf(row.status)}`">
+        <span class="logs__status" :class="`logs__status--${cells.statusKindOf(row.status)}`">
           {{ row.status }}
         </span>
       </template>
@@ -82,30 +70,30 @@ const {
         <span class="logs__mono">{{ row.userId ?? '—' }}</span>
       </template>
       <template #actions="{ row }">
-        <button class="logs__link" type="button" @click="detail = row">查看</button>
+        <button class="logs__link" type="button" @click="detail.open(row)">查看</button>
       </template>
     </DataTable>
 
     <PageBar
-      :page="page"
-      :page-size="PAGE_SIZE"
-      :total="total"
-      :disabled="loading"
-      @update:page="handlePage"
+      :page="table.page"
+      :page-size="table.PAGE_SIZE"
+      :total="table.total"
+      :disabled="table.loading"
+      @update:page="table.handlePage"
     />
 
     <ModalDialog
-      v-if="detail"
+      v-if="detail.row"
       title="请求详情"
       width="560px"
       confirm-text="关闭"
       :cancel-text="null"
-      @close="detail = null"
-      @confirm="detail = null"
+      @close="detail.close"
+      @confirm="detail.close"
     >
       <template #close-icon><X :size="16" /></template>
       <dl class="logs__detail">
-        <template v-for="field in detailFields" :key="field.label">
+        <template v-for="field in detail.fields" :key="field.label">
           <dt class="logs__detail-label">{{ field.label }}</dt>
           <dd class="logs__detail-value">{{ field.value }}</dd>
         </template>

@@ -1,10 +1,11 @@
 // 操作审计：管理端的每一次写操作都由服务端自动登记，本页只做检索与详情查看。
 // 与「API 日志」的分工是范围——这里只留写入动作及其操作人，回溯变更时不必在 GET 里翻找。
 import type { AuditLogItem } from '@/api/types';
-import { computed, onMounted, ref } from 'vue';
-import { formatTime } from '@repo/shared';
+import { onMounted, reactive } from 'vue';
 import { listAuditLogs } from '@/api';
 import { usePagedList } from '@/composables/usePagedList';
+import { useAuditDetail } from './useAuditDetail';
+import { useAuditFilter } from './useAuditFilter';
 
 /** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
 const PAGE_SIZE = 20;
@@ -18,72 +19,55 @@ const columns = [
   { key: 'actions', label: '详情', width: '70px', align: 'right' as const },
 ];
 
-/** 审计页对模板暴露的全部绑定：静态常量在模块顶层，随实例变化的状态与动作在这里组装 */
+/** 状态色调：2xx 成功、4xx 客户端错误、5xx 服务端错误 */
+function statusKindOf(status: number): 'ok' | 'client' | 'server' {
+  if (status >= 500) return 'server';
+  if (status >= 400) return 'client';
+  return 'ok';
+}
+
+/** 操作人展示：超级令牌入口无账号 ID，账号被删后也只剩 ID */
+function actorLabel(row: AuditLogItem): string {
+  if (row.actorId === null) return '超级令牌';
+  return row.actorName ?? `#${row.actorId}`;
+}
+
+/**
+ * 操作审计页：筛选 + 分页列表 + 详情弹窗。
+ * 出口按关注点收敛成 filter / table / detail / cells 四组，模板按组取用。
+ */
 export function useAuditPage() {
-  const keyword = ref('');
+  // 取数动作要读筛选条件，而筛选条件由 filter 持有，故先用占位函数间接引用，
+  // paged 建好后再指向真正的 search（同 users 的 onRowsReload 手法）
+  let runSearch: () => Promise<void> = () => Promise.resolve();
+  const filter = useAuditFilter({ search: () => runSearch() });
 
-  /** 状态色调：2xx 成功、4xx 客户端错误、5xx 服务端错误 */
-  function statusKindOf(status: number): 'ok' | 'client' | 'server' {
-    if (status >= 500) return 'server';
-    if (status >= 400) return 'client';
-    return 'ok';
-  }
-
-  /** 操作人展示：超级令牌入口无账号 ID，账号被删后也只剩 ID */
-  function actorLabel(row: AuditLogItem): string {
-    if (row.actorId === null) return '超级令牌';
-    return row.actorName ?? `#${row.actorId}`;
-  }
-
-  /** 详情弹窗中的这一条：为空表示未打开 */
-  const detail = ref<AuditLogItem | null>(null);
-
-  /** 详情字段：值可能为空，统一用「—」占位，避免弹窗出现空白行 */
-  const detailFields = computed(() => {
-    const row = detail.value;
-    if (!row) return [];
-    return [
-      { label: '操作人', value: actorLabel(row) },
-      { label: '操作', value: `${row.method} ${row.path}` },
-      { label: '结果', value: String(row.status) },
-      { label: '时间', value: formatTime(row.createdAt) },
-      { label: '请求体', value: row.detail ?? '—' },
-    ];
-  });
-
-  /** 分页取数、页码、加载态与错误文案统一交由 usePagedList 托管，本页只提供筛选条件 */
-  const {
-    rows,
-    total,
-    page,
-    loading,
-    errorMsg,
-    load,
-    search: handleSearch,
-    goPage: handlePage,
-  } = usePagedList<AuditLogItem>({
+  const { rows, total, loading, errorMsg, paging } = usePagedList<AuditLogItem>({
     pageSize: PAGE_SIZE,
     fetcher: ({ page, pageSize }) =>
-      listAuditLogs({ keyword: keyword.value.trim(), page, pageSize }),
+      listAuditLogs({ keyword: filter.keyword.value.trim(), page, pageSize }),
     errorFallback: '加载操作审计失败',
   });
+  runSearch = paging.search;
 
-  onMounted(() => void load());
+  const detail = useAuditDetail({ actorLabel });
 
+  onMounted(() => void paging.load());
+
+  // 分组包一层 reactive：嵌套在普通对象里的 ref 在模板中不会被解包，包过 reactive 才会
   return {
-    PAGE_SIZE,
-    columns,
-    keyword,
-    detail,
-    detailFields,
-    statusKindOf,
-    actorLabel,
-    rows,
-    total,
-    page,
-    loading,
-    errorMsg,
-    handleSearch,
-    handlePage,
+    filter: reactive({ keyword: filter.keyword, handleSearch: filter.handleSearch }),
+    table: reactive({
+      PAGE_SIZE,
+      columns,
+      rows,
+      page: paging.page,
+      total,
+      loading,
+      errorMsg,
+      handlePage: paging.goPage,
+    }),
+    detail: reactive({ row: detail.detail, fields: detail.detailFields }),
+    cells: reactive({ statusKindOf, actorLabel }),
   };
 }

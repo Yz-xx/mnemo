@@ -2,10 +2,10 @@
 // 过滤三个维度（路径关键词、请求方法、状态档位）都是服务端能力，前端不本地过滤，
 // 避免列表与总数对不上。
 import type { ApiLogItem, ApiLogStatusKind } from '@/api/types';
-import { computed, onMounted, ref } from 'vue';
-import { formatTime } from '@repo/shared';
+import { onMounted, reactive, ref } from 'vue';
 import { listApiLogs } from '@/api';
 import { usePagedList } from '@/composables/usePagedList';
+import { useLogsDetail } from './useLogsDetail';
 
 /** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
 const PAGE_SIZE = 20;
@@ -29,49 +29,23 @@ const columns = [
   { key: 'actions', label: '详情', width: '70px', align: 'right' as const },
 ];
 
-/** API 日志页的全部状态与动作：模板只做展示，逻辑集中在此以便单独复用与测试 */
+/** 状态色调：2xx 成功、4xx 客户端错误、5xx 服务端错误 */
+function statusKindOf(status: number): 'ok' | 'client' | 'server' {
+  if (status >= 500) return 'server';
+  if (status >= 400) return 'client';
+  return 'ok';
+}
+
+/**
+ * API 日志页的入口：按关注点收成 filter / table / detail / cells 四组，模板按组取用。
+ * 详情弹窗的状态与字段进子 hook，本入口只负责建筛选与列表状态。
+ */
 export function useLogsPage() {
   const keyword = ref('');
   const method = ref('');
   const statusKind = ref<ApiLogStatusKind>('all');
 
-  /** 详情弹窗中的这一条：为空表示未打开 */
-  const detail = ref<ApiLogItem | null>(null);
-
-  /** 状态色调：2xx 成功、4xx 客户端错误、5xx 服务端错误 */
-  function statusKindOf(status: number): 'ok' | 'client' | 'server' {
-    if (status >= 500) return 'server';
-    if (status >= 400) return 'client';
-    return 'ok';
-  }
-
-  /** 详情字段：值可能为空，统一用「—」占位，避免弹窗出现空白行 */
-  const detailFields = computed(() => {
-    const row = detail.value;
-    if (!row) return [];
-    return [
-      { label: '请求 ID', value: row.requestId },
-      { label: '请求', value: `${row.method} ${row.path}` },
-      { label: '状态与耗时', value: `${row.status} · ${row.durationMs} ms` },
-      { label: '用户', value: row.userId === null ? '未登录 / 超级令牌' : `#${row.userId}` },
-      { label: '时间', value: formatTime(row.createdAt) },
-      { label: '查询串', value: row.queryParams ?? '—' },
-      { label: '请求体', value: row.requestBody ?? '—' },
-      { label: '响应体', value: row.responseBody ?? '—' },
-      { label: '错误', value: row.error ?? '—' },
-    ];
-  });
-
-  const {
-    rows,
-    total,
-    page,
-    loading,
-    errorMsg,
-    load,
-    search: handleSearch,
-    goPage: handlePage,
-  } = usePagedList<ApiLogItem>({
+  const { rows, total, loading, errorMsg, paging } = usePagedList<ApiLogItem>({
     pageSize: PAGE_SIZE,
     fetcher: ({ page, pageSize }) =>
       listApiLogs({
@@ -84,25 +58,36 @@ export function useLogsPage() {
     errorFallback: '加载接口日志失败',
   });
 
-  onMounted(() => void load());
+  const detail = useLogsDetail();
 
+  onMounted(() => void paging.load());
+
+  // 分组包一层 reactive：嵌套在普通对象里的 ref 在模板中不会被解包，包过 reactive 才会
   return {
-    PAGE_SIZE,
-    METHOD_OPTIONS,
-    STATUS_OPTIONS,
-    columns,
-    keyword,
-    method,
-    statusKind,
-    page,
-    rows,
-    total,
-    loading,
-    errorMsg,
-    detail,
-    detailFields,
-    statusKindOf,
-    handleSearch,
-    handlePage,
+    filter: reactive({
+      keyword,
+      method,
+      statusKind,
+      handleSearch: paging.search,
+      METHOD_OPTIONS,
+      STATUS_OPTIONS,
+    }),
+    table: reactive({
+      PAGE_SIZE,
+      columns,
+      rows,
+      page: paging.page,
+      total,
+      loading,
+      errorMsg,
+      handlePage: paging.goPage,
+    }),
+    detail: reactive({
+      row: detail.detail,
+      fields: detail.detailFields,
+      open: detail.openDetail,
+      close: detail.closeDetail,
+    }),
+    cells: reactive({ statusKindOf }),
   };
 }

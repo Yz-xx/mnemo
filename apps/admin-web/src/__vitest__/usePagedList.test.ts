@@ -22,8 +22,8 @@ describe('usePagedList 分页取数', () => {
 
     const list = usePagedList({ pageSize: 10, fetcher, errorFallback: '加载失败' });
 
-    const first = list.load();
-    const second = list.goPage(2);
+    const first = list.paging.load();
+    const second = list.paging.goPage(2);
     await second;
 
     // 迟到的第一页响应此刻才回来，不得覆盖已经渲染出来的第二页
@@ -48,8 +48,8 @@ describe('usePagedList 分页取数', () => {
 
     const list = usePagedList({ pageSize: 10, fetcher, errorFallback: '加载失败' });
 
-    const first = list.load();
-    const second = list.goPage(2);
+    const first = list.paging.load();
+    const second = list.paging.goPage(2);
 
     resolveFirst?.(pageOf(['第一页'], 1, 2));
     await first;
@@ -65,7 +65,7 @@ describe('usePagedList 分页取数', () => {
     const fetcher = vi.fn(() => Promise.resolve(pageOf(['甲', '乙'], 1, 2)));
     const list = usePagedList({ pageSize: 10, fetcher, errorFallback: '加载失败' });
 
-    await list.load();
+    await list.paging.load();
 
     expect(list.rows.value).toEqual(['甲', '乙']);
     expect(list.total.value).toBe(2);
@@ -77,7 +77,7 @@ describe('usePagedList 分页取数', () => {
     const fetcher = vi.fn(() => Promise.reject(new Error('后端忙不过来')));
     const list = usePagedList({ pageSize: 10, fetcher, errorFallback: '加载失败' });
 
-    await list.load();
+    await list.paging.load();
 
     expect(list.errorMsg.value).toBe('后端忙不过来');
     expect(list.loading.value).toBe(false);
@@ -87,7 +87,7 @@ describe('usePagedList 分页取数', () => {
     const fetcher = vi.fn(() => Promise.reject(new Error('')));
     const list = usePagedList({ pageSize: 10, fetcher, errorFallback: '加载失败' });
 
-    await list.load();
+    await list.paging.load();
 
     expect(list.errorMsg.value).toBe('加载失败');
   });
@@ -98,12 +98,12 @@ describe('usePagedList 分页取数', () => {
     );
     const list = usePagedList({ pageSize: 10, fetcher, errorFallback: '加载失败' });
 
-    await list.goPage(3);
-    expect(list.page.value).toBe(3);
+    await list.paging.goPage(3);
+    expect(list.paging.page.value).toBe(3);
 
-    await list.search();
+    await list.paging.search();
 
-    expect(list.page.value).toBe(1);
+    expect(list.paging.page.value).toBe(1);
     expect(fetcher).toHaveBeenLastCalledWith({ page: 1, pageSize: 10 });
   });
 
@@ -112,8 +112,8 @@ describe('usePagedList 分页取数', () => {
     const fetcher = vi.fn(() => Promise.resolve(pageOf([], 1, 0)));
     const list = usePagedList({ pageSize: 10, fetcher, errorFallback: '加载失败', onReset });
 
-    await list.load();
-    await list.goPage(2);
+    await list.paging.load();
+    await list.paging.goPage(2);
 
     expect(onReset).toHaveBeenCalledTimes(2);
   });

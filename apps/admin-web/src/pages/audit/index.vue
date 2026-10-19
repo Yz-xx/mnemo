@@ -4,51 +4,40 @@ import { DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
 import { formatTime } from '@repo/shared';
 import { useAuditPage } from './audit';
 
-const {
-  PAGE_SIZE,
-  columns,
-  keyword,
-  detail,
-  detailFields,
-  statusKindOf,
-  actorLabel,
-  rows,
-  total,
-  page,
-  loading,
-  errorMsg,
-  handleSearch,
-  handlePage,
-} = useAuditPage();
+const { filter, table, detail, cells } = useAuditPage();
 </script>
 
 <template>
   <div class="audit">
     <header class="audit__head reveal" :style="{ '--reveal-index': 0 }">
       <p class="audit__lede">管理端的写入操作留档，含被拒绝的尝试，按时间倒序</p>
-      <p class="audit__stamp">共 {{ total }} 条</p>
+      <p class="audit__stamp">共 {{ table.total }} 条</p>
     </header>
 
     <div class="audit__toolbar reveal" :style="{ '--reveal-index': 1 }">
-      <SearchBar v-model:keyword="keyword" placeholder="搜索操作路径" @search="handleSearch">
+      <SearchBar
+        v-model:keyword="filter.keyword"
+        placeholder="搜索操作路径"
+        @search="filter.handleSearch"
+      >
         <template #icon><Search :size="15" /></template>
       </SearchBar>
     </div>
 
-    <p v-if="errorMsg" class="audit__error">{{ errorMsg }}</p>
+    <p v-if="table.errorMsg" class="audit__error">{{ table.errorMsg }}</p>
 
     <DataTable
-      :columns="columns"
-      :rows="rows"
+      :columns="table.columns"
+      :rows="table.rows"
       :row-key="(row) => row.id"
-      :loading="loading"
+      :loading="table.loading"
       empty-text="没有匹配的操作记录"
     >
       <template #createdAt="{ row }">
         <span class="audit__mono">{{ formatTime(row.createdAt) }}</span>
       </template>
       <template #actor="{ row }">
-        <span class="audit__actor">{{ actorLabel(row) }}</span>
+        <span class="audit__actor">{{ cells.actorLabel(row) }}</span>
       </template>
       <template #method="{ row }">
         <span class="audit__method">{{ row.method }}</span>
@@ -57,35 +46,35 @@ const {
         <span class="audit__path" :title="row.path">{{ row.path }}</span>
       </template>
       <template #status="{ row }">
-        <span class="audit__status" :class="`audit__status--${statusKindOf(row.status)}`">
+        <span class="audit__status" :class="`audit__status--${cells.statusKindOf(row.status)}`">
           {{ row.status }}
         </span>
       </template>
       <template #actions="{ row }">
-        <button class="audit__link" type="button" @click="detail = row">查看</button>
+        <button class="audit__link" type="button" @click="detail.row = row">查看</button>
       </template>
     </DataTable>
 
     <PageBar
-      :page="page"
-      :page-size="PAGE_SIZE"
-      :total="total"
-      :disabled="loading"
-      @update:page="handlePage"
+      :page="table.page"
+      :page-size="table.PAGE_SIZE"
+      :total="table.total"
+      :disabled="table.loading"
+      @update:page="table.handlePage"
     />
 
     <ModalDialog
-      v-if="detail"
+      v-if="detail.row"
       title="操作详情"
       width="560px"
       confirm-text="关闭"
       :cancel-text="null"
-      @close="detail = null"
-      @confirm="detail = null"
+      @close="detail.row = null"
+      @confirm="detail.row = null"
     >
       <template #close-icon><X :size="16" /></template>
       <dl class="audit__detail">
-        <template v-for="field in detailFields" :key="field.label">
+        <template v-for="field in detail.fields" :key="field.label">
           <dt class="audit__detail-label">{{ field.label }}</dt>
           <dd class="audit__detail-value">{{ field.value }}</dd>
         </template>
