@@ -1,5 +1,5 @@
 {
-  "name": "@repo/components",
+  "name": "@mnemo/components",
   "version": "0.0.0",
   "private": true,
   "description": "跨 web 应用复用的 Vue 3 组件库（内部使用，不对外发布）",

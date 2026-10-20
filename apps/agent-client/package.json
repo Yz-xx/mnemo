@@ -1,5 +1,5 @@
 {
-  "name": "@repo/agent-client",
+  "name": "@mnemo/agent-client",
   "version": "0.0.0",
   "private": true,
   "description": "桌面端应用（Electron + Vue 3 + TypeScript）",
@@ -9,7 +9,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "electron-vite build && cross-env ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --win"
+    "dist": "electron-vite build && cross-env ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --win",
+    "postinstall": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node node_modules/electron/install.js"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",
@@ -22,8 +23,8 @@
     "vue-tsc": "^3.3.11"
   },
   "dependencies": {
-    "@repo/reusable": "workspace:*",
-    "@repo/shared": "workspace:*",
+    "@mnemo/reusable": "workspace:*",
+    "@mnemo/shared": "workspace:*",
     "markdown-it": "^15.0.2"
   }
 }

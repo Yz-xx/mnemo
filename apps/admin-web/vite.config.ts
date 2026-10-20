@@ -19,7 +19,7 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       // 只别名真正用到的包：多留一条别名会让一次误 import 悄悄通过（把无关依赖拖进产物）
-      '@repo/reusable': fileURLToPath(
+      '@mnemo/reusable': fileURLToPath(
         new URL('../../packages/reusable/src/index.ts', import.meta.url),
       ),
     },

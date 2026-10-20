@@ -5,8 +5,8 @@
 import type { AdminKnowledgeContent } from '@/api/types';
 import { X } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
-import { ModalDialog } from '@repo/components';
-import { formatTime } from '@repo/shared';
+import { ModalDialog } from '@mnemo/components';
+import { formatTime } from '@mnemo/shared';
 
 const props = withDefaults(
   defineProps<{

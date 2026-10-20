@@ -18,12 +18,13 @@ export function multiSelect({ message, items, input = process.stdin, output = pr
   });
 
   let cursor = 0;
-  let renderedLines = 0; // 上一次渲染占用的行数，用于把光标退回列表首行
+  let rendered = false; // 是否已渲染过：首次渲染先保存光标锚点，之后每帧恢复到锚点重绘
 
   return new Promise((resolve) => {
-    // 逐行清空重写：相比整屏清屏不会闪烁，也不会抹掉此前的终端输出
+    // 用「保存/恢复光标 + 清到屏幕末尾」重绘：不依赖「上移 N 行」的行数计数，
+    // 行宽折行或 raw 模式下 \n 不回车时也不会残留旧行
     const draw = () => {
-      if (renderedLines > 0) output.write(`\u001B[${renderedLines}A`);
+      output.write(rendered ? '\u001B8\u001B[0J' : '\u001B7');
       const lines = [
         message,
         ...items.map((item, index) => {
@@ -33,8 +34,9 @@ export function multiSelect({ message, items, input = process.stdin, output = pr
           return `${pointer} ${box} ${item.label}${hint}`;
         }),
       ];
-      output.write(lines.map((line) => `\u001B[2K${line}\n`).join(''));
-      renderedLines = lines.length;
+      // 每行「清整行 + 回车」后重写，兼容 \n 不自动回车的终端
+      output.write(lines.map((line) => `\u001B[2K\r${line}\n`).join(''));
+      rendered = true;
     };
 
     const finish = (result) => {

@@ -4,8 +4,8 @@ import type {
   KnowledgeDocument,
   KnowledgeUpload,
 } from '../../entities/knowledge.js';
-import type { Logger } from '@repo/logger';
-import { toErrorMessage } from '@repo/shared';
+import type { Logger } from '@mnemo/logger';
+import { toErrorMessage } from '@mnemo/shared';
 
 /** 标题缺省值：客户端私有入口与管理端全局入口共用，默认标题保持一致 */
 const DEFAULT_DOCUMENT_TITLE = '未命名文档';

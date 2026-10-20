@@ -1,5 +1,5 @@
 import type { QueryResultRow } from 'pg';
-import { truncate } from '@repo/shared';
+import { truncate } from '@mnemo/shared';
 
 export const DEFAULT_TITLE = '新对话';
 const TITLE_MAX_LENGTH = 24;

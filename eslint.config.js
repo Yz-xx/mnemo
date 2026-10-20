@@ -56,7 +56,7 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       // 分组口径与原 .prettierrc.json 的 importOrder 保持一致：
-      // 类型 → Node 内置 → 第三方 → @repo/* → @/* → 相对路径，组内按大小写不敏感升序
+      // 类型 → Node 内置 → 第三方 → @mnemo/* → @/* → 相对路径，组内按大小写不敏感升序
       'import-x/order': [
         'error',
         {
@@ -71,10 +71,10 @@ export default tseslint.config(
             'object',
             'unknown',
           ],
-          // pathGroups 的 group 只接受内置枚举，无法自定义组名，因此 @repo/* 与 @/* 同归 internal，
-          // 靠列表先后配合 position: before 维持「@repo 在前、@/ 在后」的既有顺序
+          // pathGroups 的 group 只接受内置枚举，无法自定义组名，因此 @mnemo/* 与 @/* 同归 internal，
+          // 靠列表先后配合 position: before 维持「@mnemo 在前、@/ 在后」的既有顺序
           pathGroups: [
-            { pattern: '@repo/**', group: 'internal', position: 'before' },
+            { pattern: '@mnemo/**', group: 'internal', position: 'before' },
             { pattern: '@/**', group: 'internal', position: 'before' },
           ],
           // 只把 type 排除在外：否则 import type 会命中 pathGroups 被拉进 internal，破坏「类型声明置顶」

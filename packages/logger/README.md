@@ -1,6 +1,6 @@
-# @repo/logger Node 端日志库
+# @mnemo/logger Node 端日志库
 
-Node 环境的结构化日志库，供后端服务共用。包定位：**依赖进程与文件系统，只在 Node 端使用**；纯粹的通用工具请放 `@repo/shared`，与业务约定绑定的可复用代码请放 `@repo/reusable`，`apps/*` 之间禁止互相 import。
+Node 环境的结构化日志库，供后端服务共用。包定位：**依赖进程与文件系统，只在 Node 端使用**；纯粹的通用工具请放 `@mnemo/shared`，与业务约定绑定的可复用代码请放 `@mnemo/reusable`，`apps/*` 之间禁止互相 import。
 
 仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)。
 
@@ -8,7 +8,7 @@ Node 环境的结构化日志库，供后端服务共用。包定位：**依赖�
 
 ## 一、导出能力
 
-统一出口为 `src/index.ts`，业务方只需从 `@repo/logger` 引入。
+统一出口为 `src/index.ts`，业务方只需从 `@mnemo/logger` 引入。
 
 | 导出                                                                            | 说明                                                                                                                                                  |
 | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -21,7 +21,7 @@ Node 环境的结构化日志库，供后端服务共用。包定位：**依赖�
 ### 使用
 
 ```ts
-import { createLogger } from '@repo/logger';
+import { createLogger } from '@mnemo/logger';
 
 const logger = createLogger({
   name: 'agent-server',
@@ -43,16 +43,16 @@ logger.child({ requestId: 'abcd1234' }).info('请求完成', { method: 'POST', s
 跨包引用统一写 workspace 包名，不用相对路径穿透到其他包：
 
 ```ts
-import type { Logger } from '@repo/logger';
-import { createLogger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
+import { createLogger } from '@mnemo/logger';
 ```
 
 包已声明 `exports` 条件导出：`types` → `dist/index.d.ts`、`import` → `dist/index.mjs`、`require` → `dist/index.cjs`。本包无第三方运行时依赖，Node 内置模块在打包时外置。
 
-> 跨包引用读取的是 `dist` 产物，改动本包后需先 `pnpm --filter @repo/logger run build`，使用方才能拿到最新类型与实现。
+> 跨包引用读取的是 `dist` 产物，改动本包后需先 `pnpm --filter @mnemo/logger run build`，使用方才能拿到最新类型与实现。
 
 ## 三、构建与测试
 
-- `pnpm --filter @repo/logger run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）产出 `dist/index.mjs`、`dist/index.cjs` 与 `dist/index.d.ts` 等类型声明；
+- `pnpm --filter @mnemo/logger run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）产出 `dist/index.mjs`、`dist/index.cjs` 与 `dist/index.d.ts` 等类型声明；
 - 产物保留空格与注释、开启 sourcemap，便于使用方调试。
-- `pnpm --filter @repo/logger run test`：vitest 运行单测，用例位于 `src/__vitest__/`（覆盖级别过滤、格式化、脱敏、会话绑定、文件轮转与超期清理）。
+- `pnpm --filter @mnemo/logger run test`：vitest 运行单测，用例位于 `src/__vitest__/`（覆盖级别过滤、格式化、脱敏、会话绑定、文件轮转与超期清理）。

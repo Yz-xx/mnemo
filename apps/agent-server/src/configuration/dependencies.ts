@@ -13,7 +13,7 @@ import type { ConcurrencyGuard } from '../middleware/concurrencyGuard.js';
 import type { RoundRegistry } from '../services/conversation/roundRegistry.js';
 import type { KnowledgeStore } from '../services/knowledge/index.js';
 import type { AgentService } from '../services/llm/agent.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 
 /**
  * 应用运行期依赖集合：由组合根 index.ts 统一装配后注入路由层。

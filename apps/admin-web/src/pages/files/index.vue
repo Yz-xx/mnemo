@@ -2,8 +2,8 @@
 // 文件管理：管理视角列出全部用户的上传文件，可清理。
 // 列表只展示元数据（文件名、类型、大小、归属），文件字节留在服务端，不在此页预览。
 import { Search, X } from 'lucide-vue-next';
-import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
-import { formatTime } from '@repo/shared';
+import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@mnemo/components';
+import { formatTime } from '@mnemo/shared';
 import { useFilesPage } from './files';
 
 const { filter, table, selection, dialog, cells } = useFilesPage();

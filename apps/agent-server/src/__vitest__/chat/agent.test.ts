@@ -4,7 +4,7 @@ import type { FileStore } from '../../mappers/file/fileStore.js';
 import type { KnowledgeStore } from '../../services/knowledge/index.js';
 import type { VisionReader } from '../../services/llm/vision.js';
 import type { BaseMessage, ToolCallChunk } from '@langchain/core/messages';
-import type { AgentStreamEvent } from '@repo/reusable';
+import type { AgentStreamEvent } from '@mnemo/reusable';
 import { AIMessageChunk, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentService } from '../../services/llm/agent.js';

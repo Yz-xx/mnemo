@@ -1,7 +1,7 @@
 // 用户管理接口：查询、新建、改角色 / 状态、删除与批量操作。
 // 统一经 adminApi 发请求，鉴权由请求头里的 Bearer 令牌承担，此处不再重复拼装。
 import type { AdminUser, PageResult, UserRole, UserStatus } from './types';
-import { encryptPassword } from '@repo/reusable';
+import { encryptPassword } from '@mnemo/reusable';
 import { adminApi } from './client';
 
 /** 用户列表查询条件：keyword 为空表示不做过滤 */

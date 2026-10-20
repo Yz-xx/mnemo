@@ -1,5 +1,5 @@
 import type { UserStore } from '../../mappers/user/store.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 
 /**
  * 超管自举：仅当库中没有任何后台侧账号时创建一枚超管（已存在则原样跳过，不覆盖）。

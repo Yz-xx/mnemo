@@ -1,7 +1,7 @@
 import type { AppDependencies } from '../../configuration/dependencies.js';
 import type { Request, Response } from 'express';
 import { Router } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { parseCredentials } from '../../infrastructure/auth/credentials.js';
 import { requestLogger } from '../../middleware/requestLog.js';

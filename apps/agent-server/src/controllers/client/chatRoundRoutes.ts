@@ -1,6 +1,6 @@
 import type { AppDependencies } from '../../configuration/dependencies.js';
 import type { Request, Response, Router } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { METRIC } from '../../infrastructure/observability/index.js';
 import { currentUserId } from '../../middleware/auth.js';

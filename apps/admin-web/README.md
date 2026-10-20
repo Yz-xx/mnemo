@@ -1,11 +1,11 @@
-# 后台管理网站（@repo/admin-web）
+# 后台管理网站（@mnemo/admin-web）
 
 `agent-server` 的后台管理网站：管理员登录后完成运行总览、用户治理、知识库 / 会话 / 文件治理，以及接口日志、操作审计与系统配置的查看。数据全部取自后端 `/api/admin/*` 接口，前端不直连数据库、不持有业务规则。定位是运维与账号治理的可视化入口——普通账号在登录环节就被拦下，这里没有面向终端用户的页面。
 
 - 框架：Vue 3 `<script setup>` + TypeScript + Vite 6 + Less
 - 路由：vue-router 4 + `unplugin-vue-router` 文件式自动路由（`src/pages` 即路由表）
 - 状态：pinia（setup store），目前只有 `auth` 一个 store
-- 请求：复用 `@repo/shared` 的通用客户端 `createHttpClient`（见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本包只注入 `baseURL` 与 token 取值器，401 收口挂在错误拦截器上
+- 请求：复用 `@mnemo/shared` 的通用客户端 `createHttpClient`（见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本包只注入 `baseURL` 与 token 取值器，401 收口挂在错误拦截器上
 - 图表：echarts 按需引入（`echarts/core` + 按需注册图表与组件，避免整包进产物）
 - 图标：lucide-vue-next
 - UI：不引 Element / Ant，表格、分页、搜索栏、弹窗等组件自建并目录化
@@ -71,9 +71,9 @@ apps/admin-web/
 ## 二、技术选型与取舍
 
 - **文件式自动路由**：`src/pages` 下的文件结构即路由，省掉一张手写路由表这一处「改页面必改两处」的漂移点。生成的 `typed-router.d.ts` 入库并登记到 `tsconfig` 的 `include`，`router.push('/users')` 一类的路径因此能被类型检查拦下笔误。
-- **HTTP 客户端落在 `@repo/shared`**：请求头拼装、错误归一化、超时与流式发送都与业务无关，抽成注入式工厂后本包只提供「baseURL 与 token 从哪来」，401 收口从工厂回调改挂在错误拦截器上（失效判定复用 `@repo/reusable` 的 `isUnauthorized`，见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)）。token 取值推迟到请求发起时（而非构造期固化），实例可长期持有。
+- **HTTP 客户端落在 `@mnemo/shared`**：请求头拼装、错误归一化、超时与流式发送都与业务无关，抽成注入式工厂后本包只提供「baseURL 与 token 从哪来」，401 收口从工厂回调改挂在错误拦截器上（失效判定复用 `@mnemo/reusable` 的 `isUnauthorized`，见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)）。token 取值推迟到请求发起时（而非构造期固化），实例可长期持有。
 - **固定亮色 + 自建组件**：后台以信息密度和可读性为先，不做主题切换，故不引主题体系；UI 需求集中在表格、分页、弹窗三处，自建比引入整套组件库更省，也避免样式被第三方覆盖规则牵着走。
-- **依赖边界**：`vite` / `@types/node` / `@vitejs/plugin-vue` 由根 `package.json` 提供，本包**不重复声明**；`unplugin-vue-router` 只服务构建（`vite.config.ts` 与文件式路由生成），归 `devDependencies`。只登记真正用到的 `@repo/*` 包与 tsconfig 路径映射——多留一条映射，等于给一次误 import 留了「也能通过」的后路。
+- **依赖边界**：`vite` / `@types/node` / `@vitejs/plugin-vue` 由根 `package.json` 提供，本包**不重复声明**；`unplugin-vue-router` 只服务构建（`vite.config.ts` 与文件式路由生成），归 `devDependencies`。只登记真正用到的 `@mnemo/*` 包与 tsconfig 路径映射——多留一条映射，等于给一次误 import 留了「也能通过」的后路。
 - **服务端能力优先**：列表的过滤、搜索与分页一律走服务端参数，前端不本地过滤。否则「当前页显示 3 条、总数却写 47」这类对不上的状态迟早出现。
 - **分页取数收进 `composables/usePagedList.ts`**：六个列表页的「页码、每页条数、加载态、错误文案、翻页竞态」逐字同形，这些收进 composable；**筛选条件不进**——由各页经 `fetcher` 闭包注入，免得为六个页面的不同查询参数再造一层配置。竞态用请求序号挡住（只认最后一次发出的请求），原先各页都没有。
 
@@ -90,7 +90,7 @@ apps/admin-web/
 
 - **登录即筛角色**：后台登录 `/api/admin/auth/login` 成功后，若 `role` 不在 `ADMIN_ROLES`（`super_admin` / `admin` 均可）中或 `status` 非 `active`，store 当场抛错且**不写入令牌**。否则守卫会先放行再弹回登录页，用户看到的是「登录成功了又被踢出来」。后台侧角色不止 `admin` 一个，判定一律以 `ADMIN_ROLES` 为准，取舍见 [ADR 0006](../../docs/adr/0006-account-isolation-and-admin-hierarchy.md)。
 - **权限分级**：超管可管理所有账号；普通管理员在用户管理里**看不到也动不了**后台账号（后端按资源不存在回 404、按角色取值非法回 400）。前端只做展示与按调用者角色收窄角色选项，不重复实现这套规则——规则只有后端一处，前端再判一次只会多一个漂移点。
-- **口令加密传输**：登录与新建用户提交的 `password` 不是明文，而是先用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后的 Base64 密文，加密动作收在 `@repo/reusable` 的 `encryptPassword`（见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)）。服务端解不开就是 `400`，明文送上去一样被拒。
+- **口令加密传输**：登录与新建用户提交的 `password` 不是明文，而是先用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后的 Base64 密文，加密动作收在 `@mnemo/reusable` 的 `encryptPassword`（见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md)）。服务端解不开就是 `400`，明文送上去一样被拒。
 - **守卫双校验**：`router/guards.ts` 先看 token 是否存在，再在 `restoreUser()` 拉完 `/api/auth/me` 之后判角色。必须先拉用户信息再判——刷新页面时 store 里的 `user` 是空的，直接判角色会把刚刷新的人误踢回登录页。
 - **401 统一收口**：任意请求返回 401（令牌过期或被新登录顶掉）时，`api/client.ts` 清掉 localStorage 里的令牌，并通过 `setSessionExpiredHandler` 通知调用方清 store、跳登录页。回调由 `main.ts` 注入而非在 client 里直接 `import router`，是为了避免 `client → router → store → client` 的循环依赖；跳转策略留在调用方，client 只负责宣布「令牌已失效」。
 - **登出**：尽力调 `/api/auth/logout` 清服务端会话，无论成败都清本地态（`clear()` 与 401、`/me` 失败三处共用）。
@@ -147,7 +147,7 @@ apps/admin-web/
 
 **组件**（应用内仅剩 4 个，均按 `Xxx/{index.ts, Xxx.vue, Xxx.less}` 目录化，`index.ts` 用 `export { default } from './Xxx.vue'` 导出）
 
-`PageBar` / `DataTable` / `SearchBar` / `ModalDialog` / `BatchBar` 已迁出到公共组件库 `@repo/components`：改从该包具名引入（`import { DataTable, ModalDialog } from '@repo/components'`），样式已由 `main.ts` 一次性 `import '@repo/components/style.css'` 导入。组件库样式包在 `@layer repo-components` 内，应用侧未分层的规则天然覆盖它，不需要更高的特异性或 `!important`。
+`PageBar` / `DataTable` / `SearchBar` / `ModalDialog` / `BatchBar` 已迁出到公共组件库 `@mnemo/components`：改从该包具名引入（`import { DataTable, ModalDialog } from '@mnemo/components'`），样式已由 `main.ts` 一次性 `import '@mnemo/components/style.css'` 导入。组件库样式包在 `@layer mnemo-components` 内，应用侧未分层的规则天然覆盖它，不需要更高的特异性或 `!important`。
 
 迁出组件的图标按组件库规范改由消费方经具名插槽传入——`SearchBar` 的 `#icon` 传 `<Search :size="15" />`，`ModalDialog` 的 `#close-icon` 传 `<X :size="16" />`，`BatchBar` 的 `#clear-icon` 传 `<X :size="13" />`；组件库自身不依赖任何图标库，也就不锁死消费方的图标方案。改动组件库样式契约见 [packages/components/README.md](../../packages/components/README.md)。
 
@@ -173,15 +173,15 @@ apps/admin-web/
 ## 七、开发与构建
 
 ```bash
-pnpm --filter @repo/admin-web run dev      # vite dev，默认 5173
-pnpm --filter @repo/admin-web run build    # vue-tsc --noEmit + vite build
-pnpm --filter @repo/admin-web run preview  # 预览构建产物
+pnpm --filter @mnemo/admin-web run dev      # vite dev，默认 5173
+pnpm --filter @mnemo/admin-web run build    # vue-tsc --noEmit + vite build
+pnpm --filter @mnemo/admin-web run preview  # 预览构建产物
 ```
 
 - 开发期 `/api` 由 `vite.config.ts` 的 proxy 转发到 `http://localhost:3000`（`agent-server` 的默认端口），因此本机先把后端跑起来；`baseURL` 留空走同源，生产期由反向代理统一接入，前端不感知后端真实地址。
 - 后端在 `apps/agent-server`，需要先起来才能登录：空库首次启动时由 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 自举超管（未配置则启动告警），之后后台账号只能由超管在用户管理里创建（或用运维超级令牌调 `POST /api/admin/users` 建一个）。
-- 单测放 `src/__vitest__/`，只覆盖纯逻辑（分页取数、登录态 store、HTTP 客户端的令牌收口、路由守卫、各列表接口的查询串参数拼装），组件层靠 `vue-tsc` 与实机走查兜底，取舍见 [ADR 0005](../../docs/adr/0005-admin-web-test-scope.md)。跑 `pnpm --filter @repo/admin-web run test`，或在根目录 `pnpm test` 一并执行——测试运行在 node 环境，`localStorage` 与 `fetch` 由 `src/__vitest__/storageStub.ts` 顶替，不依赖真实浏览器。
-- 质量校验走根脚本：`pnpm lint`（ESLint + Prettier）与 `pnpm test`；改了路由或类型后建议单独跑一次 `pnpm --filter @repo/admin-web run build`，它包含 `vue-tsc --noEmit` 全量类型检查。
+- 单测放 `src/__vitest__/`，只覆盖纯逻辑（分页取数、登录态 store、HTTP 客户端的令牌收口、路由守卫、各列表接口的查询串参数拼装），组件层靠 `vue-tsc` 与实机走查兜底，取舍见 [ADR 0005](../../docs/adr/0005-admin-web-test-scope.md)。跑 `pnpm --filter @mnemo/admin-web run test`，或在根目录 `pnpm test` 一并执行——测试运行在 node 环境，`localStorage` 与 `fetch` 由 `src/__vitest__/storageStub.ts` 顶替，不依赖真实浏览器。
+- 质量校验走根脚本：`pnpm lint`（ESLint + Prettier）与 `pnpm test`；改了路由或类型后建议单独跑一次 `pnpm --filter @mnemo/admin-web run build`，它包含 `vue-tsc --noEmit` 全量类型检查。
 
 ---
 
@@ -191,6 +191,6 @@ P1 交付「总览 + 用户管理」，P2 交付其余七个模块（知识库�
 
 尚未立项的调整已在评审中拍板为**维持现状**，理由见 [`docs/adr/0002`](../../docs/adr/0002-contract-type-sharing-boundary.md)：
 
-- `api/types.ts` 不从 `@repo/reusable` 复用——两端同名字段并不同构，合并会让桌面端看到管理端专属字段；
+- `api/types.ts` 不从 `@mnemo/reusable` 复用——两端同名字段并不同构，合并会让桌面端看到管理端专属字段；
 - 页面内联 scoped 样式不再抽公共 `.less`——它们各页专属，抽出来只会是一堆单调用点的类；分页/筛选态仍是各页局部状态，不因 `usePagedList` 引入 store；
 - 状态管理继续用 pinia——`auth` 跨路由存活（顶栏、守卫、401 回跳都要用）是 store 的正例，其余页面的分页与筛选属组件局部状态。

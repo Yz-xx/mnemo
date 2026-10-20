@@ -48,7 +48,7 @@ renderer/src/
 ```
 
 - `api/bridge.ts` 导出 `initialSettings` 与 `readSettings` / `saveSettings`，无桥接时回退默认值，各模块不必自行判空。
-- `api/client.ts` 是渲染进程**唯一依赖 `@repo/*` 的模块**：HTTP 发送、请求头拼装、错误归一化、超时与流式发送收在 `@repo/shared` 的通用客户端 `createHttpClient`（见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器；非 2xx 抛携带状态码的 `HttpError`，登录失效判定取 `@repo/reusable` 的 `isUnauthorized`，SSE 分帧取 `parseSSEStream`；其余模块不直接调用 `fetch`，共享能力（`toErrorMessage`、`SESSION_EXPIRED_MESSAGE`）也从这里转发。
+- `api/client.ts` 是渲染进程**唯一依赖 `@mnemo/*` 的模块**：HTTP 发送、请求头拼装、错误归一化、超时与流式发送收在 `@mnemo/shared` 的通用客户端 `createHttpClient`（见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器；非 2xx 抛携带状态码的 `HttpError`，登录失效判定取 `@mnemo/reusable` 的 `isUnauthorized`，SSE 分帧取 `parseSSEStream`；其余模块不直接调用 `fetch`，共享能力（`toErrorMessage`、`SESSION_EXPIRED_MESSAGE`）也从这里转发。
 - `api/session.ts` 是会话唯一来源：地址与令牌以取值器注入 `AgentApi`，请求发起时才求值，切换地址或登录/登出都无需重建实例；仅「保存前先探测草稿地址」（登录页探活、设置抽屉预览）保留临时实例。
 - `composables/` 承载跨组件共享的状态与业务，组件私有的状态留组件目录内；单文件超 250 行按关注点外提（纯函数层、独立子状态各自成文件），不做互相转发的碎类，跨层依赖用回调注入。
 - `components/` 只做展示与交互，经 props / emit 与 composable 交互；一律以**目录**为单位组织，目录名即组件名（`Xxx/{index.ts, Xxx.vue, Xxx.less}`），`index.ts` 统一 `export { default } from './Xxx.vue'`，消费方按 `import Xxx from '../components/Xxx'` 引入，不写 `.vue` 后缀。
@@ -60,7 +60,7 @@ renderer/src/
 - 后端地址与 token 由 `api/session.ts` 的模块级 ref 持有并以取值器注入 `AgentApi`，地址或登录态变化**无需重建实例**（不要用 `computed` 重建客户端）。
 - 401 统一处理：清除登录态并重置业务状态，回到登录页。
 - 流式回复：先入列占位助手消息，`token` 事件累加正文；事件消费集中在 `composables/chatStream.ts`，会话级副作用经回调交回调用方；`conversation` 事件在首个产出前到达，用于先记住会话 ID。
-- 事件类型统一取 `@repo/reusable` 的 `ChatStreamEvent`（经 `api/client.ts` 转发），不在渲染进程自行声明联合，避免两端协议漂移。
+- 事件类型统一取 `@mnemo/reusable` 的 `ChatStreamEvent`（经 `api/client.ts` 转发），不在渲染进程自行声明联合，避免两端协议漂移。
 - 中断保留 `AbortController`，停止按钮触发 `abort`，`finally` 中复位 streaming 状态。
 - 用户可见文案一律中文，错误提示区分「网络不可达」与「业务错误」。
 
@@ -97,7 +97,7 @@ renderer/src/
 
 ## 10. 自检清单
 
-- `pnpm --filter @repo/agent-client run build` 通过；需要安装包时 `run dist` 能产出 `release/` 下的 exe。
+- `pnpm --filter @mnemo/agent-client run build` 通过；需要安装包时 `run dist` 能产出 `release/` 下的 exe。
 - 新增 IPC 已在注册、暴露、类型三处同步。
 - 渲染进程未引入 Node / Electron API，未直接暴露 `ipcRenderer`。
 - 主题切换无字闪，冷启动无深色闪烁。

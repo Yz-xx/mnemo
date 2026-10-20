@@ -1,7 +1,7 @@
 import type { ApiLogItem } from '@/api/types';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref } from 'vue';
-import { formatTime } from '@repo/shared';
+import { formatTime } from '@mnemo/shared';
 
 /** 详情字段：已展平成「标签 / 文本」，模板直接遍历渲染 */
 export type LogsDetailField = { label: string; value: string };

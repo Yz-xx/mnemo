@@ -3,7 +3,7 @@ import { createFileSink } from './fileSink.js';
 import { formatRecord } from './format.js';
 import { redactFields } from './redact.js';
 
-// 统一出口：业务方只从 '@repo/logger' 引入
+// 统一出口：业务方只从 '@mnemo/logger' 引入
 export type { LogFields, LogLevel, LogRecord, LogSink, Logger } from './types.js';
 export { formatDay, formatRecord } from './format.js';
 export { preview } from './preview.js';

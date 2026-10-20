@@ -3,7 +3,7 @@ import type { KnowledgeScope } from '../../entities/knowledge.js';
 import type { KnowledgeStore } from '../../services/knowledge/index.js';
 import type { Request, Response } from 'express';
 import { Router } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { currentUserId } from '../../middleware/auth.js';
 import { requestLogger } from '../../middleware/requestLog.js';

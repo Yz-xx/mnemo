@@ -3,8 +3,8 @@
 // 过滤三个维度（路径关键词、请求方法、状态档位）都是服务端能力，前端不本地过滤，
 // 避免列表与总数对不上。
 import { Search, X } from 'lucide-vue-next';
-import { DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
-import { formatTime } from '@repo/shared';
+import { DataTable, ModalDialog, PageBar, SearchBar } from '@mnemo/components';
+import { formatTime } from '@mnemo/shared';
 import { useLogsPage } from './logs';
 
 const { filter, table, detail, cells } = useLogsPage();

@@ -1,5 +1,5 @@
-import type { HttpClient } from '@repo/shared';
-import { toBase64 } from '@repo/shared';
+import type { HttpClient } from '@mnemo/shared';
+import { toBase64 } from '@mnemo/shared';
 
 /** 服务端下发口令加密公钥的路径：两端共用同一约定，改路径只改这一处 */
 const PUBLIC_KEY_PATH = '/api/auth/public-key';

@@ -1,6 +1,6 @@
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
-import '@repo/components/style.css';
+import '@mnemo/components/style.css';
 import { setSessionExpiredHandler } from './api/client';
 import App from './App.vue';
 import router from './router';

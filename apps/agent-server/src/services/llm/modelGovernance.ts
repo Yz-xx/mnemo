@@ -1,7 +1,7 @@
 import type { AppConfig } from '../../configuration/config/index.js';
 import type { CircuitBreaker } from '../../infrastructure/concurrency/circuitBreaker.js';
 import type { BoundedGate } from '../../infrastructure/concurrency/gate.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { describeChatModel } from '../../configuration/config/index.js';
 import {

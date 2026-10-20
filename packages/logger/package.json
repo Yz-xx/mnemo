@@ -1,5 +1,5 @@
 {
-  "name": "@repo/logger",
+  "name": "@mnemo/logger",
   "version": "0.0.0",
   "private": true,
   "description": "Node 端结构化日志库（控制台 + 按天轮转文件输出）",

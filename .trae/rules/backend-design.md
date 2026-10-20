@@ -53,7 +53,7 @@ apps/agent-server/src/
 ## 3. HTTP 约定
 
 - 接口前缀统一 `/api/*`；错误响应固定为 `{ message: '中文可读提示' }`，不返回堆栈。
-- 状态码常量统一取自 `@repo/reusable` 的 `HTTP_STATUS`（与桌面端共用同一份取值，见 `docs/adr/0001-http-status-contract.md`），代码里不写字面量数字。
+- 状态码常量统一取自 `@mnemo/reusable` 的 `HTTP_STATUS`（与桌面端共用同一份取值，见 `docs/adr/0001-http-status-contract.md`），代码里不写字面量数字。
 - 成功档：`200` 普通响应、`201` 新建资源、`204` 删除与登出等无响应体的成功。
 - 错误档保留五个：`400` 参数非法、`401` 未登录或登录失效、`404` 资源不存在、`500` 服务内部错误、`503` 过载拒绝。需要第六种含义时先改本节、再改 `HTTP_STATUS`，不要就地造码。
 - 有意不引入 `403` 与 `409`：权限不足按「资源不存在」处理（第 4 章），用户名冲突按「参数非法」处理。
@@ -81,7 +81,7 @@ apps/agent-server/src/
 - **断开只退订，停止走显式接口**：`roundPipe.ts` 的 `res.on('close')` 只 `subscription.abort()` 退订，**不触达轮次的中止**；会话锁包住整轮（`done`），但不盖住重连订阅。显式中止只经 `POST /api/chat/rounds/:roundId/stop` 的 `round.abort('user')`；重连走只读的 `GET /api/chat/rounds/:roundId/stream?lastEventId=N`（不存在或过 TTL 一律 404）。两个处理器按 `handleChatMessage` 的可测试形态导出。
 - 落库提问必须在响应头写出之前完成，落库失败才能按普通请求返回 500。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
-- 事件帧格式 `id: <seq>\ndata: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `file` / `context` / `done` / `error`，类型声明统一取 `@repo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
+- 事件帧格式 `id: <seq>\ndata: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `file` / `context` / `done` / `error`，类型声明统一取 `@mnemo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
 - `conversation` 事件必须在首个 token / tool 之前补推，使「有产出才保留」与「客户端已知晓会话 ID」严格对齐。
 - **异常收尾一律以 `error` 结束，只有自然完成才 `done`**：因超时、停机、脱离轮次上限、用户停止而中止的轮次必须推 `error`（含中止原因），客户端据此判定「需回落 `getConversation`」而非「读完了」；`finally` 中统一 `res.end()`。
 - 轮次任务脱离请求生命周期后**必须顶层自吞异常**（`runChatRoundTask` 的 `try/catch/finally` 与 `startChatRound` 的 `.catch`）：逃逸的拒绝会触发进程级 `unhandledRejection` 直接退出。
@@ -131,12 +131,12 @@ apps/agent-server/src/
 - 运行期依赖与 Node 内置模块一律外置：`external` 由 `package.json` 的 `dependencies` 动态生成，外置时保留裸包名，新增依赖不必改配置。
 - 构建前清空 `dist`（`emptyOutDir`）；`src/__vitest__` 被 `tsconfig.json` 的 `exclude` 排除，不进入产物。
 - `.env.*` 只在运行时由 `node --env-file` 读取，构建时用 `envDir: false` 关闭 Vite 自身的 env 加载，避免生产配置被误读或写进产物。
-- 单测不连真实数据库与网络，外部依赖用替身隔离，运行 `pnpm --filter @repo/agent-server run test`。
+- 单测不连真实数据库与网络，外部依赖用替身隔离，运行 `pnpm --filter @mnemo/agent-server run test`。
 - `src/__vitest__` 被主 tsconfig 的 `exclude` 排除，`pnpm build` 的 `tsc --noEmit` 覆盖不到它，故另立一份 `src/__vitest__/tsconfig.json`（extends 主配置、重写 `include` / `exclude`）供显式检查：`pnpm exec tsc --noEmit -p src/__vitest__`。实体类型新增字段后，测试夹具必须同步补齐。
 
 ## 10. 日志
 
-- 统一使用 `@repo/logger` 的 `Logger`（`createLogger({ name, level, dir, retentionDays })`），不再写裸 `console.*`；`name` 取服务名并决定日志文件名前缀，同目录下多个服务各写各的文件。
+- 统一使用 `@mnemo/logger` 的 `Logger`（`createLogger({ name, level, dir, retentionDays })`），不再写裸 `console.*`；`name` 取服务名并决定日志文件名前缀，同目录下多个服务各写各的文件。
 - 装配顺序：根日志在 `index.ts` 与配置一起最先建立，再经 `AppDependencies.logger` 传给 `app.ts`，保证建库等启动环节失败时也有记录。
 - 请求级日志：`createRequestLog` 为每个请求生成 8 位 `requestId`，挂到 `res.locals.log` 与 `res.locals.requestId`，并回写 `x-request-id` 响应头；路由与中间件内取日志只用 `requestLogger(res)`。
 - 一次请求只留一条结果汇总：由 `createRequestLog` 在响应结束时按状态码定级（`5xx` = error、`4xx` = warn、其余 = info）；`errorHandler` 不自行打印，只把 5xx 错误挂到 `res.locals.error`。
@@ -149,7 +149,7 @@ apps/agent-server/src/
 
 ## 11. 自检清单
 
-- `pnpm --filter @repo/agent-server run test` 与 `run build` 通过。
+- `pnpm --filter @mnemo/agent-server run test` 与 `run build` 通过。
 - 新接口已登记到 `controllers/index.ts`，鉴权策略与所属前缀正确。
 - 错误响应为中文文案且状态码符合第 3 章的约定。
 - 状态码取自 `HTTP_STATUS`、固定文案取自 `ERROR_MESSAGE`，未新增字面量数字与手抄文案。

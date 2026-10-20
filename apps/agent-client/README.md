@@ -1,4 +1,4 @@
-# @repo/agent-client 桌面端
+# @mnemo/agent-client 桌面端
 
 Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话界面，通过 HTTP + SSE 对接后端服务。
 
@@ -6,7 +6,7 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 - 技术栈：Electron 44 + Vue 3 + TypeScript + Less，构建工具为 electron-vite
 - 目录分层：`src/main`（主进程）、`src/preload`（预加载）、`src/renderer`（渲染进程）
 
-仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；后端接口与 SSE 协议见 [@repo/agent-server](../agent-server/README.md)；跨端可复用代码（状态码契约 / 对话协议类型 / 固定文案）见 [@repo/reusable](../../packages/reusable/README.md)，通用工具见 [@repo/shared](../../packages/shared/README.md)。
+仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；后端接口与 SSE 协议见 [@mnemo/agent-server](../agent-server/README.md)；跨端可复用代码（状态码契约 / 对话协议类型 / 固定文案）见 [@mnemo/reusable](../../packages/reusable/README.md)，通用工具见 [@mnemo/shared](../../packages/shared/README.md)。
 
 ---
 
@@ -52,7 +52,7 @@ Electron + Vue 3 的桌面客户端：承载登录、会话管理与流式对话
 - **连接状态**：`canSend` 要求后端在线且当前不在流式中，因此 `connection === 'offline'` 时输入区自动禁用。
 - **登录态联动**：请求经 `api/session.ts` 暴露的**唯一 `AgentApi` 实例**发出，地址与令牌在请求发起时才取值，因此登录/登出、切换后端地址都无需重建客户端；`handleError` 识别到 401 会清空登录态，`App.vue` 监听令牌变化后调用 `reset()` 清空会话数据，避免上一个账号的内容残留在界面上。
 
-`api/client.ts` 负责 HTTP 与 SSE 解析：请求头拼装、错误归一化、超时与流式发送收在 `@repo/shared` 的通用客户端 `createHttpClient`（取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器、并把业务方法转发给它；非 2xx 抛出携带状态码的 `HttpError`，登录失效用 `@repo/reusable` 的 `isUnauthorized` 判定（契约外的码按 500 处理）；`ChatStreamEvent` / `ChatStreamFrame`（SSE 事件与带序号的一帧）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@repo/reusable`，`toErrorMessage` 取自 `@repo/shared`，它是渲染进程唯一依赖 `@repo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；附件下载走 `responseType: 'blob'`，SSE 走 `responseType: 'stream'` 拿到未消费的字节流后由 `@repo/reusable` 的 `parseSSEStream` 按空行切分、读 `id:` 行取序号，产出 `ChatStreamFrame`（**最后一段可能被截断，保留到下一轮再拼接**），`Authorization: Bearer <token>` 由客户端按 `getToken` 自动附加；`streamChat` 返回 `AsyncGenerator<ChatStreamFrame>`，本模块另暴露 `resumeChat(roundId, lastEventId)`（断点重连）与 `stopRound(roundId)`（显式停止）两个方法。
+`api/client.ts` 负责 HTTP 与 SSE 解析：请求头拼装、错误归一化、超时与流式发送收在 `@mnemo/shared` 的通用客户端 `createHttpClient`（取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)），本模块只注入后端地址与令牌取值器、并把业务方法转发给它；非 2xx 抛出携带状态码的 `HttpError`，登录失效用 `@mnemo/reusable` 的 `isUnauthorized` 判定（契约外的码按 500 处理）；`ChatStreamEvent` / `ChatStreamFrame`（SSE 事件与带序号的一帧）与 `SESSION_EXPIRED_MESSAGE`（登录失效文案）同样取自 `@mnemo/reusable`，`toErrorMessage` 取自 `@mnemo/shared`，它是渲染进程唯一依赖 `@mnemo/*` 的模块（同时依赖这两个包），其余模块所需能力都从这里转发；附件下载走 `responseType: 'blob'`，SSE 走 `responseType: 'stream'` 拿到未消费的字节流后由 `@mnemo/reusable` 的 `parseSSEStream` 按空行切分、读 `id:` 行取序号，产出 `ChatStreamFrame`（**最后一段可能被截断，保留到下一轮再拼接**），`Authorization: Bearer <token>` 由客户端按 `getToken` 自动附加；`streamChat` 返回 `AsyncGenerator<ChatStreamFrame>`，本模块另暴露 `resumeChat(roundId, lastEventId)`（断点重连）与 `stopRound(roundId)`（显式停止）两个方法。
 
 ## 五、登录态与启动门禁
 
@@ -120,8 +120,8 @@ Markdown 由 `markdown-it` 渲染；AI 回复以文档流形式呈现（不加�
 
 ## 九、构建与打包
 
-- 三段式构建由 `electron-vite` 承担（对应根脚本 `pnpm --filter @repo/agent-client run dev / build / preview`）：主进程与 preload 走 SSR 打包，渲染进程走 Vite；
-- `pnpm --filter @repo/agent-client run dist`：`electron-vite build && electron-builder --win`，产物落在 `apps/agent-client/release/`，含 NSIS 安装包 `AgentDesktop Setup <version>.exe` 与免安装目录 `win-unpacked/`；
+- 三段式构建由 `electron-vite` 承担（对应根脚本 `pnpm --filter @mnemo/agent-client run dev / build / preview`）：主进程与 preload 走 SSR 打包，渲染进程走 Vite；
+- `pnpm --filter @mnemo/agent-client run dist`：`electron-vite build && electron-builder --win`，产物落在 `apps/agent-client/release/`，含 NSIS 安装包 `Mnemo Setup <version>.exe` 与免安装目录 `win-unpacked/`；
 - preload 在 `type: module` 下输出为 `index.mjs`，主进程按该扩展名加载；
 - 下载源必须显式指定：Electron 二进制在 `electron-builder.yml` 的 `electronDownload.mirror` 里指向 npmmirror，打包工具链（NSIS / 7zip / winCodeSign）的镜像由 `dist` 脚本用 `cross-env` 注入 `ELECTRON_BUILDER_BINARIES_MIRROR`。原因是 `pnpm run` 不会把 `.npmrc` 的 `electron_mirror` 注入为环境变量，工具链镜像又只认环境变量、没有可写入的配置文件，不声明就会回落到 GitHub 重下整包（约 150 MB）而超时。
 
@@ -130,10 +130,10 @@ Markdown 由 `markdown-it` 渲染；AI 回复以文档流形式呈现（不加�
 单独启动桌面端（会自行连接 `http://localhost:3000`，需后端已运行）：
 
 ```bash
-pnpm --filter @repo/agent-client run dev     # electron-vite dev
+pnpm --filter @mnemo/agent-client run dev     # electron-vite dev
 ```
 
-视觉改动可在构建产物上做静态验证：`pnpm --filter @repo/agent-client run build` 后用任意静态服务器指向 `out/renderer`，再以无头 Chrome 截图核对两套主题。
+视觉改动可在构建产物上做静态验证：`pnpm --filter @mnemo/agent-client run build` 后用任意静态服务器指向 `out/renderer`，再以无头 Chrome 截图核对两套主题。
 
 ## 十一、已知约束与设计取舍
 

@@ -6,7 +6,7 @@ import dts from 'vite-plugin-dts';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
-// 跨包依赖（@repo/shared）外置、保留裸包名：使用方本就直连 shared，
+// 跨包依赖（@mnemo/shared）外置、保留裸包名：使用方本就直连 shared，
 // 内联会把同一份通用工具在产物里存两遍，且与「跨包引用写包名」的约定相悖
 const external = Object.keys(pkg.dependencies ?? {}).map((name) => new RegExp(`^${name}(/|$)`));
 

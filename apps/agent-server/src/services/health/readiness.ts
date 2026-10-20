@@ -2,7 +2,7 @@ import type { AppConfig } from '../../configuration/config/index.js';
 import type { DbPool } from '../../infrastructure/db/pool.js';
 import type { MetricsRegistry, MetricsSnapshot } from '../../infrastructure/observability/index.js';
 import type { ConcurrencyGuard, GateSnapshot } from '../../middleware/concurrencyGuard.js';
-import { toErrorMessage } from '@repo/shared';
+import { toErrorMessage } from '@mnemo/shared';
 import {
   describeChatEndpoint,
   describeEmbeddingEndpoint,

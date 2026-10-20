@@ -1,4 +1,4 @@
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import { describe, expect, it } from 'vitest';
 import {
   CircuitOpenError,

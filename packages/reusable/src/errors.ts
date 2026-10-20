@@ -1,4 +1,4 @@
-import { isHttpError } from '@repo/shared';
+import { isHttpError } from '@mnemo/shared';
 import { HTTP_STATUS, toHttpStatusCode } from './http.js';
 
 /**
@@ -8,7 +8,7 @@ import { HTTP_STATUS, toHttpStatusCode } from './http.js';
  * 403 / 502，直接拿数字比较会把它们误判成「登录失效」。收敛到契约集合后，只有契约定下的
  * 401 才算失效，契约外一律按 500 处理——这正是「状态码契约」这层业务口径存在的意义。
  *
- * 通用 HTTP 库（@repo/shared）只承诺「status 是一个数字」，把 status 收敛成业务契约属
+ * 通用 HTTP 库（@mnemo/shared）只承诺「status 是一个数字」，把 status 收敛成业务契约属
  * 本包的业务约定，故这层判断留在本包而非通用库。
  */
 export function isUnauthorized(error: unknown): boolean {

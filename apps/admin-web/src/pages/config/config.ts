@@ -1,6 +1,6 @@
 import type { AdminSystemConfig } from '@/api/types';
 import { computed, onMounted, ref } from 'vue';
-import { formatBytes } from '@repo/shared';
+import { formatBytes } from '@mnemo/shared';
 import { fetchSystemConfig } from '@/api';
 
 /** 一行配置：state 用于给密钥类结果着色，普通参数留空 */

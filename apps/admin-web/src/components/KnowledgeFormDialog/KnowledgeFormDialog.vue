@@ -3,7 +3,7 @@
 // 失败信息经 error 回填，弹窗保留已填内容——向量化服务未起来这类问题修好环境即可重试。
 import { X } from 'lucide-vue-next';
 import { ref } from 'vue';
-import { ModalDialog } from '@repo/components';
+import { ModalDialog } from '@mnemo/components';
 
 withDefaults(defineProps<{ loading?: boolean; error?: string }>(), { loading: false, error: '' });
 

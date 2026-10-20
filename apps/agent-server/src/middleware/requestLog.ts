@@ -1,8 +1,8 @@
 import type { ApiLogStore } from '../mappers/apiLog/store.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { hasContent, summarize } from '../mappers/apiLog/summarize.js';
 
 /** 请求 ID 取 UUID 前 8 位：足够区分单机并发请求，又便于人工抄读 */

@@ -1,4 +1,4 @@
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 
 /**
  * 依赖熔断半开（见 docs/adr/0010 决策 16）：模型或向量服务连续失败达阈值即进入

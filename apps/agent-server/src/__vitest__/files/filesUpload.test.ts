@@ -6,7 +6,7 @@ import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { handleUploadFile } from '../../controllers/client/files.js';
 import { detectUploadType, detectUploadTypeFromFile } from '../../infrastructure/files/type.js';
 import { TEST_ROOT } from '../helpers/fakeEmbeddings.js';

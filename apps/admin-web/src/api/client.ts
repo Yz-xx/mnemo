@@ -1,6 +1,6 @@
-import type { HttpClient } from '@repo/shared';
-import { isUnauthorized } from '@repo/reusable';
-import { createHttpClient } from '@repo/shared';
+import type { HttpClient } from '@mnemo/shared';
+import { isUnauthorized } from '@mnemo/reusable';
+import { createHttpClient } from '@mnemo/shared';
 
 // localStorage 键名：admin 网站登录令牌的持久化位置
 export const TOKEN_KEY = 'admin_token';

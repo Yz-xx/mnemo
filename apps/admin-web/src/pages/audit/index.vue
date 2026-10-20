@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Search, X } from 'lucide-vue-next';
-import { DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
-import { formatTime } from '@repo/shared';
+import { DataTable, ModalDialog, PageBar, SearchBar } from '@mnemo/components';
+import { formatTime } from '@mnemo/shared';
 import { useAuditPage } from './audit';
 
 const { filter, table, detail, cells } = useAuditPage();

@@ -1,4 +1,4 @@
-import type { ChatStreamEvent, ChatStreamFrame } from '@repo/reusable';
+import type { ChatStreamEvent, ChatStreamFrame } from '@mnemo/reusable';
 
 /** 轮次中止原因：决定收尾回推的文案，也是「本轮是否被中途掐断」的判据 */
 export type RoundAbortReason = 'user' | 'timeout' | 'shutdown' | 'detached-limit';

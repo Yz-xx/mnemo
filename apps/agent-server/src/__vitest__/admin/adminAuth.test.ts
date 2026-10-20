@@ -5,7 +5,7 @@ import type { SessionStore } from '../../mappers/session.js';
 import type { UserStore } from '../../mappers/user/store.js';
 import type { Request, Response } from 'express';
 import { describe, expect, it } from 'vitest';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { createRequireAdmin } from '../../middleware/auth.js';
 

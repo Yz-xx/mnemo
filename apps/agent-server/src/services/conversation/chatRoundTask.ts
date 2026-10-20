@@ -7,9 +7,9 @@ import type {
 } from '../../entities/conversation.js';
 import type { ConversationStore } from '../../mappers/conversation/conversations.js';
 import type { AgentService } from '../llm/agent.js';
-import type { Logger } from '@repo/logger';
-import { preview } from '@repo/logger';
-import { toErrorMessage } from '@repo/shared';
+import type { Logger } from '@mnemo/logger';
+import { preview } from '@mnemo/logger';
+import { toErrorMessage } from '@mnemo/shared';
 import { ModelOverloadedError } from '../llm/modelGovernance.js';
 import { governContext } from './contextGovernance.js';
 

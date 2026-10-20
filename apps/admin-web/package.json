@@ -1,5 +1,5 @@
 {
-  "name": "@repo/admin-web",
+  "name": "@mnemo/admin-web",
   "version": "0.0.0",
   "private": true,
   "description": "agent-server 的后台管理网站（Vue 3 + Vite + TypeScript）",
@@ -11,9 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@repo/components": "workspace:*",
-    "@repo/reusable": "workspace:*",
-    "@repo/shared": "workspace:*",
+    "@mnemo/components": "workspace:*",
+    "@mnemo/reusable": "workspace:*",
+    "@mnemo/shared": "workspace:*",
     "echarts": "^5.6.0",
     "lucide-vue-next": "^0.472.0",
     "pinia": "^2.3.1",

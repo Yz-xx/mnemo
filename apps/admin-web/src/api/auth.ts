@@ -1,5 +1,5 @@
 import type { AuthSession, AuthUser } from './types';
-import { encryptPassword } from '@repo/reusable';
+import { encryptPassword } from '@mnemo/reusable';
 import { adminApi } from './client';
 
 /**

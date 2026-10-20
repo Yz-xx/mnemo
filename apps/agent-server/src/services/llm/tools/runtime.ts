@@ -1,6 +1,6 @@
 import type { ToolBudget } from '../context/index.js';
 import type { ToolRunnableConfig } from '@langchain/core/tools';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 
 /** 一次导出产出的文件引用：Agent 在流结束后推给客户端，供用户点击下载 */
 export interface GeneratedFileRef {

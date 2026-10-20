@@ -1,6 +1,6 @@
 import type { ChatRound, RoundAbortReason } from './round.js';
 import type { MetricsRegistry } from '../../infrastructure/observability/index.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import { METRIC } from '../../infrastructure/observability/index.js';
 import { createChatRound } from './round.js';
 

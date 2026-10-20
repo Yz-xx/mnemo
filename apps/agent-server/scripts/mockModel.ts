@@ -4,7 +4,7 @@
  * 不调用真实模型，按固定节奏吐字：这样压测聚焦服务端的编排、闸门与背压，
  * 而不是模型算力本身。对话与向量两个接口都实现，便于用一套 mock 同时喂 4 个模型配置项。
  *
- * 启动：pnpm --filter @repo/agent-server run mock:model
+ * 启动：pnpm --filter @mnemo/agent-server run mock:model
  * 可调环境变量：MOCK_PORT / MOCK_FIRST_DELAY_MS / MOCK_TOKEN_DELAY_MS / MOCK_TOKEN_COUNT / MOCK_EMBED_DIM
  */
 import http from 'node:http';

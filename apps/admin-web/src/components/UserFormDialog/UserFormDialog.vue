@@ -6,7 +6,7 @@
 import type { RoleOption, UserRole } from '@/api/types';
 import { X } from 'lucide-vue-next';
 import { ref } from 'vue';
-import { ModalDialog } from '@repo/components';
+import { ModalDialog } from '@mnemo/components';
 
 withDefaults(
   defineProps<{

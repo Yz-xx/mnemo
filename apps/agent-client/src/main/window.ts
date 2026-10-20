@@ -20,7 +20,7 @@ export function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: WINDOW_BACKGROUND[theme],
-    title: 'AI Agent Desktop',
+    title: 'Mnemo',
     webPreferences: {
       // 预加载产物在 type: module 下输出为 .mjs
       preload: path.join(currentDir, '../preload/index.mjs'),

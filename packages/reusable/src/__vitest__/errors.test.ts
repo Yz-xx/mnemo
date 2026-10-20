@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HttpError } from '@repo/shared';
+import { HttpError } from '@mnemo/shared';
 import { isUnauthorized } from '../errors.js';
 
 /** 造一个带状态码的传输成功但状态非 2xx 的错误 */

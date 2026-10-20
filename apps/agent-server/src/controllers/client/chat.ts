@@ -3,7 +3,7 @@ import type { ChatRound } from '../../services/conversation/round.js';
 import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { retryAfterSeconds } from '../../infrastructure/concurrency/gate.js';
 import { ConversationBusyError } from '../../infrastructure/concurrency/lock.js';

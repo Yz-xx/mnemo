@@ -7,7 +7,7 @@ import type {
   KnowledgeVectorStore,
 } from '../../mappers/knowledge/vectorStore.js';
 import type { Embeddings } from '@langchain/core/embeddings';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import { describeConnectionError } from '../../common/errors.js';
 import { CircuitOpenError } from '../../infrastructure/concurrency/circuitBreaker.js';
 import { withTimeout } from '../../infrastructure/concurrency/timeout.js';

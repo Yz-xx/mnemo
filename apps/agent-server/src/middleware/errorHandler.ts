@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../common/messages.js';
 
 /**

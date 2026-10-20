@@ -1,5 +1,5 @@
 {
-  "name": "@repo/shared",
+  "name": "@mnemo/shared",
   "version": "0.0.0",
   "private": true,
   "description": "跨端共享的通用工具函数库",

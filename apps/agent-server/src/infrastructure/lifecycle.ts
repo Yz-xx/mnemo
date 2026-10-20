@@ -1,4 +1,4 @@
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import type http from 'node:http';
 import { once } from 'node:events';
 

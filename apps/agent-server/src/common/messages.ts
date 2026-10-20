@@ -1,4 +1,4 @@
-import { SESSION_EXPIRED_MESSAGE } from '@repo/reusable';
+import { SESSION_EXPIRED_MESSAGE } from '@mnemo/reusable';
 
 /**
  * 错误文案常量表。

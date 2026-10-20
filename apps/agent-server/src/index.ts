@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { createLogger } from '@repo/logger';
+import { createLogger } from '@mnemo/logger';
 import { createApp } from './app.js';
 import {
   describeChatModel,

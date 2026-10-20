@@ -1,5 +1,5 @@
 import type { GateConfig } from './types.js';
-import type { LogLevel } from '@repo/logger';
+import type { LogLevel } from '@mnemo/logger';
 import process from 'node:process';
 
 /** 逗号分隔列表：去空白、统一小写、去重，避免大小写或多余空格让白名单静默失效 */

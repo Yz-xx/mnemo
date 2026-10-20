@@ -1,6 +1,6 @@
-# @repo/shared 通用工具库
+# @mnemo/shared 通用工具库
 
-跨端复用的**通用工具库**，供后端与桌面端共同引用。包定位与职责边界：**只放与业务无关的通用能力**——判据是「换一个业务它还用得上吗」，用不上就说明它绑定了本业务约定（状态码裁剪、对话协议、固定文案），应放 [@repo/reusable](../reusable/README.md)；应用私有逻辑留在应用内。`apps/*` 之间禁止互相 import。
+跨端复用的**通用工具库**，供后端与桌面端共同引用。包定位与职责边界：**只放与业务无关的通用能力**——判据是「换一个业务它还用得上吗」，用不上就说明它绑定了本业务约定（状态码裁剪、对话协议、固定文案），应放 [@mnemo/reusable](../reusable/README.md)；应用私有逻辑留在应用内。`apps/*` 之间禁止互相 import。
 
 仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)。
 
@@ -8,7 +8,7 @@
 
 ## 一、导出能力
 
-包根 `src/index.ts` 只导出**不含第三方依赖**的能力，业务方从 `@repo/shared` 引入即可按需取用。按模块分为五组：
+包根 `src/index.ts` 只导出**不含第三方依赖**的能力，业务方从 `@mnemo/shared` 引入即可按需取用。按模块分为五组：
 
 | 模块      | 导出                         | 说明                                                                                                           |
 | --------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@
 #### 1. 创建实例
 
 ```ts
-import { createHttpClient, isHttpError } from '@repo/shared';
+import { createHttpClient, isHttpError } from '@mnemo/shared';
 
 const api = createHttpClient({
   baseURL: '/api', // 也可传 () => runtime.baseURL：运行期换地址不必重建实例
@@ -165,22 +165,22 @@ api.defaults.headers['X-Client'] = 'desktop';
 
 别当漏做：上传 / 下载进度（`fetch` 无对应 API）、cancel token（用 `AbortSignal`）、transform 管道（与拦截器重叠）、自动重试（可重试的 503 属业务契约）、XSRF 自动处理（本仓同源 + Bearer）。测试用 `HttpClientOptions.fetch` 注入替身走同一接缝，不必 mock 全局。
 
-当前使用方：后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题，`llm/tools/files.ts` 用 `formatBytes` 生成附件体积描述，`conversation/store/stats.ts` 用 `formatDate` 归档统计日期，`errors.ts` 与桌面端（经 `api/client.ts` 转发）统一调用 `toErrorMessage`。管理网站与桌面端的时间 / 体积展示统一取 `formatTime` / `formatBytes`。HTTP 状态码契约（`HTTP_STATUS`）、SSE 对话事件类型（`ChatStreamEvent`）、口令加密（`encryptPassword`）与登录失效固定文案（`SESSION_EXPIRED_MESSAGE`）已随业务约定迁至 [@repo/reusable](../reusable/README.md)，不再由本包提供。HTTP 客户端（`createHttpClient`）已由管理网站（`src/api/client.ts`，401 收口挂在错误拦截器上）与桌面端（`api/client.ts`，附件下载走 `responseType: 'blob'`、对话流走 `responseType: 'stream'`）接入，`@repo/reusable` 原有的 `createApiClient` 工厂随之删除，取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)。
+当前使用方：后端 `ConversationStore` 用 `truncate` 由首条用户消息生成会话标题，`llm/tools/files.ts` 用 `formatBytes` 生成附件体积描述，`conversation/store/stats.ts` 用 `formatDate` 归档统计日期，`errors.ts` 与桌面端（经 `api/client.ts` 转发）统一调用 `toErrorMessage`。管理网站与桌面端的时间 / 体积展示统一取 `formatTime` / `formatBytes`。HTTP 状态码契约（`HTTP_STATUS`）、SSE 对话事件类型（`ChatStreamEvent`）、口令加密（`encryptPassword`）与登录失效固定文案（`SESSION_EXPIRED_MESSAGE`）已随业务约定迁至 [@mnemo/reusable](../reusable/README.md)，不再由本包提供。HTTP 客户端（`createHttpClient`）已由管理网站（`src/api/client.ts`，401 收口挂在错误拦截器上）与桌面端（`api/client.ts`，附件下载走 `responseType: 'blob'`、对话流走 `responseType: 'stream'`）接入，`@mnemo/reusable` 原有的 `createApiClient` 工厂随之删除，取舍见 [ADR 0013](../../docs/adr/0013-shared-http-client-via-fetch.md)。
 
 ## 二、按需引入
 
 跨包引用统一写 workspace 包名，不用相对路径穿透到其他包。包已声明 `sideEffects: false`，并声明了 `exports` 条件导出：包根为 `types` → `dist/index.d.ts`、`import` → `dist/index.mjs`、`require` → `dist/index.cjs`。
 
 ```ts
-import { truncate } from '@repo/shared';
+import { truncate } from '@mnemo/shared';
 ```
 
-**包根不出现带第三方依赖的模块。** 第三方包常常没有自己的 `sideEffects` 声明，打包器因此无法证明「导入它没有副作用」，即使一个绑定都没用到也会为保留副作用而整包引入；而 `electron-vite` 不读本包的 `sideEffects`（同一场景下 `vite build` 能正确剔除）。本包历史上为口令存储提供过 DES 加解密（依赖 `crypto-js`），正是为此单开过 `@repo/shared/crypto` 子路径入口；该能力已随存量口令迁移完成一并移除，取舍见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md) 与 [ADR 0001](../../docs/adr/0001-http-status-contract.md)。将来若引入带第三方依赖的能力，仍照此另开子路径入口（`build.lib.entry` 加一项 + `exports` 加一段），不要指望消费方的打包器替我们剔除。
+**包根不出现带第三方依赖的模块。** 第三方包常常没有自己的 `sideEffects` 声明，打包器因此无法证明「导入它没有副作用」，即使一个绑定都没用到也会为保留副作用而整包引入；而 `electron-vite` 不读本包的 `sideEffects`（同一场景下 `vite build` 能正确剔除）。本包历史上为口令存储提供过 DES 加解密（依赖 `crypto-js`），正是为此单开过 `@mnemo/shared/crypto` 子路径入口；该能力已随存量口令迁移完成一并移除，取舍见 [ADR 0004](../../docs/adr/0004-password-transport-and-storage.md) 与 [ADR 0001](../../docs/adr/0001-http-status-contract.md)。将来若引入带第三方依赖的能力，仍照此另开子路径入口（`build.lib.entry` 加一项 + `exports` 加一段），不要指望消费方的打包器替我们剔除。
 
-依赖约定：新增第三方依赖使用 `pnpm add <包> --filter @repo/shared`；需要 postinstall 的依赖须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记。
+依赖约定：新增第三方依赖使用 `pnpm add <包> --filter @mnemo/shared`；需要 postinstall 的依赖须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记。
 
 ## 三、构建与测试
 
-- `pnpm --filter @repo/shared run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）产出 `dist/index.{d.ts,mjs,cjs}`，声明文件由 `vite-plugin-dts` 依 `tsconfig.json` 的 include / exclude 生成（测试目录不参与产物）；
+- `pnpm --filter @mnemo/shared run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build`（库模式）产出 `dist/index.{d.ts,mjs,cjs}`，声明文件由 `vite-plugin-dts` 依 `tsconfig.json` 的 include / exclude 生成（测试目录不参与产物）；
 - 产物保留空格与注释、开启 sourcemap，便于使用方调试。
-- `pnpm --filter @repo/shared run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖错误消息提取、Base64 编码与容量分档、时间格式化与非法值回落，以及 HTTP 客户端的地址拼装 / 序列化 / 错误归一化 / 超时与取消 / 拦截器链）。
+- `pnpm --filter @mnemo/shared run test`：vitest 运行单测，用例位于 `src/__vitest__/`（当前覆盖错误消息提取、Base64 编码与容量分档、时间格式化与非法值回落，以及 HTTP 客户端的地址拼装 / 序列化 / 错误归一化 / 超时与取消 / 拦截器链）。

@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { createServer } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { createAdminAuditRouter } from '../../controllers/admin/audit.js';
 import { createAdminConversationsRouter } from '../../controllers/admin/conversations.js';
 import { createAdminFilesRouter } from '../../controllers/admin/files.js';

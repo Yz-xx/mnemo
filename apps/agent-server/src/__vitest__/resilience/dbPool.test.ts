@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 
 /**
  * 建池链路：把 pg 的 Pool 换成替身，只守护「配置 → 池参数」与「池满快速失败」两条链，不真正连库。

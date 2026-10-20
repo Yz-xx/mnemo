@@ -1,5 +1,5 @@
 {
-  "name": "@repo/reusable",
+  "name": "@mnemo/reusable",
   "version": "0.0.0",
   "private": true,
   "description": "跨端共享的业务可复用代码（HTTP 契约 / 对话协议类型 / 固定文案）",
@@ -23,6 +23,6 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@repo/shared": "workspace:*"
+    "@mnemo/shared": "workspace:*"
   }
 }

@@ -1,8 +1,8 @@
 import type { ToolBudget } from './context/index.js';
 import type { AgentTool, GeneratedFileRef } from './tools/index.js';
 import type { BaseMessageChunk } from '@langchain/core/messages';
-import type { Logger } from '@repo/logger';
-import type { AgentStreamEvent } from '@repo/reusable';
+import type { Logger } from '@mnemo/logger';
+import type { AgentStreamEvent } from '@mnemo/reusable';
 import { AIMessageChunk, ToolMessage } from '@langchain/core/messages';
 import { extractReasoning, extractText } from './messageContent.js';
 import { ToolTrace } from './toolTrace.js';

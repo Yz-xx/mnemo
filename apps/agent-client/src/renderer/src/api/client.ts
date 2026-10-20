@@ -5,18 +5,18 @@ import type {
   ConversationSummary,
   KnowledgeDocument,
 } from '../types';
-import type { ChatStreamEvent, ChatStreamFrame } from '@repo/reusable';
-import type { BaseUrlLike, HttpClient } from '@repo/shared';
-import { encryptPassword, isNotFound, isUnauthorized, parseSSEStream } from '@repo/reusable';
-import { createHttpClient } from '@repo/shared';
+import type { ChatStreamEvent, ChatStreamFrame } from '@mnemo/reusable';
+import type { BaseUrlLike, HttpClient } from '@mnemo/shared';
+import { encryptPassword, isNotFound, isUnauthorized, parseSSEStream } from '@mnemo/reusable';
+import { createHttpClient } from '@mnemo/shared';
 
-// 渲染进程只有本模块依赖 @repo/*（见 desktop-design 第 2 章）：其余模块要用共享能力
+// 渲染进程只有本模块依赖 @mnemo/*（见 desktop-design 第 2 章）：其余模块要用共享能力
 // 也经此处转发，避免第二个模块直接引包，让产物里多带无关代码
 
-export { SESSION_EXPIRED_MESSAGE } from '@repo/reusable';
-export { toErrorMessage } from '@repo/shared';
+export { SESSION_EXPIRED_MESSAGE } from '@mnemo/reusable';
+export { toErrorMessage } from '@mnemo/shared';
 
-// 共享能力统一从本模块转发，调用方不直接引 @repo/*
+// 共享能力统一从本模块转发，调用方不直接引 @mnemo/*
 export type { ChatStreamEvent, ChatStreamFrame };
 export { isUnauthorized, isNotFound };
 

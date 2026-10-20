@@ -2,7 +2,7 @@
 // 列表只展示元数据（文件名、类型、大小、归属），文件字节留在服务端，不在此页预览。
 import type { AdminFileItem } from '@/api/types';
 import { onMounted, reactive, ref } from 'vue';
-import { formatBytes } from '@repo/shared';
+import { formatBytes } from '@mnemo/shared';
 import { listAdminFiles } from '@/api';
 import { usePagedList } from '@/composables/usePagedList';
 import { useFilesDelete } from './useFilesDelete';

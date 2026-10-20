@@ -1,4 +1,4 @@
-import type { ChatStreamEvent } from '@repo/reusable';
+import type { ChatStreamEvent } from '@mnemo/reusable';
 import type { Response } from 'express';
 
 /**

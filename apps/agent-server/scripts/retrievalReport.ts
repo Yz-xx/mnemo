@@ -7,7 +7,7 @@
  * 两者之和即本次检索实际评估过的候选数——故本脚本是验收工具，不是线上埋点。
  *
  * 前置：PostgreSQL 已建表且有知识库数据；Ollama 向量服务可达（查询要真实向量化）。
- * 用法：pnpm --filter @repo/agent-server run report:retrieval
+ * 用法：pnpm --filter @mnemo/agent-server run report:retrieval
  * 可调：REPORT_QUERIES（逗号分隔，覆盖默认问题集）/ REPORT_USER_ID / REPORT_ROUNDS
  */
 import type { PoolClient } from 'pg';

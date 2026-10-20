@@ -1,12 +1,12 @@
 import type { AppDependencies } from '../../configuration/dependencies.js';
-import type { HttpClient } from '@repo/shared';
+import type { HttpClient } from '@mnemo/shared';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createServer } from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { encryptPassword, HTTP_STATUS } from '@repo/reusable';
-import { createHttpClient } from '@repo/shared';
+import { encryptPassword, HTTP_STATUS } from '@mnemo/reusable';
+import { createHttpClient } from '@mnemo/shared';
 import { createAdminAuthRouter } from '../../controllers/admin/auth.js';
 import { createPasswordCipher } from '../../infrastructure/auth/passwordCipher.js';
 

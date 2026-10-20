@@ -1,4 +1,4 @@
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 
 /**
  * 通用有界并发闸门：软水位之上进有界队列，硬水位之上直接拒绝（见 docs/adr/0010 决策 3）。

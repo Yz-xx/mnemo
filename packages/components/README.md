@@ -1,6 +1,6 @@
-# @repo/components 公共组件库
+# @mnemo/components 公共组件库
 
-跨 web 应用复用的展示型 Vue 3 组件库，当前供管理网站 `@repo/admin-web` 使用。包声明 `private: true`，**不发布、不对外提供**，因此不背版本兼容包袱、不写 CHANGELOG。桌面端 `agent-client` 不在服务范围内。
+跨 web 应用复用的展示型 Vue 3 组件库，当前供管理网站 `@mnemo/admin-web` 使用。包声明 `private: true`，**不发布、不对外提供**，因此不背版本兼容包袱、不写 CHANGELOG。桌面端 `agent-client` 不在服务范围内。
 
 **收录判据**：换一个 web 应用它还用得上吗。用不上，说明它绑定了本业务（HTTP 状态码语义、SSE 对话协议、固定文案）或直接依赖应用代码，应留在应用内。组件只收展示型——接收 props、回传事件，不自己取数、不自己跳路由；组件之间不互相 import，共用逻辑上提 `src/composables/`。
 
@@ -25,19 +25,19 @@
 跨包引用统一写 workspace 包名。接入三步：
 
 ```bash
-pnpm add @repo/components --filter @repo/admin-web
+pnpm add @mnemo/components --filter @mnemo/admin-web
 ```
 
 ```ts
 // 1. 入口导入样式：放在哪一行都行（样式已包进 @layer，不依赖导入顺序）
-import '@repo/components/style.css';
+import '@mnemo/components/style.css';
 // 2. 具名引入，按需使用
-import { PageBar } from '@repo/components';
+import { PageBar } from '@mnemo/components';
 ```
 
 ```ts
 // 或全局注册：app.use(Components) 后所有组件已在模板中可用
-import Components from '@repo/components';
+import Components from '@mnemo/components';
 
 app.use(Components);
 ```
@@ -46,7 +46,7 @@ app.use(Components);
 
 ## 三、样式与令牌契约
 
-组件库**所有**样式（含令牌默认值）都完整包在 `@layer repo-components { … }` 内，只用这一个层名，禁止 `!important` 与层顺序声明。CSS 级联中未分层的普通样式**恒优先于**任何分层样式，因此消费方写一条最普通的规则即可覆盖组件库，无需提高特异性、无需 `!important`、与样式导入位置无关。
+组件库**所有**样式（含令牌默认值）都完整包在 `@layer mnemo-components { … }` 内，只用这一个层名，禁止 `!important` 与层顺序声明。CSS 级联中未分层的普通样式**恒优先于**任何分层样式，因此消费方写一条最普通的规则即可覆盖组件库，无需提高特异性、无需 `!important`、与样式导入位置无关。
 
 覆盖的三档方式：
 
@@ -60,5 +60,5 @@ app.use(Components);
 
 ## 四、构建与测试
 
-- `pnpm --filter @repo/components run build`：`vite build`（库模式）产出 `dist/index.{mjs,cjs}`、`dist/index.d.ts` 与 `dist/components.css`；Vue 由宿主应用提供，构建时 external，不重复打包。`pnpm build` 会先构建 `packages/*` 再构建 `apps/*`，消费方无需等待手工构建。
-- `pnpm --filter @repo/components run test`：vitest 运行纯逻辑单测，用例位于 `src/__vitest__/`（当前组件逻辑内联、尚无外提的纯逻辑，故用例为空）。
+- `pnpm --filter @mnemo/components run build`：`vite build`（库模式）产出 `dist/index.{mjs,cjs}`、`dist/index.d.ts` 与 `dist/components.css`；Vue 由宿主应用提供，构建时 external，不重复打包。`pnpm build` 会先构建 `packages/*` 再构建 `apps/*`，消费方无需等待手工构建。
+- `pnpm --filter @mnemo/components run test`：vitest 运行纯逻辑单测，用例位于 `src/__vitest__/`（当前组件逻辑内联、尚无外提的纯逻辑，故用例为空）。

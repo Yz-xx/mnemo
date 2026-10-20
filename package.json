@@ -1,5 +1,5 @@
 {
-  "name": "my-monorepo",
+  "name": "mnemo",
   "version": "0.0.0",
   "private": true,
   "description": "Monorepo + pnpm + TypeScript 单仓库工程",

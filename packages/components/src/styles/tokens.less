@@ -1,8 +1,8 @@
-// 组件库令牌默认值：统一声明在 repo-components 层内，
+// 组件库令牌默认值：统一声明在 mnemo-components 层内，
 // 消费方未分层的 :root 覆盖自动生效（级联层优先于特异性）。
 // 取值形式为「吸附消费方同名令牌 + 兜底值」：消费方改了 --text，
 // 组件库外观随之改变；要单独调组件库则覆盖 --ui-*。
-@layer repo-components {
+@layer mnemo-components {
   :root {
     --ui-font-body: var(--font-body, system-ui, -apple-system, 'Segoe UI', sans-serif);
     --ui-font-mono: var(--font-mono, ui-monospace, Consolas, monospace);

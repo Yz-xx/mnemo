@@ -2,7 +2,7 @@ import type { UserRole, UserStatus } from '../../entities/user.js';
 import type { AdminActor } from '../../infrastructure/auth/actor.js';
 import type { MutationOutcome } from '../../services/admin/adminUsers.js';
 import type { Response } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ADMIN_ROLES } from '../../entities/user.js';
 import { isSuperAdmin } from '../../infrastructure/auth/actor.js';
 

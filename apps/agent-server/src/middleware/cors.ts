@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 
 /** 桌面客户端可能以 file:// 加载页面（Origin 为 null），统一放开跨域 */
 export function allowCors(req: Request, res: Response, next: NextFunction): void {

@@ -1,4 +1,4 @@
-import { preview, redactValue } from '@repo/logger';
+import { preview, redactValue } from '@mnemo/logger';
 
 /** 入参出参摘要长度上限：只记录开头，避免整包报文把日志文件与库表撑大 */
 const PAYLOAD_PREVIEW = 500;

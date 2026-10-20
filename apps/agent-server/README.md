@@ -1,4 +1,4 @@
-# @repo/agent-server 智能体后端服务
+# @mnemo/agent-server 智能体后端服务
 
 Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式对话、会话持久化与向量知识库能力。
 
@@ -7,7 +7,7 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 - 存储：PostgreSQL 保存用户、登录会话与对话记录；知识库向量走同一 PostgreSQL 实例的 pgvector 扩展
 - 模型：默认本地 Ollama（`qwen3` + `nomic-embed-text`），可选切换 OpenAI 兼容的线上服务
 
-仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；通用工具库见 [@repo/shared](../../packages/shared/README.md)，业务可复用库见 [@repo/reusable](../../packages/reusable/README.md)，日志库见 [@repo/logger](../../packages/logger/README.md)。
+仓库整体架构、统一命令与跨端约束见根 [README](../../README.md)；通用工具库见 [@mnemo/shared](../../packages/shared/README.md)，业务可复用库见 [@mnemo/reusable](../../packages/reusable/README.md)，日志库见 [@mnemo/logger](../../packages/logger/README.md)。
 
 ---
 
@@ -39,7 +39,7 @@ Express 5 + LangChain 的智能体服务：对外提供账号鉴权、SSE 流式
 | `POST`   | `/api/knowledge/global/documents` | 需登录 | 新增全局共享文档，需带 `x-admin-token` 管理令牌                                                                  |
 | `DELETE` | `/api/knowledge/documents/:id`    | 需登录 | 删除文档及其全部片段；私有仅本人可删、全局仅管理员可删                                                           |
 
-以上状态码统一取自 `@repo/reusable` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
+以上状态码统一取自 `@mnemo/reusable` 的 `HTTP_STATUS`，鉴权失效与内部错误等固定文案收在 `src/messages.ts` 的 `ERROR_MESSAGE`，代码里不再出现字面量数字与手抄的固定文案。
 
 三个约定：
 
@@ -137,7 +137,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 中断处理是这段实现里最关键的一处细节：客户端关闭连接时必须立刻停下模型推理。实现上监听的是 `res` 而非 `req`——`req` 的 `close` 在请求体读取完成后就会触发，会误中断正常的流式响应；同时用 `res.writableEnded` 排除“正常结束”这一次回调，只有真正的提前断开才 `controller.abort()`。此外，仅在答复正文非空时落库，避免保存空回复；中断或出错时也会把已产出的部分回复落库，用户已经看到的内容不会在重开会话后消失。
 
-这一整轮编排都在 `services/conversation/chatStream.ts` 的 `streamChatReply()` 中（落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话），`controllers/client/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在 `flushHeaders()` 之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。事件本身的结构声明在 `@repo/reusable` 的 `ChatStreamEvent`，服务端与桌面端共用同一份，避免两端各抄一份而漂移。
+这一整轮编排都在 `services/conversation/chatStream.ts` 的 `streamChatReply()` 中（落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话），`controllers/client/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在 `flushHeaders()` 之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。事件本身的结构声明在 `@mnemo/reusable` 的 `ChatStreamEvent`，服务端与桌面端共用同一份，避免两端各抄一份而漂移。
 
 新建会话若本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止），该会话只剩刚写入的提问，服务会连会话一起删除——否则列表里会留下一条没有回答的记录，用户重新发起对话后就会看到两条。反过来，已经开始产出内容的会话即便被中断（用户点“停止”）也保留，不丢用户刚发出的输入，且服务端在首个产出之前就补推了 `conversation` 事件，客户端从此刻起已知道会话 ID，中断后仍能接着这条会话继续发；已推送 `done` 的会话（含模型返回空内容的情形）同样保留，避免前端已记住的 `conversationId` 失效。
 
@@ -221,7 +221,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 - `list(userId)`：按 `updated_at` 倒序返回摘要（ID、标题、更新时间、消息数），消息数由子查询统计；
 - `get(userId, id)`：先按 `id + user_id` 校验归属，再按 `seq` 升序读出全部消息；
-- `append(userId, id, role, content)`：未指定会话或会话不存在时自动 `create`；**首条用户消息**会被归一化空白后截断为 24 字作为会话标题（复用 `@repo/shared` 的 `truncate`）；写入消息后同步更新 `conversations.updated_at`，新消息的 `seq` 由 `INSERT ... RETURNING seq` 取回；
+- `append(userId, id, role, content)`：未指定会话或会话不存在时自动 `create`；**首条用户消息**会被归一化空白后截断为 24 字作为会话标题（复用 `@mnemo/shared` 的 `truncate`）；写入消息后同步更新 `conversations.updated_at`，新消息的 `seq` 由 `INSERT ... RETURNING seq` 取回；
 - `remove(userId, id)`：删除会话行，其消息由外键 `ON DELETE CASCADE` 级联清除。
 
 ## 十、配置项
@@ -332,7 +332,7 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ### 日志
 
-日志能力来自公共包 [@repo/logger](../../packages/logger/README.md)，同时输出到控制台与 `<LOG_DIR>/agent-server-YYYY-MM-DD.log`（文件名前缀取自 `createLogger({ name: 'agent-server' })`）：按本地日期轮转，超期文件在启动与跨天时清理，且只清理自己前缀的文件；日志文件写入失败（目录无权限、磁盘满）只降级为"仅控制台输出"，不影响服务本身。控制台里 `warn` / `error` 走 stderr，可用 `2>` 单独重定向。
+日志能力来自公共包 [@mnemo/logger](../../packages/logger/README.md)，同时输出到控制台与 `<LOG_DIR>/agent-server-YYYY-MM-DD.log`（文件名前缀取自 `createLogger({ name: 'agent-server' })`）：按本地日期轮转，超期文件在启动与跨天时清理，且只清理自己前缀的文件；日志文件写入失败（目录无权限、磁盘满）只降级为"仅控制台输出"，不影响服务本身。控制台里 `warn` / `error` 走 stderr，可用 `2>` 单独重定向。
 
 每个请求都会分配一个 8 位 `requestId`：它出现在该请求产生的每条日志上，并通过响应头 `x-request-id` 回写。排查时先按 `requestId` 检索日志文件，即可拿到该请求的完整链路（请求汇总、业务动作、5xx 的原始堆栈）。
 
@@ -348,13 +348,13 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ```bash
 # 1) 起不调真实模型的 mock 服务（OpenAI 兼容），让压测聚焦服务端编排而非模型算力
-pnpm --filter @repo/agent-server run mock:model
+pnpm --filter @mnemo/agent-server run mock:model
 # 2) 让后端指向 mock（覆盖模型与向量两处配置），再按需启动后端
 LLM_PROVIDER=deepseek DEEPSEEK_BASE_URL=http://127.0.0.1:8901 DEEPSEEK_API_KEY=mock \
 EMBEDDING_PROVIDER=openai EMBEDDING_BASE_URL=http://127.0.0.1:8901 EMBEDDING_API_KEY=mock \
-pnpm --filter @repo/agent-server run dev
+pnpm --filter @mnemo/agent-server run dev
 # 3) 施压并判定 SLO（未给令牌时用 BENCH_USERNAME / BENCH_PASSWORD 换一枚）
-BENCH_TOKEN=<登录令牌> pnpm --filter @repo/agent-server run bench
+BENCH_TOKEN=<登录令牌> pnpm --filter @mnemo/agent-server run bench
 ```
 
 压测在客户端侧采集四项口径：**首 token P95**（从发起到收首个 `token` 事件，贴近用户感知）、**整轮 P95**、**503 比例**（闸门硬水位拒绝），以及从 `/api/health/ready` 读回的**连接池等待 P95**（`pool.waitMs` 分位数）。四项各有默认目标值，任一未达标脚本以非零退出码收尾；目标可用 `SLO_FIRST_CHUNK_P95_MS` / `SLO_ROUND_P95_MS` / `SLO_MAX_503_RATIO` / `SLO_POOL_WAIT_P95_MS` 覆盖。
@@ -392,7 +392,7 @@ BENCH_TOKEN=<登录令牌> pnpm --filter @repo/agent-server run bench
 压测用的是 mock，**不覆盖知识库检索路径**：检索是模型决策的工具调用（`search_knowledge_base`），mock 不发起工具调用，故 `retrieval.ms` / `retrieval.hits` 无样本。检索侧的召回条数、扫描量与延迟由验收脚本单独量：
 
 ```bash
-pnpm --filter @repo/agent-server run report:retrieval
+pnpm --filter @mnemo/agent-server run report:retrieval
 # 可调：REPORT_QUERIES（逗号分隔的问题集）/ REPORT_USER_ID / REPORT_ROUNDS（默认 5）
 ```
 
@@ -421,15 +421,15 @@ ollama serve
 单独启动后端（默认 3000 端口，`tsx watch`）：
 
 ```bash
-pnpm --filter @repo/agent-server run dev
+pnpm --filter @mnemo/agent-server run dev
 ```
 
 ## 十二、构建与运行
 
-- `pnpm --filter @repo/agent-server run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build` 把 `src/index.ts` 打成单文件 `dist/index.js`（ESM + sourcemap，代码部分已压缩、不含空格与注释）；
+- `pnpm --filter @mnemo/agent-server run build`：先 `tsc --noEmit` 做类型检查，再由 `vite build` 把 `src/index.ts` 打成单文件 `dist/index.js`（ESM + sourcemap，代码部分已压缩、不含空格与注释）；
 - Vite 走服务端构建（`build.ssr`，`target: node20`），按 Node 环境解析依赖；目录下的 `.env.*` 由 `node --env-file` 在运行时读取，构建时以 `envDir: false` 关闭 Vite 自身的 env 加载；
-- 运行期依赖（含 workspace 的 `@repo/shared`、`@repo/reusable`、`@repo/logger`）与 Node 内置模块全部外置，产物中保留裸包名，部署时需一并安装 `dependencies`；
-- 启动：`pnpm --filter @repo/agent-server run start`，即 `node --env-file=.env.production dist/index.js`。
+- 运行期依赖（含 workspace 的 `@mnemo/shared`、`@mnemo/reusable`、`@mnemo/logger`）与 Node 内置模块全部外置，产物中保留裸包名，部署时需一并安装 `dependencies`；
+- 启动：`pnpm --filter @mnemo/agent-server run start`，即 `node --env-file=.env.production dist/index.js`。
 - 产物中仍可见的换行与缩进都属于字符串内容（多行 SQL、系统提示词、SSE 报文的 `\n\n`），是数据而非格式：`\n\n` 是 SSE 协议分隔符，提示词换行影响模型输入，压缩器不会也不应改写它们。
 
 ## 十三、已知约束与设计取舍

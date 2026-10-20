@@ -1,4 +1,4 @@
-import type { ChatStreamFrame } from '@repo/reusable';
+import type { ChatStreamFrame } from '@mnemo/reusable';
 import { describe, expect, it } from 'vitest';
 import { createChatRound } from '../../services/conversation/round.js';
 

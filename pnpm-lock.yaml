@@ -74,13 +74,13 @@ importers:
 
   apps/admin-web:
     dependencies:
-      '@repo/components':
+      '@mnemo/components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@repo/reusable':
+      '@mnemo/reusable':
         specifier: workspace:*
         version: link:../../packages/reusable
-      '@repo/shared':
+      '@mnemo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       echarts:
@@ -108,10 +108,10 @@ importers:
 
   apps/agent-client:
     dependencies:
-      '@repo/reusable':
+      '@mnemo/reusable':
         specifier: workspace:*
         version: link:../../packages/reusable
-      '@repo/shared':
+      '@mnemo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       markdown-it:
@@ -157,18 +157,18 @@ importers:
       '@langchain/textsplitters':
         specifier: ^1.0.1
         version: 1.0.1(@langchain/core@1.2.12(@opentelemetry/api@1.9.1)(openai@7.21.0(undici@7.29.1)(zod@4.6.5)))
+      '@mnemo/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@mnemo/reusable':
+        specifier: workspace:*
+        version: link:../../packages/reusable
+      '@mnemo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@pdf-lib/fontkit':
         specifier: ^1.1.1
         version: 1.1.1
-      '@repo/logger':
-        specifier: workspace:*
-        version: link:../../packages/logger
-      '@repo/reusable':
-        specifier: workspace:*
-        version: link:../../packages/reusable
-      '@repo/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       docx:
         specifier: ^9.7.2
         version: 9.7.2
@@ -236,7 +236,7 @@ importers:
 
   packages/reusable:
     dependencies:
-      '@repo/shared':
+      '@mnemo/shared':
         specifier: workspace:*
         version: link:../shared
 

@@ -2,7 +2,7 @@ import type { PostgresConfig } from '../../configuration/config/index.js';
 import type { MetricsRegistry } from '../observability/index.js';
 import type { Pool, PoolClient, PoolConfig, QueryResult, QueryResultRow } from 'pg';
 import { Pool as PgPool, types } from 'pg';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { monitorPool } from '../observability/poolMonitor.js';
 

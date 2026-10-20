@@ -1,11 +1,11 @@
 import type { ParseRunner } from '../../../infrastructure/files/parseGovernance.js';
 import type { FileStore } from '../../../mappers/file/fileStore.js';
 import type { VisionReader } from '../vision.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import path from 'node:path';
 import { tool } from 'langchain';
 import { z } from 'zod';
-import { formatBytes, toErrorMessage } from '@repo/shared';
+import { formatBytes, toErrorMessage } from '@mnemo/shared';
 import { buildDocument, EXPORT_FORMATS } from '../../../infrastructure/files/generate.js';
 import { extractText } from '../../../infrastructure/files/parser.js';
 import { BUDGET_EXHAUSTED_NOTE } from '../context/index.js';

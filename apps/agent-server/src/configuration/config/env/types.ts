@@ -1,4 +1,4 @@
-import type { LogLevel } from '@repo/logger';
+import type { LogLevel } from '@mnemo/logger';
 
 /** 服务标识：日志文件名前缀与健康检查的 service 字段共用，改名时只需改这一处 */
 export const SERVICE_NAME = 'agent-server';

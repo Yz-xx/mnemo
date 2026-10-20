@@ -4,7 +4,7 @@ import type { AuditLogStore } from '../../mappers/auditLog.js';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { createAdminAudit } from '../../middleware/adminAudit.js';
 
 /**

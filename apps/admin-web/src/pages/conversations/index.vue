@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Search, X } from 'lucide-vue-next';
-import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@repo/components';
-import { formatTime } from '@repo/shared';
+import { BatchBar, DataTable, ModalDialog, PageBar, SearchBar } from '@mnemo/components';
+import { formatTime } from '@mnemo/shared';
 import { useConversationsPage } from './conversations';
 
 const { filter, table, selection, detail, dialog } = useConversationsPage();

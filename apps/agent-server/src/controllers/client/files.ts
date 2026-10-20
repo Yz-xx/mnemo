@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Router } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { detectUploadTypeFromFile } from '../../infrastructure/files/type.js';
 import { currentUserId } from '../../middleware/auth.js';
 import { createUploadMiddleware } from '../../middleware/upload.js';

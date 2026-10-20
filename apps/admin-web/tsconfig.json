@@ -5,7 +5,7 @@
     "paths": {
       // 开发 / 构建时直接编译公共库源码，无需等待公共库先产出 dist；
       // 只登记真正用到的包，多余的映射会让一次误 import 静默通过
-      "@repo/reusable": ["../../packages/reusable/src/index.ts"],
+      "@mnemo/reusable": ["../../packages/reusable/src/index.ts"],
       // 应用内绝对路径别名，与 vite.config.ts 的 resolve.alias 保持一致
       "@/*": ["./src/*"]
     }

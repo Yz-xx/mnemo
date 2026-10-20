@@ -3,9 +3,9 @@ import type { FileSource } from './tools/index.js';
 import type { VisionReader } from './vision.js';
 import type { ParseRunner } from '../../infrastructure/files/parseGovernance.js';
 import type { BaseMessage } from '@langchain/core/messages';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import { SystemMessage } from '@langchain/core/messages';
-import { toErrorMessage } from '@repo/shared';
+import { toErrorMessage } from '@mnemo/shared';
 import { BUDGET_EXHAUSTED_NOTE } from './context/index.js';
 import { readAttachmentText } from './tools/index.js';
 

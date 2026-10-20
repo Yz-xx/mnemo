@@ -1,9 +1,9 @@
 ---
-description: my-monorepo 仓库级总纲：目录结构与职责边界、统一脚本、依赖与版本、Git 提交规范，并索引后端、桌面端、代码风格、组件库四份子规范及收尾自检要求。在本仓库做任何任务时必须始终遵守。
+description: mnemo 仓库级总纲：目录结构与职责边界、统一脚本、依赖与版本、Git 提交规范，并索引后端、桌面端、代码风格、组件库四份子规范及收尾自检要求。在本仓库做任何任务时必须始终遵守。
 alwaysApply: true
 ---
 
-# my-monorepo 总纲
+# mnemo 总纲
 
 ## 角色定位
 
@@ -16,16 +16,16 @@ alwaysApply: true
 ## 仓库结构
 
 ```text
-my-monorepo/
+mnemo/
 ├── apps/
 │   ├── agent-server/  Express 5 + LangChain 智能体服务（PostgreSQL 持久化）
 │   ├── agent-client/  Electron 桌面端（主进程 / 预加载 / Vue 3 渲染进程）
 │   └── admin-web/     后台管理网站（Vue 3 + Vite + TypeScript，自建 UI 组件）
 ├── packages/
-│   ├── shared/      @repo/shared 通用工具（strings / common / bytes / time）
-│   ├── reusable/    @repo/reusable 业务可复用代码（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
-│   ├── logger/      @repo/logger Node 端结构化日志库（控制台 + 按天轮转文件）
-│   └── components/  @repo/components 公共 Vue 组件库（Vite 库模式，样式经 @layer 封装）
+│   ├── shared/      @mnemo/shared 通用工具（strings / common / bytes / time）
+│   ├── reusable/    @mnemo/reusable 业务可复用代码（HTTP 状态码契约 / SSE 对话协议类型 / 固定文案）
+│   ├── logger/      @mnemo/logger Node 端结构化日志库（控制台 + 按天轮转文件）
+│   └── components/  @mnemo/components 公共 Vue 组件库（Vite 库模式，样式经 @layer 封装）
 ├── docs/
 │   └── adr/         架构决策记录（ADR）：记录刻意偏离常识默认的取舍
 ├── scripts/         根脚本：dev / build / lint / test
@@ -36,7 +36,7 @@ my-monorepo/
 职责边界：
 
 - 与业务无关的通用工具放 `packages/shared`，与业务约定绑定的可复用代码放 `packages/reusable`（判据是「换一个业务它还用得上吗」，用不上即说明它绑定了本业务的状态码裁剪、对话协议或固定文案），可复用的 Vue 组件放 `packages/components`，依赖进程与文件系统的 Node 端能力放 `packages/logger`，禁止 `apps/*` 之间互相 import。
-- 依赖方向：`@repo/reusable` 可依赖 `@repo/shared`（通用工具不绑定业务），`@repo/shared` 不得反向依赖 `@repo/reusable`。
+- 依赖方向：`@mnemo/reusable` 可依赖 `@mnemo/shared`（通用工具不绑定业务），`@mnemo/shared` 不得反向依赖 `@mnemo/reusable`。
 - 应用私有逻辑留在应用内，不上提到 `packages`。
 - 新增包或应用时同步 `pnpm-workspace.yaml`、根 `scripts/` 与 `README.md`。
 
@@ -63,8 +63,8 @@ my-monorepo/
 - 包管理器只用 pnpm（>=9），Node >= 20，仓库为 `type: module`。
 - 新增依赖使用 `pnpm add <包> --filter <包名>`；根依赖只放工具链（eslint / prettier / typescript / vite / vitest 等）。
 - 需要 postinstall 的依赖必须在 `pnpm-workspace.yaml` 的 `allowBuilds` 中显式登记，否则安装产物不完整。
-- 跨包引用写 workspace 包名（如 `@repo/shared`），不用相对路径穿透到其他包。
-- `@repo/shared` 只放**与业务无关的通用工具**（`strings` / `common` / `bytes` / `time`），`@repo/reusable` 放**与业务约定绑定的可复用代码**（HTTP 状态码契约 / 对话协议类型 / 固定文案）；两者都声明 `sideEffects: false`，且**包根只放不含第三方依赖的能力**，带第三方依赖的能力必须另开子路径入口。原因是第三方包常常没有自己的 `sideEffects` 声明，打包器无法证明导入它无副作用，只能为保留副作用而整包引入，且 `electron-vite` 不读本包的 `sideEffects`（`vite build` 则能正确剔除）。本包曾因 DES（依赖 `crypto-js`）立过 `@repo/shared/crypto` 子路径入口，该能力已随存量口令迁移完成移除，见 `docs/adr/0004`。
+- 跨包引用写 workspace 包名（如 `@mnemo/shared`），不用相对路径穿透到其他包。
+- `@mnemo/shared` 只放**与业务无关的通用工具**（`strings` / `common` / `bytes` / `time`），`@mnemo/reusable` 放**与业务约定绑定的可复用代码**（HTTP 状态码契约 / 对话协议类型 / 固定文案）；两者都声明 `sideEffects: false`，且**包根只放不含第三方依赖的能力**，带第三方依赖的能力必须另开子路径入口。原因是第三方包常常没有自己的 `sideEffects` 声明，打包器无法证明导入它无副作用，只能为保留副作用而整包引入，且 `electron-vite` 不读本包的 `sideEffects`（`vite build` 则能正确剔除）。本包曾因 DES（依赖 `crypto-js`）立过 `@mnemo/shared/crypto` 子路径入口，该能力已随存量口令迁移完成移除，见 `docs/adr/0004`。
 
 ## 编辑工具约束
 
@@ -92,7 +92,7 @@ my-monorepo/
 | 后端接口、路由、鉴权、数据层、SSE、LLM 工具          | `.trae/rules/backend-design.md`    |
 | Electron 主进程、预加载、IPC、渲染进程组件、样式体系 | `.trae/rules/desktop-design.md`    |
 | TypeScript / Vue / Less 写法、命名、注释、单元测试   | `.trae/rules/code-style.md`        |
-| `@repo/components` 的收录边界、样式与令牌契约        | `.trae/rules/components-design.md` |
+| `@mnemo/components` 的收录边界、样式与令牌契约       | `.trae/rules/components-design.md` |
 
 规范调整时只改 `.trae/rules/` 下对应文件，保持单一来源；四份子规范冲突时以总纲与更具体的那份为准。
 

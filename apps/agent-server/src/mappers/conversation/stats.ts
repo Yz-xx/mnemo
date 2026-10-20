@@ -1,7 +1,7 @@
 import type { ConversationStats } from '../../entities/conversation.js';
 import type { DbPool } from '../../infrastructure/db/pool.js';
 import type { QueryResultRow } from 'pg';
-import { formatDate } from '@repo/shared';
+import { formatDate } from '@mnemo/shared';
 
 /** 业务时区：趋势按本地日切分，与 get_current_time 工具保持同一口径 */
 const BUSINESS_TIME_ZONE = 'Asia/Shanghai';

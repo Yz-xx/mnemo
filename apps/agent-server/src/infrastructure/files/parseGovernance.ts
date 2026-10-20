@@ -1,6 +1,6 @@
 import type { AppConfig } from '../../configuration/config/index.js';
 import type { BoundedGate } from '../concurrency/gate.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { createBoundedGate } from '../concurrency/gate.js';
 

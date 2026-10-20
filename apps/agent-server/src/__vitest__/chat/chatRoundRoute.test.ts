@@ -1,10 +1,10 @@
 import type { AppConfig } from '../../configuration/config/index.js';
-import type { ChatStreamEvent } from '@repo/reusable';
+import type { ChatStreamEvent } from '@mnemo/reusable';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { createLogger } from '@repo/logger';
-import { HTTP_STATUS } from '@repo/reusable';
+import { createLogger } from '@mnemo/logger';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { handleRoundResume, handleRoundStop } from '../../controllers/client/chatRoundRoutes.js';
 import { createMetrics } from '../../infrastructure/observability/index.js';
 import { METRIC } from '../../infrastructure/observability/index.js';

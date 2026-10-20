@@ -3,12 +3,12 @@
  * 采集首 token 时延、整轮时延、503 比例与连接池等待 P95，并与 SLO 目标比对后决定退出码。
  *
  * 前置（三件）：
- *   1. 起 mock 模型：pnpm --filter @repo/agent-server run mock:model
+ *   1. 起 mock 模型：pnpm --filter @mnemo/agent-server run mock:model
  *   2. 让后端指向 mock（示例，实际按 .env 覆盖即可）：
  *      LLM_PROVIDER=deepseek DEEPSEEK_BASE_URL=http://127.0.0.1:8901 DEEPSEEK_API_KEY=mock \
  *      EMBEDDING_PROVIDER=openai EMBEDDING_BASE_URL=http://127.0.0.1:8901 EMBEDDING_API_KEY=mock \
- *      pnpm --filter @repo/agent-server run dev
- *   3. 跑压测：BENCH_TOKEN=<登录令牌> pnpm --filter @repo/agent-server run bench
+ *      pnpm --filter @mnemo/agent-server run dev
+ *   3. 跑压测：BENCH_TOKEN=<登录令牌> pnpm --filter @mnemo/agent-server run bench
  *      （未提供令牌时用 BENCH_USERNAME / BENCH_PASSWORD 走一次登录换取）
  *
  * 可调环境变量：BENCH_BASE_URL / BENCH_CONCURRENCY / BENCH_REQUESTS / BENCH_CRUD_REQUESTS

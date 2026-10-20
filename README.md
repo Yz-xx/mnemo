@@ -1,4 +1,4 @@
-# AI 智能体桌面应用（my-monorepo）
+# Mnemo —— 本地 AI 智能体桌面应用
 
 一个可本地运行的 AI 智能体应用：**Electron 桌面端**负责交互，**Express + LangChain 后端**负责推理与工具调用，账号与对话记录持久化在 **PostgreSQL**，并内置一套 **pgvector 向量知识库**（全局共享 + 用户私有）。整个仓库由 pnpm workspace 统一管理，一条命令即可拉起全链路。
 
@@ -14,7 +14,7 @@
 ## 一、目录结构
 
 ```text
-my-monorepo/
+mnemo/
 ├── apps/
 │   ├── agent-server/         # 智能体后端服务（Express + LangChain）
 │   │   ├── src/
@@ -168,7 +168,7 @@ my-monorepo/
 ```bash
 pnpm install
 pnpm dev                             # 交互选择要启动的应用（默认全选，回车即启动全部）
-pnpm dev agent-server agent-client   # 也可直接指定，支持目录名（agent-server）或包名（@repo/agent-server）
+pnpm dev agent-server agent-client   # 也可直接指定，支持目录名（agent-server）或包名（@mnemo/agent-server）
 ```
 
 `pnpm dev` 的交互菜单：`↑`/`↓` 移动光标、空格切换选中、`a` 全选/全不选、回车确认、`Esc` 取消；确认后先构建 `packages/*`，再用 `pnpm --parallel` 启动所选应用（桌面端会自行连接 http://localhost:3000）。在非交互环境（CI、输出被管道接管）下无法弹菜单，会自动启动全部应用。
@@ -176,9 +176,9 @@ pnpm dev agent-server agent-client   # 也可直接指定，支持目录名（ag
 单独运行某个应用：
 
 ```bash
-pnpm --filter @repo/agent-server run dev     # tsx watch，默认 3000 端口
-pnpm --filter @repo/agent-client run dev     # electron-vite dev
-pnpm --filter @repo/admin-web run dev         # vite dev，默认 5173，/api 代理到 3000
+pnpm --filter @mnemo/agent-server run dev     # tsx watch，默认 3000 端口
+pnpm --filter @mnemo/agent-client run dev     # electron-vite dev
+pnpm --filter @mnemo/admin-web run dev         # vite dev，默认 5173，/api 代理到 3000
 ```
 
 前置条件（Node.js ≥ 20、pnpm ≥ 9、本地 PostgreSQL（含 pgvector 扩展）与 Ollama 的模型准备）见 [apps/agent-server/README.md](./apps/agent-server/README.md)；后台管理网站还需运行中的后端与一个后台侧账号——空库首次启动时由 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 自举超管（未配置则启动告警），之后后台账号只能由超管在用户管理里创建，见 [apps/admin-web/README.md](./apps/admin-web/README.md)。
@@ -197,7 +197,7 @@ pnpm build          # 全仓构建，并把各应用的 dist 产物汇总到根 
 
 - **口令加密传输 + 加盐哈希存储**：客户端用服务端公钥（`GET /api/auth/public-key`）做 RSA-OAEP 加密后提交，明文不上网；服务端以 `scrypt` 加盐哈希入库（格式 `scrypt$盐hex$散列hex`）。存量账号的 DES 密文兼容已随迁移完成删除，取舍见 [docs/adr/0004-password-transport-and-storage.md](./docs/adr/0004-password-transport-and-storage.md)。
 - **令牌以明文流转**：登录令牌明文保存在桌面端 `settings.json` 中，并随请求以 Bearer 明文传输（后端只做校验与有效期管理），仅适用于本机/内网场景。
-- **HTTP 状态码契约收敛为 8 项**：前后端共用 `@repo/reusable` 的 `HTTP_STATUS`（200/201/204/400/401/404/500/503），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、依赖失败按 500、过载拒绝按 503（附 `Retry-After`，只由并发闸门签发），取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md) 与 [docs/adr/0010-concurrency-governance.md](./docs/adr/0010-concurrency-governance.md)。
+- **HTTP 状态码契约收敛为 8 项**：前后端共用 `@mnemo/reusable` 的 `HTTP_STATUS`（200/201/204/400/401/404/500/503），代码里不再写字面量数字；权限不足按 404、用户名冲突按 400、依赖失败按 500、过载拒绝按 503（附 `Retry-After`，只由并发闸门签发），取舍见 [docs/adr/0001-http-status-contract.md](./docs/adr/0001-http-status-contract.md) 与 [docs/adr/0010-concurrency-governance.md](./docs/adr/0010-concurrency-governance.md)。
 - **账号与端绑定 + 后台权限分级**：一个账号只属于一端，**端由登录路径承载**（客户端 `/api/auth/login`、后台 `/api/admin/auth/login`），不让调用方传字段自证身份；角色分三级 `super_admin` / `admin` / `user`，后台登录只接受前两者。权限只在用户管理模块分级——普通 admin 的列表在 SQL 层就过滤掉后台账号，也动不了它们；运维超级令牌 `x-admin-token` 权限等价超管，保留为超管丢号时的结构性后路。取舍见 [docs/adr/0006-account-isolation-and-admin-hierarchy.md](./docs/adr/0006-account-isolation-and-admin-hierarchy.md)。
 
 各端自身的取舍（如后端的单端登录策略、桌面端的主题过渡范围、后台管理网站的固定亮色与自建 UI 组件）分别记在对应的子 README 中。

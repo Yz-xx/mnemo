@@ -1,6 +1,6 @@
 # Windows 桌面端打包配置（electron-builder）
-appId: com.repo.agent.desktop
-productName: AgentDesktop
+appId: com.mnemo.agent.desktop
+productName: Mnemo
 directories:
   output: release
 # 只打包构建产物与包描述，源码不进入安装包

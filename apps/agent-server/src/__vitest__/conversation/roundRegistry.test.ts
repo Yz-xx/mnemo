@@ -1,6 +1,6 @@
 import type { ChatRound } from '../../services/conversation/round.js';
 import { describe, expect, it } from 'vitest';
-import { createLogger } from '@repo/logger';
+import { createLogger } from '@mnemo/logger';
 import { createMetrics } from '../../infrastructure/observability/index.js';
 import { METRIC } from '../../infrastructure/observability/index.js';
 import {

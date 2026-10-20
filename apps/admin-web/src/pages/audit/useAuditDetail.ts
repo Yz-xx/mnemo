@@ -1,7 +1,7 @@
 import type { AuditLogItem } from '@/api/types';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref } from 'vue';
-import { formatTime } from '@repo/shared';
+import { formatTime } from '@mnemo/shared';
 
 interface AuditDetailDeps {
   /** 操作人展示口径与列表行共用，由入口注入，避免详情与列表各写一份映射 */

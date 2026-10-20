@@ -2,7 +2,7 @@ import type { ContextConfig } from '../../configuration/config/index.js';
 import type { StoredMessage } from '../../entities/conversation.js';
 import type { Summarizer } from '../llm/context/index.js';
 import type { BaseMessage } from '@langchain/core/messages';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import {
   assembleContext,
   buildSummaryPrompt,

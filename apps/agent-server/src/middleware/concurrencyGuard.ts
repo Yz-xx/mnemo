@@ -1,8 +1,8 @@
 import type { ConcurrencyConfig } from '../configuration/config/index.js';
 import type { BoundedGate } from '../infrastructure/concurrency/gate.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../common/messages.js';
 import { createBoundedGate, retryAfterSeconds } from '../infrastructure/concurrency/gate.js';
 

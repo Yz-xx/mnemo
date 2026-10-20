@@ -4,7 +4,7 @@ import type { ContextConfig } from '../../configuration/config/index.js';
 import type { Conversation } from '../../entities/conversation.js';
 import type { ConversationStore } from '../../mappers/conversation/conversations.js';
 import type { AgentService } from '../llm/agent.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import { runChatRoundTask } from './chatRoundTask.js';
 import { RoundConflictError } from './roundRegistry.js';
 

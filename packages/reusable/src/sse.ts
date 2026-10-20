@@ -4,7 +4,7 @@ import type { ChatStreamEvent, ChatStreamFrame } from './chat.js';
  * 把 SSE 响应体流解析为带序号的对话事件流。
  *
  * 只收「已拿到的字节流」，不碰 fetch / token / 错误归一化：分帧是对话协议的事实，
- * 传输与鉴权是通用 HTTP 库（@repo/shared）的职责。两件事拆开后，本函数可用一段
+ * 传输与鉴权是通用 HTTP 库（@mnemo/shared）的职责。两件事拆开后，本函数可用一段
  * 手工构造的流单测，调用方也只需自己决定「怎么发请求、怎么处理非 2xx」。
  *
  * 每帧序号取自 `id:` 行；旧服务端不下发 `id:` 时退回本地递增计数，使客户端在两种服务端

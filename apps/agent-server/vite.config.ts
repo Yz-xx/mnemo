@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
-// 服务端产物不打包 node_modules：运行时依赖（含 workspace 包 @repo/shared）与 Node 内置模块一律外置
+// 服务端产物不打包 node_modules：运行时依赖（含 workspace 包 @mnemo/shared）与 Node 内置模块一律外置
 const external = [
   /^node:/,
   ...Object.keys(pkg.dependencies ?? {}).map((name) => new RegExp(`^${name}(/|$)`)),

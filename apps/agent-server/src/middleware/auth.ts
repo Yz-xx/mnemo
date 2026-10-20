@@ -2,7 +2,7 @@ import type { AppDependencies } from '../configuration/dependencies.js';
 import type { AdminActor } from '../infrastructure/auth/actor.js';
 import type { SessionStore } from '../mappers/session.js';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../common/messages.js';
 import { isAdminRole } from '../entities/user.js';
 

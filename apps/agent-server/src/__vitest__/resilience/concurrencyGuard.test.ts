@@ -1,10 +1,10 @@
 import type { ConcurrencyConfig, GateConfig } from '../../configuration/config/index.js';
 import type { ConcurrencyGuard } from '../../middleware/concurrencyGuard.js';
-import type { Logger } from '@repo/logger';
+import type { Logger } from '@mnemo/logger';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { HTTP_STATUS } from '@repo/reusable';
+import { HTTP_STATUS } from '@mnemo/reusable';
 import { retryAfterSeconds } from '../../infrastructure/concurrency/gate.js';
 import { createConcurrencyGuard } from '../../middleware/concurrencyGuard.js';
 
