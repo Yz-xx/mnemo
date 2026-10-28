@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { ChatMessage, ChatStep, GeneratedFileInfo } from '../../types';
-import MarkdownIt from 'markdown-it';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUpdate, onUpdated, ref, watch } from 'vue';
+import { beginDomUpdate, measureRender } from '../../perf/renderMetrics';
+import { renderBlocks } from './markdown';
 
 /** 工具标签文案：有 detail 时用后端给的人话，缺省（历史回看）时退回工具名 */
 function stepLabel(step: ChatStep): string {
@@ -14,19 +15,23 @@ const props = defineProps<{ message: ChatMessage }>();
 /** 生成的文件由上层负责取字节并落盘，本组件只上报点击 */
 const emit = defineEmits<{ download: [file: GeneratedFileInfo] }>();
 
-// 单例实例：关闭原始 HTML，避免模型输出中的标签被直接注入渲染
-const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
-
-// 链接一律标记为外部打开，交由主进程的 setWindowOpenHandler 用系统浏览器处理
-markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
-  tokens[index].attrSet('target', '_blank');
-  return self.renderToken(tokens, index, options);
-};
-
 // 去掉首尾空白，规避模型首个 token 为换行时出现的顶部空行
 const content = computed(() => props.message.content.trim());
 const isAssistant = computed(() => props.message.role === 'assistant');
-const rendered = computed(() => markdown.render(content.value));
+// 按顶层块切分渲染：未变化的块 HTML 保持逐字相同，交给 v-for 的 key 复用 DOM，
+// 流式增量只重建正在增长的末块（见 ADR 0016 阶段 2）；解析计时只做测量、不改行为
+const renderedBlocks = computed(() => measureRender(() => renderBlocks(content.value)));
+
+// DOM 更新时间单独量：v-html 重建节点的开销落在渲染管线里，不在上面那段解析窗口内，
+// 阶段 0 的 long task 全为 0 正说明这段没被覆盖（见 ADR 0016 阶段 1）
+let endDomUpdate: () => void = () => {};
+onBeforeUpdate(() => {
+  endDomUpdate = beginDomUpdate();
+});
+onUpdated(() => {
+  endDomUpdate();
+  endDomUpdate = () => {};
+});
 
 // 思考过程面板默认展开跟随推理输出；正文首个 token 到达即自动折叠——
 // thinking 与正文可能交错出现，不折叠会让界面反复跳动
@@ -107,7 +112,16 @@ async function copyContent() {
       </div>
       <!-- 用户输入按纯文本展示，避免其输入的符号被当作 Markdown 语法解析 -->
       <div v-else-if="!isAssistant" class="message__content">{{ content }}</div>
-      <div v-else class="message__content markdown" v-html="rendered" />
+      <!-- 按顶层块逐块渲染：内容未变的块 HTML 字符串相同，Vue 依赖 key 复用其 DOM，
+           流式增量只重建最后一块，不再整篇重排 -->
+      <div v-else class="message__content markdown">
+        <div
+          v-for="(block, index) in renderedBlocks"
+          :key="index"
+          class="markdown__block"
+          v-html="block"
+        />
+      </div>
       <!-- 本轮提问附带的文件：回看这条消息时能看出回答是基于哪些文件 -->
       <div v-if="message.attachments?.length" class="message__files">
         <span v-for="name in message.attachments" :key="name" class="chip">{{ name }}</span>
@@ -129,8 +143,8 @@ async function copyContent() {
           {{ stepLabel(step) }}
         </span>
       </div>
-      <!-- 本轮检索命中的知识库文档：由服务端在检索工具结束后确定地推来，
-           不指望模型在正文里标注出处（提示词早有要求，但小模型遵循率撑不起主链路） -->
+      <!-- 本轮实际采用的来源文档：工具结束后先推已注入的文档，流末尾再由服务端按正文标注覆盖；
+           正文一处都没标注时终局清单为空，检索到但没采用的文档不显示出处 -->
       <div v-if="message.sources?.length" class="message__sources">
         <span v-for="name in message.sources" :key="name" class="chip chip--source">
           来源《{{ name }}》

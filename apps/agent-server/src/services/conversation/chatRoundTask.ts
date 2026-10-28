@@ -143,6 +143,11 @@ export async function runChatRoundTask(input: ChatRoundTaskInput): Promise<void>
       }
       // 检索来源随回复一起落库：切换历史会话时由服务端回读，标签不会凭空消失
       if (event.type === 'source') usedSources.add(event.name);
+      // 终局清单覆盖过程中的召回结果：正文实际采用的文档才是这条回复的出处
+      if (event.type === 'sources') {
+        usedSources.clear();
+        for (const name of event.names) usedSources.add(name);
+      }
       round.publish(event);
     }
 

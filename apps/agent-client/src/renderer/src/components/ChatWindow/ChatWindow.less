@@ -39,14 +39,39 @@
   color: var(--accent);
 }
 
+// 整段复制入口：窗口化后全选与 Ctrl+F 只能覆盖已挂载的消息，用它补上全量原文
+.chat__copy {
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: @radius-pill;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: @tracking-control;
+  cursor: pointer;
+  transition:
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    border-color: var(--gold-line);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
 .chat__list {
   .content-gutter();
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  // 消息间距比原先更宽：去掉头像后，段落之间只能靠留白分出彼此
-  gap: 34px;
+  // 消息间距由虚拟列表的偏移表统一计入（windowing.ts 的 MESSAGE_GAP），这里不再设 gap：
+  // 虚拟项是绝对定位的，gap 对它们不生效
   overflow-y: auto;
   padding-top: 44px;
   padding-bottom: 44px;
@@ -59,6 +84,22 @@
   // 书写面底纹：金色点阵极淡地铺在对话区，暗示这是一块“可书写的面”
   background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
   background-size: 22px 22px;
+}
+
+// 虚拟列表内层：高度等于全部消息的累计高度，用来撑起滚动条；消息本身脱离文档流按偏移摆放。
+// 必须写 flex: none，否则作为 flex 子项会被容器高度压缩，滚动条随之失效
+.chat__virtual {
+  position: relative;
+  flex: none;
+  width: 100%;
+}
+
+// 一条已挂载的消息：绝对定位到累计偏移上，translate 不触发布局，滚动时只补挂进出窗口的条目
+.chat__slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
 }
 
 // 空状态：衬线标题配一行说明，像一张空白文档的开头

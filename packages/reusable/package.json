@@ -20,6 +20,7 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {

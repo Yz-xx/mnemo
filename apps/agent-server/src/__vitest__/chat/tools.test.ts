@@ -95,6 +95,37 @@ describe('search_knowledge_base 工具', () => {
     expect(sources).toContain('公共手册');
   });
 
+  it('检索结果被预算挡下时，不登记来源：标签只反映真正进入上下文的文档', async () => {
+    const sources: string[] = [];
+    const model = fakeModel()
+      .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
+      .respond((messages: BaseMessage[]) => new AIMessage(String(messages.at(-1)?.content ?? '')));
+
+    await buildSearchAgent(model).invoke(
+      { messages: [{ role: 'user', content: '香蕉在哪个文档里？' }] },
+      // 预算 1 个 token：片段整体注入不了，来源也不该出现在界面上
+      { configurable: { userId: 1, sources, toolBudget: createToolBudget(1) } },
+    );
+
+    expect(sources).toEqual([]);
+  });
+
+  it('同一文档重复命中时不重复登记来源', async () => {
+    const sources: string[] = [];
+    const model = fakeModel()
+      .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
+      .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
+      .respond((messages: BaseMessage[]) => new AIMessage(String(messages.at(-1)?.content ?? '')));
+
+    await buildSearchAgent(model).invoke(
+      { messages: [{ role: 'user', content: '香蕉在哪个文档里？' }] },
+      { configurable: { userId: 1, sources, toolBudget: createToolBudget(1000) } },
+    );
+
+    // 两次命中同一批文档：来源只在第一次真正注入时登记，第二次不再追加
+    expect(sources).toEqual(['我的笔记', '公共手册']);
+  });
+
   it('检索日志记录命中数与最高分，并带上注入的请求上下文', async () => {
     const lines: string[] = [];
     const sink: LogSink = { color: false, write: (line) => void lines.push(line) };

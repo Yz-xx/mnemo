@@ -1,3 +1,4 @@
+import type { Citations } from '../citations.js';
 import type { ToolBudget } from '../context/index.js';
 import type { ToolRunnableConfig } from '@langchain/core/tools';
 import type { Logger } from '@mnemo/logger';
@@ -16,12 +17,21 @@ export function readExports(config?: ToolRunnableConfig): GeneratedFileRef[] | u
 }
 
 /**
- * 从运行时配置中取出本轮检索来源的收集器：由 Agent 注入，检索工具只往里追加文档名。
- * 来源由此确定地流向客户端，而不是靠模型在正文里自行标注。
+ * 从运行时配置中取出本轮检索来源的收集器：由 Agent 注入，检索工具只追加真正注入上下文的文档名。
+ * 过程中的增量出处由它承担；终局是否采用由 citations 按正文标注判定，两者在流末尾收口。
  */
 export function readSources(config?: ToolRunnableConfig): string[] | undefined {
   const sources = config?.configurable?.sources;
   return Array.isArray(sources) ? (sources as string[]) : undefined;
+}
+
+/**
+ * 从运行时配置中取出本轮来源登记器：由 Agent 注入，检索工具只登记真正注入上下文的文档。
+ * 回答结束后 Agent 再用同一个登记器从正文判定实际采用，两者必须共用一份状态。
+ */
+export function readCitations(config?: ToolRunnableConfig): Citations | undefined {
+  const citations = config?.configurable?.citations as Citations | undefined;
+  return typeof citations?.register === 'function' ? citations : undefined;
 }
 
 /** 从运行时配置中取出当前用户 ID：调用者身份由 Agent 经 configurable 注入 */

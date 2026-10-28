@@ -32,6 +32,28 @@ interface ChatStreamHandlers {
 }
 
 /**
+ * 高频增量的写入接缝：正文与推理链都是逐 token 到达的。
+ * 缺省实现直接累加到消息上；流式渲染期间由会话层换成合帧写入（见 docs/adr/0016 阶段 1），
+ * 协议层因此不必知道 requestAnimationFrame 的存在。
+ */
+export interface ChatStreamWrites {
+  appendContent: (chunk: string) => void;
+  appendThinking: (chunk: string) => void;
+}
+
+/** 默认写入器：每帧都直接落到消息字段上，保持逐 token 渲染的原始行为 */
+function createMessageWrites(message: ChatMessage): ChatStreamWrites {
+  return {
+    appendContent: (chunk) => {
+      message.content += chunk;
+    },
+    appendThinking: (chunk) => {
+      message.thinking = (message.thinking ?? '') + chunk;
+    },
+  };
+}
+
+/**
  * 逐帧消费 SSE 帧并合并进助手消息：token 累加正文，tool 追加为执行轨迹；
  * 会话级副作用（记住会话 ID、切换会话、报错提示）通过回调交回调用方，保持此处逻辑纯粹。
  * 帧序号经 onSeq 回报调用方，续传时才接得上——这是「已消费到哪」的唯一来源。
@@ -40,15 +62,16 @@ export async function consumeChatStream(
   stream: AsyncIterable<ChatStreamFrame>,
   message: ChatMessage,
   handlers: ChatStreamHandlers,
+  writes: ChatStreamWrites = createMessageWrites(message),
 ): Promise<void> {
   for await (const frame of stream) {
     handlers.onSeq(frame.seq);
     const event = frame.event;
     if (event.type === 'token') {
-      message.content += event.content;
+      writes.appendContent(event.content);
     } else if (event.type === 'thinking') {
       // 推理链增量累加到消息上：只作过程展示，不落库、也不进正文
-      message.thinking = (message.thinking ?? '') + event.content;
+      writes.appendThinking(event.content);
     } else if (event.type === 'tool') {
       const steps = message.steps ?? [];
       if (event.status === 'start') {
@@ -77,6 +100,10 @@ export async function consumeChatStream(
       // 检索来源挂在助手消息上：同一份文档被多次命中时只留一个标签
       const sources = message.sources ?? [];
       if (!sources.includes(event.name)) message.sources = [...sources, event.name];
+    } else if (event.type === 'sources') {
+      // 终局清单覆盖过程中的增量标签：正文未采用的文档在这里被剔除；
+      // 空清单表示本轮没有可展示的出处，置空而不是留下一个空数组
+      message.sources = event.names.length ? [...event.names] : undefined;
     } else if (event.type === 'context') {
       // 治理痕迹挂在消息上：界面据此提示「这轮回答没看到完整历史」，
       // 与 thinking 一样只作过程展示，不落库、不进正文

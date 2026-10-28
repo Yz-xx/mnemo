@@ -9,8 +9,10 @@
  * 智能体自身产出的增量事件：由 LLM 层逐条 yield，服务端原样转发。
  * 单独拆出是因为服务端只负责转发这一类事件，其余事件由服务端自己产生。
  * `file` 承载工具生成的导出文件：客户端据此提供下载入口，文件内容本身不进对话流。
- * `source` 承载知识库检索命中的文档名：服务端从检索结果里直接取，不依赖模型在正文中标注
- * （提示词层面早就要求「引用知识库内容必须标注来源」，但小模型遵循率撑不起主链路）。
+ * `source` 承载本轮真正注入上下文的文档名：服务端从检索结果里直接取，
+ * 工具结束时增量推送，保证中途停止也不会丢掉已检索到的出处。
+ * `sources` 是流末尾的终局清单：只保留正文实际标注过的文档，一处都没标注就是空清单；
+ * 客户端据此覆盖此前累积的 `source` 标签，检索到但没采用的文档不再显示。
  * `tool` 的 `detail` 是人类可读的阶段描述（如「检索知识库：人工智能」）：入参攒到能解析时
  * 才随 start 下发，客户端据此把「调用工具 x」换成人话；它不落库，历史回看时缺省并降级为工具名。
  * `thinking` 承载模型推理链的增量：仅在开启 thinking 的模型上出现，体积大且含模型噪声，
@@ -21,7 +23,8 @@ export type AgentStreamEvent =
   | { type: 'thinking'; content: string }
   | { type: 'tool'; name: string; status: 'start' | 'end'; detail?: string }
   | { type: 'file'; fileId: string; name: string; size: number }
-  | { type: 'source'; name: string };
+  | { type: 'source'; name: string }
+  | { type: 'sources'; names: string[] };
 
 /**
  * 一轮对话可能推送的全部事件。

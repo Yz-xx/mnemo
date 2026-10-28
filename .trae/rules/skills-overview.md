@@ -47,7 +47,7 @@ mnemo/
 | `pnpm dev`                        | 交互式选择要启动的应用               |
 | `pnpm build`                      | 先构建 `packages/*`，再构建 `apps/*` |
 | `pnpm lint` / `pnpm lint:fix`     | eslint + prettier 全仓检查 / 修复    |
-| `pnpm test`                       | 全仓单元测试                         |
+| `pnpm test`                       | 先跑各包 typecheck，再全仓单元测试   |
 | `pnpm format`                     | prettier 全量格式化                  |
 | `pnpm --filter <包名> run <脚本>` | 针对单个包或应用执行命令             |
 

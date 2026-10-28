@@ -469,6 +469,31 @@ describe('handleChatMessage', () => {
     expect(saved?.messages.at(-1)?.sources).toEqual(['公共手册']);
   });
 
+  it('终局来源事件覆盖过程中累积的来源，落库只保留实际采用的文档', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      fakeDeps(
+        conversations,
+        fakeAgent([
+          { type: 'source', name: '公共手册' },
+          { type: 'source', name: '我的笔记' },
+          { type: 'token', content: '据《公共手册》，苹果是水果。' },
+          { type: 'sources', names: ['公共手册'] },
+        ]),
+      ),
+      fakeRequest({ message: '苹果是什么？' }),
+      res as unknown as Response,
+    );
+
+    // 过程中两张标签都推过，终局清单覆盖为被引用的那一份
+    expect(res.events).toContainEqual({ type: 'sources', names: ['公共手册'] });
+    const [summary] = await conversations.list();
+    const saved = await conversations.get(USER_ID, summary.id);
+    expect(saved?.messages.at(-1)?.sources).toEqual(['公共手册']);
+  });
+
   it('推理链事件原样推给客户端，但不落库：历史只留正文，推理不进上下文预算', async () => {
     const conversations = new FakeConversations();
     const res = new FakeHttpResponse();

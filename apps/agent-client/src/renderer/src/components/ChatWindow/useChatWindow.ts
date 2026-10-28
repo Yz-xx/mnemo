@@ -1,6 +1,6 @@
 import type { ChatAttachment, ChatMessage, GeneratedFileInfo } from '../../types';
 import type { Ref } from 'vue';
-import { nextTick, ref, useTemplateRef, watch } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 
 /** ChatWindow 的入参：消息与流式状态由父级持有，本组件只渲染与上报 */
 export interface ChatWindowProps {
@@ -26,43 +26,56 @@ export interface ChatWindowEmits {
   download: [file: GeneratedFileInfo];
 }
 
-/** 距底部小于该距离时视为“跟随最新内容”，超出则说明用户正在上翻阅读 */
-const FOLLOW_THRESHOLD = 80;
-
 interface ChatWindowControls {
   draft: Ref<string>;
-  onScroll: () => void;
+  /** 整段会话复制后的短暂反馈 */
+  copied: Ref<boolean>;
+  copyAll: () => Promise<void>;
   submit: () => void;
   onKeydown: (event: KeyboardEvent) => void;
 }
 
-/** 输入条与滚动跟随：草稿、跟随判定和发送动作都属于本组件的交互细节 */
+/**
+ * 输入条与整段复制：草稿、发送动作与「复制全部对话」都属于本组件的交互细节。
+ * 滚动与窗口化在 `useVirtualMessages`，这里只在上抛发送后请求回到底部。
+ */
 export function useChatWindow(
   props: ChatWindowProps,
   emit: (event: 'send', text: string) => void,
+  followToBottom: () => void,
 ): ChatWindowControls {
   const draft = ref('');
-  // 滚动容器的模板 ref 归本组合式函数独占：组件只在模板写 ref="listRef"，
-  // 脚本里不持有它，否则字符串 ref 会被 noUnusedLocals 判为「声明未读取」
-  const listRef = useTemplateRef<HTMLElement>('listRef');
-  const following = ref(true);
 
-  function onScroll(): void {
-    const list = listRef.value;
-    if (!list) return;
-    following.value = list.scrollHeight - list.scrollTop - list.clientHeight <= FOLLOW_THRESHOLD;
+  // 复制反馈：按钮自身临时变成「已复制」，1.5 秒后回落到常态，不弹提示打断阅读
+  const copied = ref(false);
+  let copiedTimer: number | undefined;
+
+  /**
+   * 复制整段会话：窗口化后 Ctrl+F 与「全选复制」只能覆盖已挂载的消息，
+   * 完整原文由这里提供，用户不必为了复制而一条条滚动。
+   */
+  async function copyAll(): Promise<void> {
+    const text = props.messages
+      .filter((message) => message.content.trim().length > 0)
+      .map((message) => `${message.role === 'user' ? '用户' : '助手'}：${message.content.trim()}`)
+      .join('\n\n');
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // 剪贴板不可用时保持原状：宁可没有反馈，也不谎报「已复制」
+      return;
+    }
+    copied.value = true;
+    window.clearTimeout(copiedTimer);
+    copiedTimer = window.setTimeout(() => {
+      copied.value = false;
+    }, 1500);
   }
 
-  // 监听全部消息文本长度，覆盖“新增消息”与“流式追加”两种情况
-  watch(
-    () => props.messages.reduce((total, item) => total + item.content.length, 0),
-    async () => {
-      await nextTick();
-      const list = listRef.value;
-      // 用户主动上翻查看历史时不强行拉回底部
-      if (list && following.value) list.scrollTop = list.scrollHeight;
-    },
-  );
+  onBeforeUnmount(() => {
+    window.clearTimeout(copiedTimer);
+  });
 
   function submit(): void {
     const text = draft.value.trim();
@@ -70,7 +83,7 @@ export function useChatWindow(
     emit('send', text);
     draft.value = '';
     // 主动发送时恢复跟随，确保新消息可见
-    following.value = true;
+    followToBottom();
   }
 
   /** Enter 发送，Shift + Enter 换行 */
@@ -81,5 +94,5 @@ export function useChatWindow(
     }
   }
 
-  return { draft, onScroll, submit, onKeydown };
+  return { draft, copied, copyAll, submit, onKeydown };
 }

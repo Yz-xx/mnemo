@@ -13,6 +13,7 @@ import { describeChatEndpoint, describeChatModel } from '../../configuration/con
 import { ParseGovernance } from '../../infrastructure/files/parseGovernance.js';
 import { METRIC } from '../../infrastructure/observability/index.js';
 import { appendAttachmentHints } from './attachments.js';
+import { createCitations } from './citations.js';
 import { createToolBudget } from './context/index.js';
 import { extractText } from './messageContent.js';
 import { createChatModel } from './model.js';
@@ -117,6 +118,8 @@ export class AgentService implements Summarizer {
     const sources: string[] = [];
     // 本轮工具结果额度：检索与读取共用，跨同轮多次调用累计（阶段 2 的上下文治理）
     const toolBudget = createToolBudget(this.toolBudgetTokens);
+    // 本轮来源登记器：检索工具注入片段时登记，流结束后据此从正文判定实际采用
+    const citations = createCitations();
 
     try {
       // 复制一份再追加附件提示：不改动调用方持有的那份组装结果
@@ -143,6 +146,7 @@ export class AgentService implements Summarizer {
             logger: options.logger,
             exported,
             sources,
+            citations,
             // 本轮工具结果额度：检索与读取工具据它做去重与截断
             toolBudget,
           },
@@ -155,6 +159,7 @@ export class AgentService implements Summarizer {
         tools: this.tools,
         exported,
         sources,
+        citations,
         toolBudget,
         toolBudgetTokens: this.toolBudgetTokens,
         logger: options.logger,

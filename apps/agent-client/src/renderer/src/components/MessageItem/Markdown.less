@@ -7,12 +7,19 @@
   // 渲染结果含标签之间的换行，沿用 pre-wrap 会多出大量空行
   white-space: normal;
 
-  // 消息内首尾不留外边距，避免与容器内边距叠加出多余空白
-  :deep(> :first-child) {
+  // 每块包一层容器供 v-for 复用 DOM；display: contents 让它不生成盒子，
+  // 块级元素仍直接参与 .markdown 的布局，等价于没有这层包装
+  :deep(.markdown__block) {
+    display: contents;
+  }
+
+  // 消息内首尾不留外边距，避免与容器内边距叠加出多余空白；
+  // 容器不生成盒子，首尾判断要穿透一层落到实际块元素上
+  :deep(.markdown__block:first-child > :first-child) {
     margin-top: 0;
   }
 
-  :deep(> :last-child) {
+  :deep(.markdown__block:last-child > :last-child) {
     margin-bottom: 0;
   }
 

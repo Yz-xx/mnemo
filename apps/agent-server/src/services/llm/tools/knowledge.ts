@@ -3,7 +3,7 @@ import { tool } from 'langchain';
 import { z } from 'zod';
 import { BUDGET_EXHAUSTED_NOTE } from '../context/index.js';
 import { withLabel } from './label.js';
-import { readLogger, readSources, readToolBudget, readUserId } from './runtime.js';
+import { readCitations, readLogger, readSources, readToolBudget, readUserId } from './runtime.js';
 
 /** 检索词为用户原文，截断后写入日志，避免日志行过长 */
 const QUERY_PREVIEW = 80;
@@ -11,7 +11,7 @@ const QUERY_PREVIEW = 80;
 /** 命中的文档本轮已经回填过：不重复注入，但要让模型知道它已经看过这份资料 */
 const DELIVERED_NOTE = '这些文档的内容已在本轮此前的检索结果中给出，未重复注入。';
 
-/** 知识库检索工具：入参自校验，命中来源经收集器交回 Agent 推给客户端 */
+/** 知识库检索工具：入参自校验；命中且真正注入上下文的文档才登记为来源，交回 Agent 推给客户端 */
 export function createKnowledgeTool(knowledge: KnowledgeStore) {
   const search = tool(
     async ({ query }, config) => {
@@ -25,11 +25,10 @@ export function createKnowledgeTool(knowledge: KnowledgeStore) {
         sources: results.length > 0 ? results.map((item) => item.title).join('、') : undefined,
       });
       if (results.length === 0) return '知识库中没有检索到相关内容。';
-      // 命中的文档名一并交给 Agent 推给客户端，来源标签因此由服务端确定地给出，
-      // 不指望模型在正文里照抄出处（提示词已要求，但小模型遵循率撑不起主链路）
-      readSources(config)?.push(...results.map((item) => item.title));
 
       const budget = readToolBudget(config);
+      // 来源只登记真正注入上下文的文档：命中却被额度挡下的不算，界面上不该出现「没用上」的出处
+      const citations = readCitations(config);
       // 同轮已回填过的文档不再重复注入：模型手上已有它的片段，重复只会白占窗口
       const fresh = budget
         ? results.filter((item) => !budget.deliveredDocuments.has(item.documentId))
@@ -45,6 +44,10 @@ export function createKnowledgeTool(knowledge: KnowledgeStore) {
         if (admitted === null) break;
         // 只登记真正注入了的文档，被额度挡下的下轮仍有机会拿到
         budget?.deliveredDocuments.add(item.documentId);
+        // 注入成功即成为来源候选：答复结束后由 Agent 按正文标注判定是否真的采用
+        citations?.register(item.documentId, item.title);
+        // 命中文档名一并交给 Agent 推给客户端：过程中先给出处，终局再由正文判定结果覆盖
+        readSources(config)?.push(item.title);
         sections.push(admitted.text);
         // 这一段已被截断即说明额度用尽，后面的片段不必再试
         if (admitted.truncated) break;

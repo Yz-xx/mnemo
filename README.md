@@ -152,7 +152,7 @@ mnemo/
 | `pnpm dev`    | 交互选择要启动的应用，先构建 `packages/*`（后端直接消费其 `dist`），再并行跑所选应用的 dev    |
 | `pnpm build`  | 先打包 `packages/*`，再构建 `apps/*`，最后把各应用的 `dist` 产物汇总到根 `dist/<应用目录名>/` |
 | `pnpm lint`   | `eslint .` + `prettier --check .`（`pnpm lint:fix` 自动修复）                                 |
-| `pnpm test`   | `pnpm -r run test`，递归执行各子包单测（无 test 脚本的包自动跳过）                            |
+| `pnpm test`   | 先 `pnpm -r run typecheck`（有该脚本的包才跑），再 `pnpm -r run test` 递归执行各子包单测      |
 | `pnpm format` | `prettier --write .`                                                                          |
 
 ### 依赖与镜像
@@ -187,7 +187,7 @@ pnpm --filter @mnemo/admin-web run dev         # vite dev，默认 5173，/api �
 
 ```bash
 pnpm lint           # ESLint + Prettier
-pnpm test           # 各子包单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索、后台管理网站的分页取数 / 登录态 / 令牌收口 / 路由守卫）
+pnpm test           # 先跑各包的 typecheck（vitest / vite 只转译不校验类型），再跑单元测试（shared 的字符串 / 通用函数 / 字节与时间格式化、reusable 的 HTTP 状态码契约、logger 的格式化与文件轮转、后端的凭证校验与知识库检索、后台管理网站的分页取数 / 登录态 / 令牌收口 / 路由守卫、桌面端的流式合帧与 Markdown 块切分）
 pnpm build          # 全仓构建，并把各应用的 dist 产物汇总到根 dist/<应用目录名>/
 ```
 

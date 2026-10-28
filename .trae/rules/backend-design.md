@@ -81,7 +81,7 @@ apps/agent-server/src/
 - **断开只退订，停止走显式接口**：`roundPipe.ts` 的 `res.on('close')` 只 `subscription.abort()` 退订，**不触达轮次的中止**；会话锁包住整轮（`done`），但不盖住重连订阅。显式中止只经 `POST /api/chat/rounds/:roundId/stop` 的 `round.abort('user')`；重连走只读的 `GET /api/chat/rounds/:roundId/stream?lastEventId=N`（不存在或过 TTL 一律 404）。两个处理器按 `handleChatMessage` 的可测试形态导出。
 - 落库提问必须在响应头写出之前完成，落库失败才能按普通请求返回 500。
 - 响应头固定三件套：`text/event-stream; charset=utf-8`、`no-cache, no-transform`、`keep-alive`，随后 `flushHeaders()`。
-- 事件帧格式 `id: <seq>\ndata: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `file` / `context` / `done` / `error`，类型声明统一取 `@mnemo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
+- 事件帧格式 `id: <seq>\ndata: {...}\n\n`，`type` 取 `conversation` / `token` / `thinking` / `tool` / `source` / `sources` / `file` / `context` / `done` / `error`，类型声明统一取 `@mnemo/reusable` 的 `ChatStreamEvent`（两端各写一份必然漂移）。`done` 携带 `conversationId` 与 `title`，`file` 携带 `{ fileId, name, size }`，`source` 携带 `{ name }`，`sources` 携带 `{ names }`，`context` 携带 `{ trimmedMessages, summarized }` 且在真正裁掉历史时才补推。
 - `conversation` 事件必须在首个 token / tool 之前补推，使「有产出才保留」与「客户端已知晓会话 ID」严格对齐。
 - **异常收尾一律以 `error` 结束，只有自然完成才 `done`**：因超时、停机、脱离轮次上限、用户停止而中止的轮次必须推 `error`（含中止原因），客户端据此判定「需回落 `getConversation`」而非「读完了」；`finally` 中统一 `res.end()`。
 - 轮次任务脱离请求生命周期后**必须顶层自吞异常**（`runChatRoundTask` 的 `try/catch/finally` 与 `startChatRound` 的 `.catch`）：逃逸的拒绝会触发进程级 `unhandledRejection` 直接退出。
@@ -89,7 +89,8 @@ apps/agent-server/src/
 - 仅在答复正文非空时落库；中断与失败路径同样要把已产出的部分回复落库（用「本轮是否已落库」标志防重复写入，落库失败只 warn）。
 - 新建会话在本轮既未正常收尾、也没有任何产出时必须连同刚写入的提问一起删除；已开始产出内容的会话即便被中断也保留；已推送 `done` 的会话（含空回复）一律保留。
 - 工具产出的结构化结果（导出文件、检索来源）经 `configurable` 上的收集器交回 Agent 层，再由 Agent 转成事件推送——这类信息服务端能确定地摆好，不要指望模型在正文里自述。
-- 检索来源在工具结束的同一时刻增量推送并按文档名去重，本轮随后被中断也不会丢掉已检索到的出处。
+- 检索来源必须区分「已注入」与「实际采用」：检索工具只在片段通过 `ToolBudget.admit` 真正进入上下文后才登记（被额度挡下、同轮重复命中的文档不算），过程中按文档名去重增量推 `source`，本轮随后被中断也不会丢掉已检索到的出处。
+- 终局来源在流末尾判定：`services/llm/citations.ts` 用同一份登记状态扫描完整正文，只保留被标注的文档；一处都没标注时下发空清单，不把「已注入」当成「已采用」——检索命中无关资料时回落会把出处挂在完全没用的文档上。结果以 `sources` 事件覆盖过程中的增量标签，落库取终局清单。
 
 ## 6. 数据层
 

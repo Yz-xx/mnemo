@@ -6,6 +6,7 @@ import { saveFile } from '../api/bridge';
 import { isNotFound, isUnauthorized } from '../api/client';
 import { agentApi } from '../api/session';
 import { consumeChatStream, createMessage } from './chatStream';
+import { createFrameWriter } from './frameWriter';
 
 /** 断开后的重连退避序列（毫秒）：服务端仍在后台生成，按此节奏尝试续传，用尽即降级 */
 const RECONNECT_DELAYS_MS = [500, 1000, 2000, 4000];
@@ -76,6 +77,19 @@ export function useChatMessages({
     const assistant = ref(createMessage('assistant', ''));
     messages.value.push(assistant.value);
 
+    // 正文与推理链逐 token 到达，先攒到缓冲、每帧提交一次：
+    // 渲染次数因此从「token 数」降到「帧数」（见 docs/adr/0016 阶段 1）
+    const contentWriter = createFrameWriter((chunk) => {
+      assistant.value.content += chunk;
+    });
+    const thinkingWriter = createFrameWriter((chunk) => {
+      assistant.value.thinking = (assistant.value.thinking ?? '') + chunk;
+    });
+    const writes = {
+      appendContent: (chunk: string) => contentWriter.append(chunk),
+      appendThinking: (chunk: string) => thinkingWriter.append(chunk),
+    };
+
     streaming.value = true;
     errorMessage.value = '';
     // 保留局部引用：用户中途停止时会把 controller 置空，局部引用仍可用于判断是否被中断
@@ -117,6 +131,8 @@ export function useChatMessages({
     /** 续传彻底失败时的降级：把会话在服务端的最终助手消息拉回来，避免界面停在半截 */
     const recoverConversation = async (): Promise<void> => {
       if (!conversationId) return;
+      // 整段替换前先把缓冲落下：否则残留的增量会追到服务端全文之后，内容错位
+      contentWriter.flush();
       try {
         const detail = await agentApi.getConversation(conversationId);
         const last = detail.messages.at(-1);
@@ -146,6 +162,7 @@ export function useChatMessages({
           ),
           assistant.value,
           handlers,
+          writes,
         );
       } catch (error) {
         if (isUnauthorized(error)) throw error;
@@ -162,6 +179,7 @@ export function useChatMessages({
             agentApi.resumeChat(currentRoundId, lastSeq, currentController.signal),
             assistant.value,
             handlers,
+            writes,
           );
         } catch (error) {
           if (isUnauthorized(error)) throw error;
@@ -177,6 +195,9 @@ export function useChatMessages({
       // 用户主动中断不算错误；令牌失效同样经此收敛到登录页
       if (!currentController.signal.aborted) await handleError(error);
     } finally {
+      // 收尾前把缓冲全部落下：合帧的最后一批增量不能丢，否则界面会停在第 N 帧
+      contentWriter.flush();
+      thinkingWriter.flush();
       streaming.value = false;
       controller = null;
       roundId = null;
