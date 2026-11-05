@@ -47,6 +47,10 @@ export function useChatSession({
   const conversations = ref<ConversationSummary[]>([]);
   const loading = ref(false);
 
+  // 切换请求序号：快速点选两个会话时，先发出的响应可能后到，
+  // 只认最后一次发出的请求，避免旧会话内容覆盖新选中的会话
+  let selectSeq = 0;
+
   /** 拉取会话列表；失败时清空并让 401 收敛到登录页，其余错误不额外提示 */
   async function refreshConversations(): Promise<void> {
     try {
@@ -60,6 +64,9 @@ export function useChatSession({
   /** 开启新对话：仅清空当前上下文，真正的会话由后端在首次提问时创建 */
   function startNewConversation(): void {
     abortStream();
+    // 使在途的历史会话请求失效，否则它返回后会覆盖刚清空的对话
+    selectSeq += 1;
+    loading.value = false;
     activeId.value = null;
     messages.value = [];
     errorMessage.value = '';
@@ -67,10 +74,13 @@ export function useChatSession({
 
   async function selectConversation(id: string): Promise<void> {
     if (streaming.value || id === activeId.value) return;
+    const requestId = ++selectSeq;
     loading.value = true;
     errorMessage.value = '';
     try {
       const detail = await agentApi.getConversation(id);
+      // 过期响应只丢弃，不改写当前会话与消息
+      if (requestId !== selectSeq) return;
       activeId.value = detail.id;
       // 服务端存的是工具名数组（tools），渲染层统一用 steps（已完成态）展示，
       // 这里做一次转换，切换历史会话后工具标签就不会凭空消失
@@ -83,9 +93,11 @@ export function useChatSession({
           : message,
       );
     } catch (error) {
+      if (requestId !== selectSeq) return;
       await handleError(error);
     } finally {
-      loading.value = false;
+      // 过期请求不得收尾，否则会提前熄掉最新请求的加载态
+      if (requestId === selectSeq) loading.value = false;
     }
   }
 
@@ -101,6 +113,9 @@ export function useChatSession({
 
   /** 登出或令牌失效时清空会话数据，避免上一个账号的内容残留在界面上 */
   function clearSession(): void {
+    // 与新建同理：登出后不能让在途请求把上一个账号的内容写回来
+    selectSeq += 1;
+    loading.value = false;
     activeId.value = null;
     conversations.value = [];
   }

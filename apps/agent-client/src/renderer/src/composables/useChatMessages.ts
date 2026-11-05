@@ -115,12 +115,12 @@ export function useChatMessages({
         conversationId = id;
         activeId.value = id;
       },
-      // done 事件由后端确认会话 ID，随后刷新列表以更新标题与排序
-      onDone: async (id: string) => {
+      // done 事件由后端确认会话 ID；列表刷新统一放在收尾处，
+      // 正常完成与中断各刷一次，避免两条路径重复请求
+      onDone: (id: string) => {
         settled = true;
         conversationId = id;
         activeId.value = id;
-        await refreshConversations();
       },
       onError: (message: string) => {
         settled = true;
@@ -212,6 +212,9 @@ export function useChatMessages({
       if (!assistant.value.content) {
         messages.value = messages.value.filter((item) => item.id !== assistant.value.id);
       }
+      // 主动中断时通常收不到 done 帧，列表不会自行更新；本轮一旦确认了会话 ID
+      // （新建会话的首个产出之后），就以收尾处的这次刷新为准，两种落定方式各刷一次
+      if (conversationId) await refreshConversations();
     }
   }
 

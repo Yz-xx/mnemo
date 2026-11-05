@@ -26,6 +26,17 @@ export interface ChatWindowEmits {
   download: [file: GeneratedFileInfo];
 }
 
+/**
+ * 判断这次按键是否应当触发发送。
+ * 输入法组合期间的 Enter 只用于确认候选词，若当作发送会把未完成的候选词发出去；
+ * 事件类型收窄为判定所需的三项，便于直接测试规则本身。
+ */
+export function isSendEnter(
+  event: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'isComposing'>,
+): boolean {
+  return event.key === 'Enter' && !event.shiftKey && !event.isComposing;
+}
+
 interface ChatWindowControls {
   draft: Ref<string>;
   /** 整段会话复制后的短暂反馈 */
@@ -86,12 +97,10 @@ export function useChatWindow(
     followToBottom();
   }
 
-  /** Enter 发送，Shift + Enter 换行 */
   function onKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      submit();
-    }
+    if (!isSendEnter(event)) return;
+    event.preventDefault();
+    submit();
   }
 
   return { draft, copied, copyAll, submit, onKeydown };

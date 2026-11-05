@@ -26,7 +26,7 @@ interface ChatStreamHandlers {
   /** 本轮开始有产出，后端确认该会话会被保留，携带会话 ID */
   onConversation: (conversationId: string) => void;
   /** 本轮结束，携带后端确认的会话 ID */
-  onDone: (conversationId: string) => Promise<void>;
+  onDone: (conversationId: string) => void;
   /** 后端返回的可读错误信息 */
   onError: (message: string) => void;
 }
@@ -114,7 +114,7 @@ export async function consumeChatStream(
     } else if (event.type === 'conversation') {
       handlers.onConversation(event.conversationId);
     } else if (event.type === 'done') {
-      await handlers.onDone(event.conversationId);
+      handlers.onDone(event.conversationId);
     } else {
       // 联合类型已把其余分支排除，走到这里只剩 error
       handlers.onError(event.message);
