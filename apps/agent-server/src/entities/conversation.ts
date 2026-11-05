@@ -4,8 +4,16 @@
  * 空值写 null 而非 []，切换历史会话时按原样回读即可还原标签。
  */
 
+import type { KnowledgeCitation } from '@mnemo/reusable';
+
 /** 消息角色 */
 export type MessageRole = 'user' | 'assistant' | 'system';
+
+/**
+ * 消息来源：新版是可定位引用，旧版落库存的是文档名。
+ * 读回时两种形状都可能出现，消费端按形状兼容（旧版没有文档 ID，不提供预览入口）。
+ */
+export type StoredCitation = KnowledgeCitation | string;
 
 /** 一条已落库的消息 */
 export interface StoredMessage {
@@ -18,8 +26,8 @@ export interface StoredMessage {
   tools?: string[];
   /** 用户提问附带的文件名：随提问一起落库，历史回看时还原附件标签 */
   attachments?: string[];
-  /** 助手本轮检索命中的知识库文档名：随回复一起落库，历史回看时还原来源标签 */
-  sources?: string[];
+  /** 助手本轮检索命中的可定位引用：随回复一起落库，历史回看时还原引用卡片 */
+  sources?: StoredCitation[];
   createdAt: string;
 }
 
@@ -30,17 +38,19 @@ export interface StoredMessage {
 export interface MessageMeta {
   tools?: string[];
   attachments?: string[];
-  sources?: string[];
+  sources?: KnowledgeCitation[];
 }
 
 /**
- * 会话头：只有标识、标题与时间，不含消息与摘要。
+ * 会话头：只有标识、标题、时间与知识库绑定，不含消息与摘要。
  * 追加消息时只需要这些字段（判断归属、是否首条提问、回传标题），
  * 拿到它就不必回读整条会话历史（见 docs/adr/0010 决策 13）。
  */
 export interface ConversationHeader {
   id: string;
   title: string;
+  /** 首轮绑定的知识库：限定检索范围；存量会话与「不限库」会话无该字段 */
+  knowledgeBaseId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +74,8 @@ export interface AppendResult {
 export interface ConversationSummary {
   id: string;
   title: string;
+  /** 首轮绑定的知识库：列表条目据此显示绑定库；「不限库」会话无该字段 */
+  knowledgeBaseId?: string;
   updatedAt: string;
   messageCount: number;
 }

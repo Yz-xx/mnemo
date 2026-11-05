@@ -168,7 +168,7 @@ describe('retrieveChunks 召回条数埋点', () => {
       options,
       governance: { gate: tightGate(), breaker: closedBreaker(), timeoutMs: 1000, metrics },
       query: '苹果',
-      userId: 1,
+      baseIds: ['kb-1'],
     });
 
     expect(result).toHaveLength(2);
@@ -187,7 +187,7 @@ describe('retrieveChunks 召回条数埋点', () => {
       options,
       governance: { gate: tightGate(), breaker: closedBreaker(), timeoutMs: 1000, metrics },
       query: '苹果',
-      userId: 1,
+      baseIds: ['kb-1'],
     });
 
     expect(metrics.snapshot().counters[METRIC.RETRIEVAL_HITS]).toBe(0);

@@ -10,11 +10,25 @@ import { useChat } from './composables/useChat';
 const auth = useAuth();
 
 // 顶层持有全部会话状态，子组件只负责渲染与事件上抛
-const { backend, session, chat, attachments, lifecycle } = useChat();
+const { backend, session, chat, attachments, knowledge, lifecycle } = useChat();
 
 const settingsVisible = ref(false);
+// 抽屉分页：设置入口进连接页，知识库入口直接进知识库页
+const settingsTab = ref<'connection' | 'knowledge'>('connection');
 // 启动时先校验本地令牌，期间不渲染主界面，避免闪出一份空的会话列表
 const booting = ref(true);
+
+/** 打开设置抽屉并定位到连接分页 */
+function openSettings(): void {
+  settingsTab.value = 'connection';
+  settingsVisible.value = true;
+}
+
+/** 打开设置抽屉并定位到知识库分页 */
+function openKnowledge(): void {
+  settingsTab.value = 'knowledge';
+  settingsVisible.value = true;
+}
 
 // 登录态变化即切换数据源：登录后拉取该账号的会话，登出后清空以免串号
 watch(
@@ -42,10 +56,13 @@ onMounted(async () => {
       :active-id="session.activeId"
       :connection="backend.connection"
       :user="auth.session.user"
+      :knowledge-bases="knowledge.bases"
       @create="session.startNewConversation"
       @select="session.selectConversation"
       @remove="session.removeConversation"
-      @settings="settingsVisible = true"
+      @rename="session.renameConversation"
+      @knowledge="openKnowledge"
+      @settings="openSettings"
       @logout="auth.session.logout"
     />
 
@@ -57,17 +74,22 @@ onMounted(async () => {
       :model="backend.health?.model ?? ''"
       :provider="backend.health?.provider ?? ''"
       :attachments="attachments.list"
+      :knowledge-bases="knowledge.bases"
+      :selected-knowledge-base-id="knowledge.selectedId"
+      :bound-knowledge-base-id="session.activeKnowledgeBaseId"
       @send="chat.sendMessage"
       @stop="chat.stopStreaming"
       @attach="attachments.add"
       @remove-attachment="attachments.remove"
       @download="chat.saveGeneratedFile"
+      @select-knowledge-base="knowledge.selectBase"
     />
 
     <SettingsDrawer
       v-if="settingsVisible"
       :backend-url="backend.url"
       :health="backend.health"
+      :initial-tab="settingsTab"
       @close="settingsVisible = false"
       @save="backend.updateBackendUrl"
     />

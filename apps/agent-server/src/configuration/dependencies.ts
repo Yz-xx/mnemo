@@ -7,11 +7,12 @@ import type { ApiLogStore } from '../mappers/apiLog/store.js';
 import type { AuditLogStore } from '../mappers/auditLog.js';
 import type { ConversationStore } from '../mappers/conversation/conversations.js';
 import type { FileStore } from '../mappers/file/fileStore.js';
+import type { KnowledgeBaseStore } from '../mappers/knowledge/bases.js';
 import type { SessionStore } from '../mappers/session.js';
 import type { UserStore } from '../mappers/user/store.js';
 import type { ConcurrencyGuard } from '../middleware/concurrencyGuard.js';
 import type { RoundRegistry } from '../services/conversation/roundRegistry.js';
-import type { KnowledgeStore } from '../services/knowledge/index.js';
+import type { KnowledgeIngest, KnowledgeStore } from '../services/knowledge/index.js';
 import type { AgentService } from '../services/llm/agent.js';
 import type { Logger } from '@mnemo/logger';
 
@@ -40,6 +41,10 @@ export interface AppDependencies {
   rounds: RoundRegistry;
   files: FileStore;
   knowledge: KnowledgeStore;
+  /** 异步解析任务：上传 / 重试入队，删除时清理原始文件（见 services/knowledge/ingest.ts） */
+  knowledgeIngest: KnowledgeIngest;
+  /** 知识库 mapper：库 CRUD 与文档归属校验的 SQL 出口 */
+  knowledgeBases: KnowledgeBaseStore;
   users: UserStore;
   sessions: SessionStore;
   /** 口令传输加解密：公钥下发给客户端加密口令，私钥留在服务端解密 */

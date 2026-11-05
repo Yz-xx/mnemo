@@ -1,0 +1,164 @@
+// 侧边栏外壳：整体布局、品牌、知识库入口与底部用户区。
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  // 与对话区的分界用一条金线，而不是普普通通的灰边
+  border-right: 1px solid var(--gold-line);
+  background: var(--bg-panel);
+}
+
+.sidebar__head,
+.sidebar__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar__head {
+  position: relative;
+  padding: 20px 14px 16px 18px;
+
+  // 金色发丝线自中间向两端展开，是启动时第一件“发生的事”
+  &::after {
+    .hairline();
+    .draw-rule(120ms);
+  }
+}
+
+.sidebar__foot {
+  position: relative;
+  padding: 12px 14px 12px 18px;
+  color: var(--text-muted);
+  font-size: 13px;
+
+  &::before {
+    .hairline(top);
+  }
+}
+
+.sidebar__brand {
+  flex: 1;
+  font-family: @font-display;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: @tracking-display;
+
+  // 品牌标记：一枚金箔菱形代替图标，与强调色同源（旋转 45° 的方块）
+  &::before {
+    .brand-mark(2px);
+  }
+}
+
+// 知识库入口：一块带金边的窄条，与会话列表区分开又不抢视线
+.sidebar__knowledge {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 12px 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--gold-line);
+  border-radius: @radius;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  letter-spacing: @tracking-control;
+  cursor: pointer;
+  transition:
+    border-color @ease-quick,
+    background-color @ease-quick;
+
+  &:hover {
+    border-color: var(--gold-line-strong);
+    background: var(--bg-elevated);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+.sidebar__knowledge-arrow {
+  color: var(--text-faint);
+  font-family: @font-mono;
+  font-size: 12px;
+}
+
+.sidebar__status {
+  flex: 1;
+}
+
+// 当前登录用户：头像取用户名首字，退出入口同行右对齐
+.sidebar__user {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 18px;
+
+  &::before {
+    .hairline(top);
+  }
+}
+
+.sidebar__avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  // 方形头像配金线，比圆头像更接近印章的观感
+  border: 1px solid var(--gold-line);
+  border-radius: @radius-sm;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: @font-display;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar__name {
+  .ellipsis();
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sidebar__logout {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: @tracking-control;
+  cursor: pointer;
+  transition:
+    background-color @ease-quick,
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    border-color: transparent;
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+// 空列表用衬线斜体，把“什么都没有”也当作版面的一部分处理
+.sidebar__empty {
+  margin: auto;
+  padding: 0 24px;
+  color: var(--text-faint);
+  font-family: @font-display;
+  font-style: italic;
+  letter-spacing: @tracking-display;
+  text-align: center;
+}

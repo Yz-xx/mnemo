@@ -1,28 +1,32 @@
 import type { KnowledgeDocument } from '../../entities/knowledge.js';
 import { randomUUID } from 'node:crypto';
 
-/** 读取行上的归属用户：全局文档（或列缺失）一律按 null 处理 */
-export function readOwner(row: Record<string, unknown>): number | null {
-  return row.owner_user_id === null || row.owner_user_id === undefined
-    ? null
-    : Number(row.owner_user_id);
-}
-
 /** 读取行上的最后编辑时间：列值为空或从未编辑过一律按 null 处理 */
 export function readUpdatedAt(row: Record<string, unknown>): string | null {
   const value = row.updated_at;
   return value === null || value === undefined || value === '' ? null : String(value);
 }
 
-/** 行 → 文档元数据：scope 只认 global，其余一律按 private 处理 */
+/** 可空文本列 → string | null：空串与缺失一律归为 null，避免列表上出现空文件名 */
+function nullableText(value: unknown): string | null {
+  return value === null || value === undefined || value === '' ? null : String(value);
+}
+
+/** 行 → 文档元数据：归属由所在知识库表达（见 docs/adr/0018） */
 export function toDocument(row: Record<string, unknown>): KnowledgeDocument {
   return {
     id: String(row.id),
     title: String(row.title),
-    scope: row.scope === 'global' ? 'global' : 'private',
-    ownerUserId: readOwner(row),
+    knowledgeBaseId: String(row.knowledge_base_id),
     chunks: Number(row.chunks),
     createdAt: String(row.created_at),
+    fileName: nullableText(row.file_name),
+    // bigint 经驱动读回是字符串，出口统一收敛成数字
+    fileSize: row.file_size === null || row.file_size === undefined ? null : Number(row.file_size),
+    mimeType: nullableText(row.mime_type),
+    // 存量行没有状态列历史值时按 ready：迁移后默认值即达成
+    status: (nullableText(row.status) as KnowledgeDocument['status']) ?? 'ready',
+    failureReason: nullableText(row.failure_reason),
   };
 }
 
@@ -40,31 +44,36 @@ export function toDocumentRow(
   return {
     id: document.id,
     title: document.title,
-    scope: document.scope,
-    owner_user_id: document.ownerUserId,
+    knowledge_base_id: document.knowledgeBaseId,
     chunks: document.chunks,
     embedding_model: embeddingModel,
     dim,
     created_at: document.createdAt,
     content,
     updated_at: updatedAt,
+    file_name: document.fileName,
+    file_size: document.fileSize,
+    mime_type: document.mimeType,
+    status: document.status,
+    failure_reason: document.failureReason,
   };
 }
 
-/** 文档元数据 + 分片内容与向量 → 分片行；created_at 记分片实际入库时间 */
+/** 文档元数据 + 分片内容、向量与页码 → 分片行；created_at 记分片实际入库时间 */
 export function toChunkRow(
   document: KnowledgeDocument,
   content: string,
   vector: number[],
   createdAt: string,
+  page: number | null,
 ): Record<string, unknown> {
   return {
     id: randomUUID(),
     document_id: document.id,
+    knowledge_base_id: document.knowledgeBaseId,
     title: document.title,
     content,
-    scope: document.scope,
-    owner_user_id: document.ownerUserId,
+    page,
     created_at: createdAt,
     vector,
   };

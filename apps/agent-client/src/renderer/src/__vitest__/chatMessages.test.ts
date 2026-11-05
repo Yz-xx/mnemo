@@ -54,6 +54,8 @@ function createHarness(refreshConversations: () => Promise<void>) {
   const streaming = ref(false);
   const activeId = ref<string | null>(null);
   const errorMessage = ref('');
+  // 新会话的选库状态：本组用例不关心绑定，置空即沿用「不限库」旧行为
+  const selectedKnowledgeBaseId = ref<string | null>(null);
 
   const controls = useChatMessages({
     messages,
@@ -63,6 +65,7 @@ function createHarness(refreshConversations: () => Promise<void>) {
     isOnline: () => true,
     refreshConversations,
     takeReadyAttachments: () => ({ names: [], fileIds: [] }),
+    selectedKnowledgeBaseId,
     handleError: async () => {},
   });
 

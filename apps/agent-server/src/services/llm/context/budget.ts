@@ -20,8 +20,8 @@ export interface Admission {
  * 防止模型反复检索 / 反复读文件、或一份超长附件把窗口挤爆。
  */
 export interface ToolBudget {
-  /** 本轮已交付给模型的检索文档 ID：同一文档的片段不再重复注入 */
-  readonly deliveredDocuments: Set<string>;
+  /** 本轮已交付给模型的片段 ID：同一片段不重复注入，长文档的不同片段仍可继续注入 */
+  readonly deliveredChunks: Set<string>;
   /** 本轮已注入内容的估算 token 数，供日志观测 */
   readonly usedTokens: number;
   /**
@@ -37,7 +37,7 @@ export function createToolBudget(limit: number): ToolBudget {
   let used = 0;
 
   return {
-    deliveredDocuments: new Set<string>(),
+    deliveredChunks: new Set<string>(),
     get usedTokens() {
       return used;
     },

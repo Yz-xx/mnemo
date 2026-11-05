@@ -8,7 +8,7 @@
  *
  * 前置：PostgreSQL 已建表且有知识库数据；Ollama 向量服务可达（查询要真实向量化）。
  * 用法：pnpm --filter @mnemo/agent-server run report:retrieval
- * 可调：REPORT_QUERIES（逗号分隔，覆盖默认问题集）/ REPORT_USER_ID / REPORT_ROUNDS
+ * 可调：REPORT_QUERIES（逗号分隔，覆盖默认问题集）/ REPORT_ROUNDS
  */
 import type { PoolClient } from 'pg';
 import process from 'node:process';
@@ -18,6 +18,7 @@ import {
   loadConfig,
 } from '../src/configuration/config/index.js';
 import { createPgPool } from '../src/infrastructure/db/pool.js';
+import { KnowledgeBaseStore } from '../src/mappers/knowledge/bases.js';
 import {
   SEARCH_CHUNKS_SQL,
   SESSION_PARAMETERS,
@@ -72,11 +73,11 @@ function findScanNode(node: ExplainNode): ExplainNode | undefined {
 async function explainSearch(
   client: PoolClient,
   vector: number[],
-  userId: number,
+  baseIds: string[],
 ): Promise<ScanSample> {
   const { rows } = await client.query<Record<string, unknown>>(
     `EXPLAIN (ANALYZE, FORMAT JSON) ${SEARCH_CHUNKS_SQL}`,
-    [toVectorParam(vector), userId, TOP_K],
+    [toVectorParam(vector), baseIds, TOP_K],
   );
   const plan = rows[0]?.['QUERY PLAN'] as
     [{ Plan: ExplainNode; 'Execution Time': number }] | undefined;
@@ -136,10 +137,11 @@ async function main(): Promise<void> {
     }
 
     const documents = await store.listAllDocuments();
-    const userId = Number(process.env.REPORT_USER_ID ?? documents[0]?.owner_user_id ?? 0);
+    // 与线上检索同口径：跨全部库检索，不做用户可见性裁剪（本脚本是性能验收工具，不是权限入口）
+    const baseIds = (await new KnowledgeBaseStore(pool).listAll()).map((base) => base.id);
     const queries = resolveQueries(documents);
     console.log(
-      `语料：文档 ${documents.length} 篇 / 片段 ${chunkCount} 条；topK=${TOP_K} minScore=${options.minScore} userId=${userId}`,
+      `语料：文档 ${documents.length} 篇 / 片段 ${chunkCount} 条 / 知识库 ${baseIds.length} 个；topK=${TOP_K} minScore=${options.minScore}`,
     );
     console.log(
       `\n${pad('查询', 24)}${pad('向量化', 10)}${pad('扫描节点', 16)}${pad('扫描候选', 10)}${pad(
@@ -154,13 +156,13 @@ async function main(): Promise<void> {
       const embedMs = performance.now() - embedStartedAt;
 
       const samples: number[] = [];
-      let hits = await store.searchChunks(vector, { userId, topK: TOP_K });
+      let hits = await store.searchChunks(vector, { baseIds, topK: TOP_K });
       for (let index = 0; index < ROUNDS; index += 1) {
         const startedAt = performance.now();
-        hits = await store.searchChunks(vector, { userId, topK: TOP_K });
+        hits = await store.searchChunks(vector, { baseIds, topK: TOP_K });
         samples.push(performance.now() - startedAt);
       }
-      const scan = await explainSearch(client, vector, userId);
+      const scan = await explainSearch(client, vector, baseIds);
       const kept = hits.filter((hit) => hit.score >= options.minScore).length;
 
       console.log(

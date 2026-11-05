@@ -1,9 +1,10 @@
+import type { ChatErrorCode } from '../api/client';
 import type { ChatMessage, GeneratedFileInfo } from '../types';
 import type { ReadyAttachments } from './useChatAttachments';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref } from 'vue';
 import { saveFile } from '../api/bridge';
-import { isNotFound, isUnauthorized } from '../api/client';
+import { CHAT_ERROR_CODE, isNotFound, isUnauthorized } from '../api/client';
 import { agentApi } from '../api/session';
 import { consumeChatStream, createMessage } from './chatStream';
 import { createFrameWriter } from './frameWriter';
@@ -29,6 +30,8 @@ interface ChatMessagesDeps {
   refreshConversations: () => Promise<void>;
   /** 取走本轮已就绪的附件，随提问一起提交 */
   takeReadyAttachments: () => ReadyAttachments;
+  /** 新会话首轮将绑定的知识库；已有会话不再传，绑定以服务端记录为准 */
+  selectedKnowledgeBaseId: Ref<string | null>;
   /** 请求错误的统一处理 */
   handleError: (error: unknown) => Promise<void>;
 }
@@ -56,6 +59,7 @@ export function useChatMessages({
   isOnline,
   refreshConversations,
   takeReadyAttachments,
+  selectedKnowledgeBaseId,
   handleError,
 }: ChatMessagesDeps): ChatMessagesControls {
   let controller: AbortController | null = null;
@@ -122,9 +126,12 @@ export function useChatMessages({
         conversationId = id;
         activeId.value = id;
       },
-      onError: (message: string) => {
+      // 错误按机器分类补充下一步动作：超时/可重试的提示重发，限流的提示稍后再试
+      onError: (message: string, code?: ChatErrorCode, retryable?: boolean) => {
         settled = true;
-        errorMessage.value = message;
+        const hint =
+          code === CHAT_ERROR_CODE.RATE_LIMITED ? '，请稍后重试' : retryable ? '，可重新发送' : '';
+        errorMessage.value = `${message}${hint}`;
       },
     };
 
@@ -157,6 +164,10 @@ export function useChatMessages({
               message: content,
               fileIds: ready.fileIds,
               roundId: currentRoundId,
+              // 只有新会话允许绑定库：首轮落库后固定，已有会话再传会与服务端记录冲突
+              ...(activeId.value
+                ? {}
+                : { knowledgeBaseId: selectedKnowledgeBaseId.value ?? undefined }),
             },
             currentController.signal,
           ),

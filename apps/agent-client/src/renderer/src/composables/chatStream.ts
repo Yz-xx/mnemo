@@ -1,6 +1,6 @@
 // 聊天流的协议层：把带序号的 SSE 帧合并进助手消息。
 // 不持有任何响应式状态、不感知会话层的字段，只吃流与消息、把副作用经回调交回调用方。
-import type { ChatStreamFrame } from '../api/client';
+import type { ChatErrorCode, ChatStreamFrame } from '../api/client';
 import type { ChatMessage } from '../types';
 
 /** 新建一条消息：id 与时间戳在此生成 */
@@ -27,8 +27,8 @@ interface ChatStreamHandlers {
   onConversation: (conversationId: string) => void;
   /** 本轮结束，携带后端确认的会话 ID */
   onDone: (conversationId: string) => void;
-  /** 后端返回的可读错误信息 */
-  onError: (message: string) => void;
+  /** 后端返回的可读错误信息与机器可读分类：客户端按 code 决定提示形态 */
+  onError: (message: string, code?: ChatErrorCode, retryable?: boolean) => void;
 }
 
 /**
@@ -97,13 +97,16 @@ export async function consumeChatStream(
         { fileId: event.fileId, name: event.name, size: event.size },
       ];
     } else if (event.type === 'source') {
-      // 检索来源挂在助手消息上：同一份文档被多次命中时只留一个标签
+      // 检索来源挂在助手消息上：同一份文档被多次命中时只留一条，按文档 ID 去重
       const sources = message.sources ?? [];
-      if (!sources.includes(event.name)) message.sources = [...sources, event.name];
+      const known = sources.some(
+        (item) => typeof item !== 'string' && item.documentId === event.citation.documentId,
+      );
+      if (!known) message.sources = [...sources, event.citation];
     } else if (event.type === 'sources') {
       // 终局清单覆盖过程中的增量标签：正文未采用的文档在这里被剔除；
       // 空清单表示本轮没有可展示的出处，置空而不是留下一个空数组
-      message.sources = event.names.length ? [...event.names] : undefined;
+      message.sources = event.citations.length ? [...event.citations] : undefined;
     } else if (event.type === 'context') {
       // 治理痕迹挂在消息上：界面据此提示「这轮回答没看到完整历史」，
       // 与 thinking 一样只作过程展示，不落库、不进正文
@@ -116,8 +119,8 @@ export async function consumeChatStream(
     } else if (event.type === 'done') {
       handlers.onDone(event.conversationId);
     } else {
-      // 联合类型已把其余分支排除，走到这里只剩 error
-      handlers.onError(event.message);
+      // 联合类型已把其余分支排除，走到这里只剩 error：文案与分类一并交给调用方
+      handlers.onError(event.message, event.code, event.retryable);
     }
   }
 }

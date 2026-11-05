@@ -1,0 +1,113 @@
+// 知识库面板下半部：文档列表、解析状态徽标与行内文字按钮。
+
+// 文档列表：每张文档卡都是同一枚镶金薄片，悬停时提亮金线并抬出一层阴影
+.doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc {
+  .gold-frame();
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: @radius;
+  background: var(--bg-panel);
+  transition:
+    border-color @ease-quick,
+    box-shadow @ease-quick;
+
+  &:hover {
+    border-color: var(--gold-line-strong);
+    box-shadow: var(--shadow-card);
+  }
+}
+
+// 文案列：min-width 归零后 ellipsis 才能在 flex 行内生效，失败原因也才有地方折行
+.doc__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.doc__title {
+  .ellipsis();
+  font-size: 14px;
+}
+
+.doc__meta {
+  color: var(--text-faint);
+  font-family: @font-mono;
+  font-size: 11px;
+  letter-spacing: @tracking-control;
+}
+
+// 解析状态徽标：色只落在边框与文字上，避免三种状态各刷一块背景色
+.doc__status {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--gold-line);
+  border-radius: @radius-sm;
+  font-size: 10px;
+
+  &--ready {
+    border-color: var(--success);
+    color: var(--success);
+  }
+
+  &--processing {
+    border-color: var(--gold-line-strong);
+    color: var(--accent);
+  }
+
+  &--failed {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+}
+
+.doc__reason {
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+  // 底层报错可能很长：折行而不是把卡片撑宽
+  word-break: break-word;
+}
+
+.doc__tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+// 行内文字按钮：重试这类低频动作不占位，悬停时用下划线提示可点
+.text-btn {
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: @tracking-control;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+
+  &--danger {
+    color: var(--danger);
+  }
+}

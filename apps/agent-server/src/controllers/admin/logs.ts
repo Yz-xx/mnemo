@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { Router } from 'express';
 import { listApiLogs } from '../../services/logging/apiLogs.js';
 import { parsePaging } from '../../utils/pagination.js';
+import { keywordParam } from '../../utils/request.js';
 
 /** 方法白名单：只允许按已知方法过滤，避免拿任意串去比 method 列 */
 const METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const;
@@ -26,7 +27,7 @@ export function createAdminLogsRouter({ apiLogs }: Pick<AppDependencies, 'apiLog
   /** 日志列表：路径关键词 + 方法 + 状态档位过滤，按时间倒序分页 */
   router.get('/', async (req: Request, res: Response) => {
     const { page, pageSize } = parsePaging(req.query);
-    const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
+    const keyword = keywordParam(req.query.keyword);
     const method = pick(req.query.method, METHODS) ?? '';
     const statusKind: ApiLogStatusKind = pick(req.query.status, STATUS_KINDS) ?? 'all';
 

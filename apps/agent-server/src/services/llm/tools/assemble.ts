@@ -1,7 +1,7 @@
 import type { ParseRunner } from '../../../infrastructure/files/parseGovernance.js';
 import type { KnowledgeStore } from '../../knowledge/index.js';
 import type { VisionReader } from '../vision.js';
-import type { FileSource } from './files.js';
+import type { FileSource } from './attachment.js';
 import { createFileTools } from './files.js';
 import { createKnowledgeTool } from './knowledge.js';
 import { createUtilityTools } from './utility.js';

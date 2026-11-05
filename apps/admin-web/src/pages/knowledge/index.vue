@@ -6,7 +6,7 @@ import KnowledgeContentDialog from '@/components/KnowledgeContentDialog';
 import KnowledgeFormDialog from '@/components/KnowledgeFormDialog';
 import { useKnowledgePage } from './knowledge';
 
-const { filter, table, selection, dialog, view } = useKnowledgePage();
+const { filter, table, selection, dialog, view, bases } = useKnowledgePage();
 </script>
 
 <template>
@@ -42,6 +42,39 @@ const { filter, table, selection, dialog, view } = useKnowledgePage();
       </div>
     </div>
 
+    <!-- 库维度概览：每库文档数与归属一眼可见，整库删除前先提示级联范围 -->
+    <section class="knowledge__bases">
+      <div class="knowledge__bases-head">
+        <span class="knowledge__bases-title">知识库</span>
+        <span class="knowledge__bases-count">共 {{ bases.list.length }} 个</span>
+      </div>
+      <div class="knowledge__bases-grid">
+        <article v-for="base in bases.list" :key="base.id" class="knowledge__base-card">
+          <div class="knowledge__base-head">
+            <span class="knowledge__base-name" :title="base.name">{{ base.name }}</span>
+            <span class="knowledge__base-tag">
+              {{ base.visibility === 'global' ? '共享' : '私有' }}
+            </span>
+          </div>
+          <p class="knowledge__base-desc" :title="base.description ?? ''">
+            {{ base.description || '暂无描述' }}
+          </p>
+          <div class="knowledge__base-foot">
+            <span class="knowledge__base-meta">
+              {{ base.documentCount }} 篇 · {{ base.ownerName ?? '全体用户' }}
+            </span>
+            <button
+              class="knowledge__link knowledge__link--danger"
+              type="button"
+              @click="bases.askDelete(base)"
+            >
+              删除库
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <p v-if="table.errorMsg" class="knowledge__error">{{ table.errorMsg }}</p>
 
     <DataTable
@@ -53,9 +86,9 @@ const { filter, table, selection, dialog, view } = useKnowledgePage();
       :loading="table.loading"
       empty-text="没有匹配的文档"
     >
-      <template #scope="{ row }">
-        <span class="knowledge__badge" :class="`knowledge__badge--${row.scope}`">
-          {{ table.SCOPE_LABEL[row.scope] }}
+      <template #knowledgeBase="{ row }">
+        <span class="knowledge__base" :title="table.baseName(row.knowledgeBaseId)">
+          {{ table.baseName(row.knowledgeBaseId) }}
         </span>
       </template>
       <template #owner="{ row }">
@@ -80,7 +113,7 @@ const { filter, table, selection, dialog, view } = useKnowledgePage();
 
     <PageBar
       :page="table.page"
-      :page-size="table.PAGE_SIZE"
+      :page-size="table.pageSize"
       :total="table.total"
       :disabled="table.loading"
       @update:page="table.handlePage"
@@ -133,6 +166,23 @@ const { filter, table, selection, dialog, view } = useKnowledgePage();
       <p class="knowledge__confirm">
         确定删除选中的
         {{ selection.selectedKeys.length }} 篇文档？其全部向量片段会一并清除，操作不可撤销。
+      </p>
+    </ModalDialog>
+
+    <!-- 整库删除：与文档删除分开确认，文案明确库内文档与片段会级联清除 -->
+    <ModalDialog
+      v-if="bases.deleteTarget"
+      title="删除知识库"
+      confirm-text="删除"
+      danger
+      :loading="bases.deleting"
+      @close="bases.cancelDelete"
+      @confirm="bases.confirmDelete"
+    >
+      <template #close-icon><X :size="16" /></template>
+      <p class="knowledge__confirm">
+        确定删除知识库「{{ bases.deleteTarget.name }}」？库内
+        {{ bases.deleteTarget.documentCount }} 篇文档及其全部向量片段会一并清除，操作不可撤销。
       </p>
     </ModalDialog>
   </div>

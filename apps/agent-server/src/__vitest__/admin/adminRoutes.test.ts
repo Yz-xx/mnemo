@@ -52,14 +52,14 @@ const fakeFiles = { listAll: emptyPage, removeAny: async () => true };
 const fakeConversations = { listAll: emptyPage, removeById: async () => true };
 const fakeKnowledge = {
   listAll: async (): Promise<never[]> => [],
+  list: async (): Promise<never[]> => [],
   remove: async () => true,
   // 内容与编辑替身返回非空结果：挂载正确时回 200，路径拼错时是 404，回归才有区分度
   getContent: async () => ({
     document: {
       id: 'doc-1',
       title: '手册',
-      scope: 'global',
-      ownerUserId: null,
+      knowledgeBaseId: 'kb-shared',
       chunks: 1,
       createdAt: '2026-01-01T00:00:00.000Z',
     },
@@ -70,8 +70,7 @@ const fakeKnowledge = {
   replace: async () => ({
     id: 'doc-1',
     title: '手册',
-    scope: 'global',
-    ownerUserId: null,
+    knowledgeBaseId: 'kb-shared',
     chunks: 1,
     createdAt: '2026-01-01T00:00:00.000Z',
   }),
@@ -118,6 +117,14 @@ app.use(
   fakeAdmin,
   createAdminKnowledgeRouter({
     knowledge: fakeKnowledge as unknown as AppDependencies['knowledge'],
+    knowledgeBases: {
+      listAll: async () => [],
+      findByIds: async () => new Map(),
+      remove: async () => true,
+    } as unknown as AppDependencies['knowledgeBases'],
+    knowledgeIngest: {
+      discard: async (): Promise<void> => {},
+    } as unknown as AppDependencies['knowledgeIngest'],
     users: fakeUsers as unknown as AppDependencies['users'],
   }),
 );
@@ -223,6 +230,24 @@ describe('管理端批量接口', () => {
 
   it('用户批量删除接受数字 ID 并回 204', async () => {
     const response = await postJson(`${PREFIX}/users/batch-delete`, { ids: [1, 2] });
+
+    expect(response.status).toBe(HTTP_STATUS.NO_CONTENT);
+  });
+});
+
+describe('管理端知识库', () => {
+  it('库列表落到模块路由并回 200（数组形状，不是分页对象）', async () => {
+    const response = await fetch(`${baseUrl}${PREFIX}/knowledge/bases`);
+
+    expect(response.status).toBe(HTTP_STATUS.OK);
+    await expect(response.json()).resolves.toEqual([]);
+  });
+
+  it('删除库落到模块路由并回 204', async () => {
+    const response = await fetch(
+      `${baseUrl}${PREFIX}/knowledge/bases/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa`,
+      { method: 'DELETE' },
+    );
 
     expect(response.status).toBe(HTTP_STATUS.NO_CONTENT);
   });

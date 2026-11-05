@@ -3,13 +3,10 @@
 import type { AdminConversationSummary, MessageRole } from '@/api/types';
 import { onMounted, reactive, ref } from 'vue';
 import { listAdminConversations } from '@/api';
-import { usePagedList } from '@/composables/usePagedList';
+import { DEFAULT_PAGE_SIZE, usePagedList } from '@/composables/usePagedList';
+import { useStringTableSelection } from '@/composables/useTableSelection';
 import { useConversationsDetail } from './useConversationsDetail';
 import { useConversationsDialog } from './useConversationsDialog';
-import { useConversationsSelection } from './useConversationsSelection';
-
-/** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
-const PAGE_SIZE = 20;
 
 const ROLE_LABEL: Record<MessageRole, string> = { user: '用户', assistant: '助手', system: '系统' };
 
@@ -33,7 +30,7 @@ export function useConversationsPage() {
   let onRowsReload = (): void => {};
   /** 分页取数、页码、加载态与错误文案统一交由 usePagedList 托管，本页只提供筛选条件 */
   const { rows, total, loading, errorMsg, paging } = usePagedList<AdminConversationSummary>({
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     fetcher: ({ page, pageSize }) =>
       listAdminConversations({ keyword: keyword.value.trim(), page, pageSize }),
     errorFallback: '加载会话列表失败',
@@ -41,7 +38,7 @@ export function useConversationsPage() {
     onReset: () => onRowsReload(),
   });
 
-  const selection = useConversationsSelection();
+  const selection = useStringTableSelection();
   onRowsReload = selection.clearSelection;
 
   const detail = useConversationsDetail({ errorMsg });
@@ -57,7 +54,7 @@ export function useConversationsPage() {
   return {
     filter: reactive({ keyword, handleSearch: paging.search }),
     table: reactive({
-      PAGE_SIZE,
+      pageSize: DEFAULT_PAGE_SIZE,
       columns,
       rows,
       page: paging.page,

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import type { ChatWindowEmits, ChatWindowProps } from './useChatWindow';
+import type { ChatCitation } from '../../types';
+import { ref } from 'vue';
+import CitationDrawer from '../CitationDrawer';
 import MessageItem from '../MessageItem';
 import { useChatWindow } from './useChatWindow';
 import { useVirtualMessages } from './useVirtualMessages';
@@ -10,7 +13,14 @@ const emit = defineEmits<ChatWindowEmits>();
 
 // 窗口化在前：它独占滚动容器，并把「发送后回到底部」交给输入条
 const { items, totalHeight, onScroll, registerSlot, followToBottom } = useVirtualMessages(props);
-const { draft, copied, copyAll, submit, onKeydown } = useChatWindow(props, emit, followToBottom);
+const { draft, copied, copyAll, submit, onKeydown, baseName, onBaseChange } = useChatWindow(
+  props,
+  emit,
+  followToBottom,
+);
+
+/** 当前打开的引用：null 即抽屉关闭，切换引用时组件复用并按新值重新加载 */
+const activeCitation = ref<ChatCitation | null>(null);
 </script>
 
 <template>
@@ -18,6 +28,20 @@ const { draft, copied, copyAll, submit, onKeydown } = useChatWindow(props, emit,
     <header class="chat__head">
       <span class="chat__model">{{ model || '未连接后端' }}</span>
       <span v-if="provider" class="chip chip--muted">{{ provider }}</span>
+      <!-- 新会话可选库：默认「不限库」；打开历史会话后只读展示绑定库，改绑需新建会话 -->
+      <select
+        v-if="!boundKnowledgeBaseId"
+        class="chat__kb"
+        :value="selectedKnowledgeBaseId ?? ''"
+        title="选择本轮检索的知识库"
+        @change="onBaseChange"
+      >
+        <option value="">知识库：不限库</option>
+        <option v-for="base in knowledgeBases" :key="base.id" :value="base.id">
+          知识库：{{ base.name }}
+        </option>
+      </select>
+      <span v-else class="chip chat__kb-bound">知识库 · {{ baseName(boundKnowledgeBaseId) }}</span>
       <!-- 窗口化只挂载视口内的消息，Ctrl+F 与全选拿不到全量原文，这里补一个整段复制入口 -->
       <button
         v-if="messages.length > 0"
@@ -45,10 +69,21 @@ const { draft, copied, copyAll, submit, onKeydown } = useChatWindow(props, emit,
           class="chat__slot"
           :style="{ transform: `translateY(${slot.top}px)` }"
         >
-          <MessageItem :message="slot.message" @download="emit('download', $event)" />
+          <MessageItem
+            :message="slot.message"
+            @download="emit('download', $event)"
+            @preview="activeCitation = $event"
+          />
         </div>
       </div>
     </div>
+
+    <!-- 引用抽屉：由对话区打开，展示引用命中的原文；窗口化列表不参与其渲染 -->
+    <CitationDrawer
+      v-if="activeCitation"
+      :citation="activeCitation"
+      @close="activeCitation = null"
+    />
 
     <p v-if="errorMessage" class="chat__error">{{ errorMessage }}</p>
 

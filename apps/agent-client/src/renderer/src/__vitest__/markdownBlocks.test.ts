@@ -56,4 +56,10 @@ describe('renderBlocks', () => {
   it('空文本返回空数组', () => {
     expect(renderBlocks('')).toEqual([]);
   });
+
+  it('原始 HTML 被转义为文本，不会原样注入', () => {
+    const html = renderBlocks('<img src="x" onerror="alert(1)">').join('');
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img');
+  });
 });

@@ -29,6 +29,12 @@ export const ERROR_MESSAGE = {
   NOT_FOUND: '资源不存在',
   /** 知识库文档不存在：查看、编辑与删除三个管理端入口共用 */
   DOCUMENT_NOT_FOUND: '文档不存在',
+  /** 知识库不可见（含不存在）：客户端的库详情、文档与对话绑定入口共用，不暴露他人库 */
+  KNOWLEDGE_BASE_NOT_FOUND: '知识库不存在',
+  /** 对话绑定空库：库里没有可检索文档时拒绝开轮 */
+  KNOWLEDGE_BASE_EMPTY: '知识库暂无可用文档',
+  /** 既有会话改绑其他库：绑定在新建会话时确定，后续轮次不可变更 */
+  KNOWLEDGE_BASE_CONFLICT: '会话已绑定其他知识库',
   /** 停用、降级或删除最后一名可登录管理员时的拒绝文案：services/admin/adminUsers 的三处判定共用 */
   LAST_ADMIN: '至少保留一个可登录的管理员账号',
   /** 停用或降级当前登录账号：单条变更与批量停用共用 */

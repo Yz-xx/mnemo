@@ -24,8 +24,9 @@ export function toCount(value: string | undefined, fallback: number): number {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-/** 可按档读取水位的闸门前缀：入口三档 + 模型 / 摘要 / 检索 / 附件解析四道内部闸门 */
-export type GatePrefix = 'CHAT' | 'UPLOAD' | 'CRUD' | 'MODEL' | 'SUMMARY' | 'RETRIEVAL' | 'PARSE';
+/** 可按档读取水位的闸门前缀：入口三档 + 知识库解析 + 模型 / 摘要 / 检索 / 附件解析四道内部闸门 */
+export type GatePrefix =
+  'CHAT' | 'UPLOAD' | 'INGEST' | 'CRUD' | 'MODEL' | 'SUMMARY' | 'RETRIEVAL' | 'PARSE';
 
 /** 按档组装闸门：四项水位成套读取，缺省或非法时回落到该档默认值 */
 export function readGate(prefix: GatePrefix, fallback: GateConfig): GateConfig {

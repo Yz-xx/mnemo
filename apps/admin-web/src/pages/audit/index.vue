@@ -57,7 +57,7 @@ const { filter, table, detail, cells } = useAuditPage();
 
     <PageBar
       :page="table.page"
-      :page-size="table.PAGE_SIZE"
+      :page-size="table.pageSize"
       :total="table.total"
       :disabled="table.loading"
       @update:page="table.handlePage"

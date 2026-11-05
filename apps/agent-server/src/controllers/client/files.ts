@@ -1,16 +1,13 @@
 import type { AppDependencies } from '../../configuration/dependencies.js';
 import type { Request, Response } from 'express';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { Router } from 'express';
 import { HTTP_STATUS } from '@mnemo/reusable';
+import { normalizeFileName } from '../../infrastructure/files/name.js';
 import { detectUploadTypeFromFile } from '../../infrastructure/files/type.js';
 import { currentUserId } from '../../middleware/auth.js';
 import { createUploadMiddleware } from '../../middleware/upload.js';
 import { readOwnFile, saveUploadedFile } from '../../services/files.js';
-
-/** 展示用文件名的保留长度：只存数据库、不参与拼路径，截断是为免超出列宽与界面排版 */
-const NAME_MAX_LENGTH = 180;
 
 /** 本模块用到的依赖：文件存储、上传配置与分档闸门 */
 type FilesDependencies = Pick<AppDependencies, 'files' | 'config' | 'guard'>;
@@ -31,16 +28,6 @@ export function createFilesRouter(deps: FilesDependencies): Router {
   router.get('/:id/download', (req, res) => handleDownloadFile(deps, req, res));
 
   return router;
-}
-
-/**
- * 还原 multer 按 latin1 解码出的文件名，并剥掉客户端可能带上的目录部分。
- * busboy 默认以 latin1 解 filename，UTF-8 中文名到这里会是乱码，需按原字节重解一次；
- * 只取 basename：原始名完全由客户端控制，不能让路径分隔符进入后续展示与下载命名。
- */
-function normalizeFileName(raw: string): string {
-  const decoded = Buffer.from(raw, 'latin1').toString('utf8');
-  return path.basename(decoded).slice(0, NAME_MAX_LENGTH);
 }
 
 /**

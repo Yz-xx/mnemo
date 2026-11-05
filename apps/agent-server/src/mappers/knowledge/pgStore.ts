@@ -1,29 +1,34 @@
 import type { ClientRunner } from './queries.js';
 import type { KnowledgeStoreOptions, KnowledgeVectorStore, StoredChunkHit } from './vectorStore.js';
+import type { DocumentStatus } from '../../entities/knowledge.js';
 import type { Pool, PoolClient } from 'pg';
+import { CHUNKS_TABLE, DOCUMENTS_TABLE, SESSION_PARAMETERS, insertRowsSql } from './pg.js';
 import {
+  ADD_CHUNK_COLUMNS_SQL,
   CHUNK_COLUMNS,
-  CHUNKS_TABLE,
   CREATE_CHUNK_INDEXES_SQL,
   createChunksSql,
-  createDocumentsSql,
-  DOCUMENT_COLUMNS,
-  DOCUMENTS_TABLE,
   ensureVectorIndex,
-  insertRowsSql,
-  READ_BASELINE_SQL,
-  SESSION_PARAMETERS,
   toChunkParams,
+} from './pgChunks.js';
+import {
+  ADD_DOCUMENT_COLUMNS_SQL,
+  DOCUMENT_COLUMNS,
+  READ_BASELINE_SQL,
+  SET_DOCUMENT_STATUS_SQL,
+  createDocumentsSql,
   toDocumentParams,
-} from './pg.js';
+  toDocumentUpdateParams,
+  UPDATE_DOCUMENT_CONTENT_SQL,
+} from './pgDocuments.js';
 import {
   emptyWhenMissing,
   readAllDocuments,
+  readBaseDocuments,
   readChunkCount,
   readDocument,
   readDocumentCount,
   readStitchedContent,
-  readUserDocuments,
   searchChunkHits,
 } from './queries.js';
 
@@ -62,12 +67,21 @@ export class PgVectorStore implements KnowledgeVectorStore {
   }
 
   async ensureDocumentStore(): Promise<void> {
-    await this.run((client) => client.query(createDocumentsSql()));
+    await this.run(async (client) => {
+      await client.query(createDocumentsSql());
+      // 存量表不会因 CREATE IF NOT EXISTS 长出新列，每次初始化都幂等补列与约束
+      await client.query(ADD_DOCUMENT_COLUMNS_SQL);
+      // 片段表也要在启动时补列：检索路径只读不写，等到第一次写入才补会让升级后的首次检索报错。
+      // 首次启动时片段表尚未建（需向量维度），ALTER TABLE IF EXISTS 会跳过
+      await client.query(ADD_CHUNK_COLUMNS_SQL);
+    });
   }
 
   async ensureChunkStore(dim: number): Promise<void> {
     await this.run(async (client) => {
       await client.query(createChunksSql(dim));
+      // 存量片段表补列：与文档表同理，建表语句不会给已有表加 page 列
+      await client.query(ADD_CHUNK_COLUMNS_SQL);
       await client.query(CREATE_CHUNK_INDEXES_SQL);
       await ensureVectorIndex(client);
     });
@@ -119,6 +133,45 @@ export class PgVectorStore implements KnowledgeVectorStore {
     });
   }
 
+  async setDocumentStatus(
+    id: string,
+    status: DocumentStatus,
+    failureReason: string | null,
+  ): Promise<boolean> {
+    return this.run(async (client) => {
+      const result = await client.query(SET_DOCUMENT_STATUS_SQL, [id, status, failureReason]);
+      return (result.rowCount ?? 0) > 0;
+    });
+  }
+
+  async writeDocumentContent(
+    id: string,
+    document: Record<string, unknown>,
+    chunks: Record<string, unknown>[],
+  ): Promise<boolean> {
+    return this.run(async (client) => {
+      await client.query('BEGIN');
+      try {
+        const result = await client.query(
+          UPDATE_DOCUMENT_CONTENT_SQL,
+          toDocumentUpdateParams({ ...document, id }),
+        );
+        // 文档在解析期间被删：整个事务回滚，片段也不能落地，否则外键找不到父行
+        if ((result.rowCount ?? 0) === 0) {
+          await client.query('ROLLBACK');
+          return false;
+        }
+        await client.query(`DELETE FROM ${CHUNKS_TABLE} WHERE document_id = $1`, [id]);
+        await this.insertChunks(client, chunks);
+        await client.query('COMMIT');
+        return true;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    });
+  }
+
   /** 删除文档：片段随外键 ON DELETE CASCADE 一并消失，不需要第二条 DELETE */
   async removeDocument(id: string): Promise<void> {
     await this.run((client) => client.query(`DELETE FROM ${DOCUMENTS_TABLE} WHERE id = $1`, [id]));
@@ -128,8 +181,8 @@ export class PgVectorStore implements KnowledgeVectorStore {
     return readDocument(this.runBound, id);
   }
 
-  listDocuments(userId: number): Promise<Record<string, unknown>[]> {
-    return readUserDocuments(this.runBound, userId);
+  listDocuments(baseId: string): Promise<Record<string, unknown>[]> {
+    return readBaseDocuments(this.runBound, baseId);
   }
 
   listAllDocuments(): Promise<Record<string, unknown>[]> {
@@ -150,7 +203,7 @@ export class PgVectorStore implements KnowledgeVectorStore {
 
   searchChunks(
     vector: number[],
-    options: { userId: number; topK: number },
+    options: { baseIds: string[]; topK: number },
   ): Promise<StoredChunkHit[]> {
     return searchChunkHits(this.runBound, vector, options);
   }

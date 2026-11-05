@@ -123,22 +123,24 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 ## 五、SSE 流式协议
 
-`POST /api/chat` 的响应为 `text/event-stream`，每个事件都是 `data: <JSON>\n\n`，共七种：
+`POST /api/chat` 的响应为 `text/event-stream`，每个事件都是 `data: <JSON>\n\n`，共十种：
 
-| 事件           | 载荷                              | 触发时机                                                                                             |
-| -------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `conversation` | `{ type, conversationId }`        | 首个产出之前补推：这条会话确定会被保留                                                               |
-| `token`        | `{ type, content }`               | 模型输出增量文本                                                                                     |
-| `tool`         | `{ type, name, status }`          | 工具开始（`start`）/ 结束（`end`）                                                                   |
-| `source`       | `{ type, name }`                  | 检索工具结束时增量推送已注入上下文的文档名，客户端据此先标注来源                                     |
-| `sources`      | `{ type, names }`                 | 流末尾的终局来源清单：正文标注了来源就只保留被标注文档，未标注下发空清单，检索到但没采用的文档不显示 |
-| `file`         | `{ type, fileId, name, size }`    | `write_file` 产出文件后于流末尾统一推送，客户端据此提供下载                                          |
-| `done`         | `{ type, conversationId, title }` | 答复落库完成，本轮结束                                                                               |
-| `error`        | `{ type, message }`               | 推理过程异常                                                                                         |
+| 事件           | 载荷                                    | 触发时机                                                                                                          |
+| -------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `conversation` | `{ type, conversationId }`              | 首个产出之前补推：这条会话确定会被保留                                                                            |
+| `token`        | `{ type, content }`                     | 模型输出增量文本                                                                                                  |
+| `thinking`     | `{ type, content }`                     | 模型推理链增量：仅开启 thinking 的模型出现，不落库、不进上下文预算                                                |
+| `tool`         | `{ type, name, status, detail? }`       | 工具开始（`start`）/ 结束（`end`），`detail` 是人类可读的阶段描述                                                 |
+| `source`       | `{ type, citation }`                    | 检索工具结束时增量推送已注入上下文的引用对象（`documentId` / `chunkId` / `title` / `page` / `snippet` / `score`） |
+| `sources`      | `{ type, citations }`                   | 流末尾的终局来源清单：正文标注了来源就只保留被标注文档，未标注下发空清单，检索到但没采用的文档不显示              |
+| `file`         | `{ type, fileId, name, size }`          | `write_file` 产出文件后于流末尾统一推送，客户端据此提供下载                                                       |
+| `context`      | `{ type, trimmedMessages, summarized }` | 真正裁掉历史时才补推：`summarized` 区分压成摘要还是直接丢弃                                                       |
+| `done`         | `{ type, conversationId, title }`       | 答复落库完成，本轮结束                                                                                            |
+| `error`        | `{ type, message, code?, retryable? }`  | 推理过程异常；`code` 见 `CHAT_ERROR_CODE`，`retryable` 表示是否值得重试                                           |
 
-中断处理是这段实现里最关键的一处细节：客户端关闭连接时必须立刻停下模型推理。实现上监听的是 `res` 而非 `req`——`req` 的 `close` 在请求体读取完成后就会触发，会误中断正常的流式响应；同时用 `res.writableEnded` 排除“正常结束”这一次回调，只有真正的提前断开才 `controller.abort()`。此外，仅在答复正文非空时落库，避免保存空回复；中断或出错时也会把已产出的部分回复落库，用户已经看到的内容不会在重开会话后消失。
+客户端断开只退订，不中止推理：轮次任务在后台继续跑完，用户重进可经 `GET /api/chat/rounds/:roundId/stream?lastEventId=N` 从头重放，显式中止只走 `POST /api/chat/rounds/:roundId/stop`（见 `docs/adr/0015-sse-resumable-stream.md`）。仅在答复正文非空时落库，避免保存空回复；中断或出错时也会把已产出的部分回复落库，用户已经看到的内容不会在重开会话后消失。
 
-这一整轮编排都在 `services/conversation/chatStream.ts` 的 `streamChatReply()` 中（落库提问 → 流式写回 → 落库回复 → 回滚没有产出的新建会话），`controllers/client/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在 `flushHeaders()` 之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。事件本身的结构声明在 `@mnemo/reusable` 的 `ChatStreamEvent`，服务端与桌面端共用同一份，避免两端各抄一份而漂移。
+这一整轮编排都在 `services/conversation/` 下：`chatStream.ts` 的 `startChatRound()` 建轮次并落库提问，`chatRoundTask.ts` 的 `runChatRoundTask()` 在后台跑完整轮，`roundPipe.ts` 把轮次事件日志订阅回 HTTP 响应。`controllers/client/chat.ts` 只保留入参校验（400）与会话归属校验（404），路由与流式协议解耦。落库提问刻意放在建立 SSE 订阅之前，这样落库失败仍能按普通请求返回 500，而不是已经 flush 的事件流。事件本身的结构声明在 `@mnemo/reusable` 的 `ChatStreamEvent`，服务端与桌面端共用同一份，避免两端各抄一份而漂移。
 
 新建会话若本轮既未正常收尾、也没有任何产出（模型服务未启动、刚发出就被停止），该会话只剩刚写入的提问，服务会连会话一起删除——否则列表里会留下一条没有回答的记录，用户重新发起对话后就会看到两条。反过来，已经开始产出内容的会话即便被中断（用户点“停止”）也保留，不丢用户刚发出的输入，且服务端在首个产出之前就补推了 `conversation` 事件，客户端从此刻起已知道会话 ID，中断后仍能接着这条会话继续发；已推送 `done` 的会话（含模型返回空内容的情形）同样保留，避免前端已记住的 `conversationId` 失效。
 
@@ -172,10 +174,10 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 
 历史之外，一轮之内的**工具结果**与**附件预读**同样会挤占窗口：模型可能反复检索、反复读同一批文件，一份超长附件也能把窗口挤爆。阶段 2 给单轮注入的这些产物加了一道额度（`CONTEXT_TOOL_RATIO`，占窗口的比例），由 `src/services/llm/context/budget.ts` 的 `createToolBudget()` 承载，附件预读、检索与读取共用同一份额度、跨同轮多次调用累计。规则有两条：
 
-- **按文档去重**：同一份知识库文档在本轮只回填一次，后续检索再次命中时不再重复注入片段，只提示「已在此前给出」；
+- **按片段去重**：同一片段在本轮只回填一次，后续检索再次命中时不再重复注入，只提示「已在此前给出」；同一长文档的不同片段仍会继续注入，否则「从资料里找十道题」只能拿到一条；
 - **超额度即截断**：额度用尽后不再注入新内容，被截断的结果会附一句「已达上下文预算上限」的说明，让模型知道自己没看到全部内容；附件预读超出额度时保留「【文件名｜ID】」抬头行，只是正文不再注入。
 
-额度按 `windowTokens × toolRatio` 折算，因此本地与线上模型各有合适的档位，不必分别配绝对数。本轮注入产物的用量由 `AgentService` 在流结束时记一条 debug 日志（`usedBudget` / `budgetLimit` / `deliveredDocuments`），可据此判断本轮是否被检索或读取挤占。
+额度按 `windowTokens × toolRatio` 折算，因此本地与线上模型各有合适的档位，不必分别配绝对数。本轮注入产物的用量由 `AgentService` 在流结束时记一条 debug 日志（`usedBudget` / `budgetLimit` / `deliveredChunks`），可据此判断本轮是否被检索或读取挤占。
 
 ## 七、工具层
 
@@ -291,6 +293,10 @@ prune()   ：启动时清理过期会话，并把历史遗留的同账号重复�
 | `CONCURRENCY_UPLOAD_SOFT_LIMIT`                                | `1`                         | 上传解析档软水位                                                                                |
 | `CONCURRENCY_UPLOAD_QUEUE_LIMIT`                               | `8`                         | 上传解析档排队长度上限                                                                          |
 | `CONCURRENCY_UPLOAD_QUEUE_TIMEOUT_MS`                          | `10000`                     | 上传解析档排队等待上限（毫秒）                                                                  |
+| `CONCURRENCY_INGEST_MAX_IN_FLIGHT`                             | `2`                         | 知识库解析档硬水位（在途上限）                                                                  |
+| `CONCURRENCY_INGEST_SOFT_LIMIT`                                | `1`                         | 知识库解析档软水位                                                                              |
+| `CONCURRENCY_INGEST_QUEUE_LIMIT`                               | `8`                         | 知识库解析档排队长度上限                                                                        |
+| `CONCURRENCY_INGEST_QUEUE_TIMEOUT_MS`                          | `10000`                     | 知识库解析档排队等待上限（毫秒）                                                                |
 | `CONCURRENCY_CRUD_MAX_IN_FLIGHT`                               | `32`                        | 普通读写档硬水位（在途上限）                                                                    |
 | `CONCURRENCY_CRUD_SOFT_LIMIT`                                  | `24`                        | 普通读写档软水位                                                                                |
 | `CONCURRENCY_CRUD_QUEUE_LIMIT`                                 | `64`                        | 普通读写档排队长度上限                                                                          |

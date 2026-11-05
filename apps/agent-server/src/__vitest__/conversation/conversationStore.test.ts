@@ -2,30 +2,41 @@ import type { ConversationHeader } from '../../entities/conversation.js';
 import type { DbPool } from '../../infrastructure/db/pool.js';
 import { describe, expect, it } from 'vitest';
 import { ConversationStore } from '../../mappers/conversation/conversations.js';
+import { parseConversationTitle } from '../../services/conversation/conversations.js';
 
 /** 合法 UUID 形态的会话 ID：会话 ID 列是 uuid，非法取值会在 Store 入口被拦下，读不到会话头 */
 const CID = '22222222-2222-4222-8222-222222222222';
 
-/** 记录执行过的 SQL，用来断言轻量追加路径的回读次数与回读内容 */
+/** 记录执行过的 SQL 与绑定参数，用来断言轻量追加路径的回读次数与新会话绑定落库 */
 function recordingPool() {
   const sqls: string[] = [];
+  const paramsSeen: unknown[][] = [];
   const pool = {
     query: async (sql: string, params: unknown[] = []) => {
       sqls.push(sql);
+      paramsSeen.push(params);
       // 追加消息改走 RETURNING seq：PG 没有 insertId，自增列随插入一并取回
       if (sql.startsWith('INSERT INTO messages')) return { rows: [{ seq: 1 }], rowCount: 1 };
-      // readHeader 只取会话头四列，命中该分支时给一条可用行即可
+      // readHeader 只取会话头几列，命中该分支时给一条可用行即可
       if (sql.startsWith('SELECT')) {
         const now = new Date('2026-01-01T00:00:00.000Z');
         return {
-          rows: [{ id: params[0], title: '旧标题', created_at: now, updated_at: now }],
+          rows: [
+            {
+              id: params[0],
+              title: '旧标题',
+              knowledge_base_id: null,
+              created_at: now,
+              updated_at: now,
+            },
+          ],
           rowCount: 1,
         };
       }
       return { rows: [], rowCount: 1 };
     },
   } as unknown as DbPool;
-  return { pool, sqls };
+  return { pool, sqls, paramsSeen };
 }
 
 /** 路由层已读入的会话头：透传给 append 即跳过回读 */
@@ -63,5 +74,54 @@ describe('ConversationStore 轻量追加', () => {
     // 路由已读入历史并透传会话头，助手消息落库无需任何回读
     expect(sqls.some((sql) => sql.startsWith('SELECT'))).toBe(false);
     expect(sqls.some((sql) => sql.startsWith('INSERT INTO messages'))).toBe(true);
+  });
+
+  it('新会话首轮绑定知识库：绑定随 INSERT conversations 落库并回显在会话头', async () => {
+    const { pool, paramsSeen } = recordingPool();
+    const store = new ConversationStore(pool);
+
+    const result = await store.append(7, undefined, 'user', '你好', {}, undefined, 'kb-1');
+
+    // 新会话没有历史可读，绑定只能随建会话写入：conversations INSERT 的第 4 个参数即绑库列
+    const conversationInsertIndex = paramsSeen.findIndex((params) => params[3] === 'kb-1');
+    expect(conversationInsertIndex).toBeGreaterThanOrEqual(0);
+    expect(result.conversation.knowledgeBaseId).toBe('kb-1');
+  });
+});
+
+describe('会话重命名', () => {
+  it('按 id 与归属更新标题列，命中行返回 true', async () => {
+    const { pool, sqls, paramsSeen } = recordingPool();
+    const store = new ConversationStore(pool);
+
+    const renamed = await store.rename(9, CID, '我的新标题');
+
+    expect(renamed).toBe(true);
+    expect(sqls.some((sql) => sql.startsWith('UPDATE conversations SET title'))).toBe(true);
+    // 参数顺序：id、归属、标题——归属条件必须进 SQL，不能只按 id 更新
+    expect(paramsSeen[0]).toEqual([CID, 9, '我的新标题']);
+  });
+
+  it('非法 UUID 直接拒绝，不执行更新', async () => {
+    const { pool, sqls } = recordingPool();
+    const store = new ConversationStore(pool);
+
+    expect(await store.rename(9, 'not-a-uuid', '标题')).toBe(false);
+    expect(sqls).toHaveLength(0);
+  });
+
+  it('未命中该用户的会话时返回 false，路由据此翻 404', async () => {
+    const pool = {
+      query: async () => ({ rows: [], rowCount: 0 }),
+    } as unknown as DbPool;
+
+    expect(await new ConversationStore(pool).rename(9, CID, '标题')).toBe(false);
+  });
+
+  it('标题解析：连续空白归一，空标题与超长拒绝', () => {
+    expect(parseConversationTitle({ title: '  甲   乙 ' })).toEqual({ ok: true, title: '甲 乙' });
+    expect(parseConversationTitle({ title: '   ' }).ok).toBe(false);
+    expect(parseConversationTitle({}).ok).toBe(false);
+    expect(parseConversationTitle({ title: 'x'.repeat(25) }).ok).toBe(false);
   });
 });

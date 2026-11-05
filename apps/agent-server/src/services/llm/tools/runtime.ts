@@ -2,6 +2,7 @@ import type { Citations } from '../citations.js';
 import type { ToolBudget } from '../context/index.js';
 import type { ToolRunnableConfig } from '@langchain/core/tools';
 import type { Logger } from '@mnemo/logger';
+import type { KnowledgeCitation } from '@mnemo/reusable';
 
 /** 一次导出产出的文件引用：Agent 在流结束后推给客户端，供用户点击下载 */
 export interface GeneratedFileRef {
@@ -17,12 +18,12 @@ export function readExports(config?: ToolRunnableConfig): GeneratedFileRef[] | u
 }
 
 /**
- * 从运行时配置中取出本轮检索来源的收集器：由 Agent 注入，检索工具只追加真正注入上下文的文档名。
+ * 从运行时配置中取出本轮检索来源的收集器：由 Agent 注入，检索工具只追加真正注入上下文的引用。
  * 过程中的增量出处由它承担；终局是否采用由 citations 按正文标注判定，两者在流末尾收口。
  */
-export function readSources(config?: ToolRunnableConfig): string[] | undefined {
+export function readSources(config?: ToolRunnableConfig): KnowledgeCitation[] | undefined {
   const sources = config?.configurable?.sources;
-  return Array.isArray(sources) ? (sources as string[]) : undefined;
+  return Array.isArray(sources) ? (sources as KnowledgeCitation[]) : undefined;
 }
 
 /**
@@ -56,6 +57,15 @@ export function readFileIds(config?: ToolRunnableConfig): string[] {
 export function readLogger(config?: ToolRunnableConfig): Logger | undefined {
   const logger = config?.configurable?.logger as Logger | undefined;
   return typeof logger?.debug === 'function' ? logger : undefined;
+}
+
+/**
+ * 从运行时配置中取出本轮会话绑定的知识库 ID：由 Agent 注入（会话首轮绑定后随历史透传）。
+ * 未绑定（含存量会话）返回 undefined，检索按「用户全部可见库」执行（docs/adr/0018 决策 5）。
+ */
+export function readKnowledgeBase(config?: ToolRunnableConfig): string | undefined {
+  const baseId = config?.configurable?.knowledgeBaseId;
+  return typeof baseId === 'string' && baseId !== '' ? baseId : undefined;
 }
 
 /**

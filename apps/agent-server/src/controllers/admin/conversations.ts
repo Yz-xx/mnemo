@@ -12,11 +12,7 @@ import {
 import { removeConversationById } from '../../services/conversation/conversations.js';
 import { parseStringIds } from '../../utils/batchIds.js';
 import { parsePaging } from '../../utils/pagination.js';
-
-/** 路径参数：Express 5 的值类型为 string | string[]，路径参数实际只有单值，这里收窄 */
-function pathParam(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
+import { keywordParam, pathParam } from '../../utils/request.js';
 
 /**
  * 管理端会话：以管理视角查看与清理全部用户的会话。
@@ -31,7 +27,7 @@ export function createAdminConversationsRouter({
   /** 会话列表：按标题包含匹配 + 分页，归属账号名一次批量还原 */
   router.get('/', async (req: Request, res: Response) => {
     const { page, pageSize } = parsePaging(req.query);
-    const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
+    const keyword = keywordParam(req.query.keyword);
     const query = { keyword, page, pageSize };
     const result = await listAdminConversations({ conversations, users }, query);
     res.json(result);

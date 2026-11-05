@@ -1,0 +1,132 @@
+// 会话列表：列表容器、会话项、就地重命名与行内操作按钮。
+
+.session-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 12px 12px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.session {
+  .enter();
+  .stagger(10, 30ms, 80ms);
+  position: relative;
+  padding: 10px 12px 10px 14px;
+  border-radius: @radius;
+  cursor: pointer;
+  transition: background-color @ease-quick;
+
+  // 选中标记：左侧随选中态伸缩的金条，比整块高亮更克制
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 2px;
+    height: 24px;
+    border-radius: @radius-pill;
+    background: var(--accent-gradient);
+    transform: translateY(-50%) scaleY(0);
+    transition: transform @ease-quick;
+  }
+
+  &:hover {
+    background: var(--bg-elevated);
+
+    .session__title {
+      color: var(--text);
+    }
+  }
+
+  &--active {
+    background-color: var(--bg-elevated);
+    // 从左金条向外洇开的一层极淡金光，把“当前项”点亮得更有层次
+    background-image: linear-gradient(90deg, var(--accent-soft), transparent 62%);
+
+    &::before {
+      transform: translateY(-50%) scaleY(1);
+    }
+
+    .session__title {
+      color: var(--text);
+      font-weight: 500;
+    }
+  }
+
+  // 重命名与删除按钮平时隐藏，悬停会话项时再出现，减少视觉噪音
+  &:hover &__remove,
+  &:hover &__action {
+    display: block;
+  }
+}
+
+.session__title {
+  .ellipsis();
+  // 右侧留给重命名与删除两枚按钮
+  padding-right: 50px;
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: color @ease-quick;
+}
+
+// 就地重命名：边框改用强调金线，让编辑态与选中态一眼区分
+.session__rename {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--gold-line-strong);
+  border-radius: @radius-sm;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+
+.session__meta {
+  .eyebrow();
+  margin-top: 5px;
+  // eyebrow 的宽字距对会话时间这类密集元信息偏散，收一点
+  letter-spacing: @tracking-meta;
+}
+
+// 绑定库名：用强调色把「这条会话检索哪」从时间信息里拎出来
+.session__base {
+  margin-right: 4px;
+  color: var(--accent);
+}
+
+// 会话项右上角的两枚行内按钮：默认隐藏，悬停出现；重命名靠左、删除靠右
+.session__action,
+.session__remove {
+  position: absolute;
+  top: 8px;
+  display: none;
+  padding: 2px 6px;
+  border: none;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-faint);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.session__action {
+  right: 28px;
+  font-size: 13px;
+
+  &:hover {
+    color: var(--accent);
+  }
+}
+
+.session__remove {
+  right: 8px;
+  font-size: 15px;
+
+  &:hover {
+    color: var(--danger);
+  }
+}

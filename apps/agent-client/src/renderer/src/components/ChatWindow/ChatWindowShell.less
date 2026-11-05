@@ -1,0 +1,82 @@
+// 会话窗口外壳：整体布局、顶栏与知识库入口。
+// 三份样式文件的导入顺序即原 ChatWindow.less 的书写顺序，拆分不改动任何层叠关系。
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  // 作为 grid 子项需允许收缩，否则内容会把整列撑高
+  min-height: 0;
+  // 刻意不铺底色：窗口自身的墨底/纸面与淡金光晕就是这块“书写面”，
+  // 铺一层不透明色反而会把微光挡掉
+  background: transparent;
+}
+
+// 顶栏、正文、输入条共用同一条中轴，三者的左右边界由此对齐
+.chat__head {
+  .content-gutter();
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  background: transparent;
+
+  &::after {
+    .hairline();
+    .draw-rule(60ms);
+  }
+}
+
+// 模型名是这里最常被确认的信息，固定为等宽小字
+.chat__model {
+  font-family: @font-mono;
+  font-size: 12px;
+  letter-spacing: @tracking-caps;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+// 知识库选择：新会话可切换；已绑定会话只读展示（chip）。等宽小字与模型名同一语汇
+.chat__kb {
+  max-width: 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--gold-line);
+  border-radius: @radius-sm;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-family: @font-mono;
+  font-size: 11px;
+  letter-spacing: @tracking-control;
+  cursor: pointer;
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+// 整段复制入口：窗口化后全选与 Ctrl+F 只能覆盖已挂载的消息，用它补上全量原文
+.chat__copy {
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: @radius-pill;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: @tracking-control;
+  cursor: pointer;
+  transition:
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    border-color: var(--gold-line);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}

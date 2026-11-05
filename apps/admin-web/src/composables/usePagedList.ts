@@ -2,6 +2,9 @@ import type { PageResult } from '@/api/types';
 import type { Ref } from 'vue';
 import { ref, shallowRef } from 'vue';
 
+/** 列表默认每页条数：与后端 DEFAULT_PAGE_SIZE 取齐，各页不再各自声明 */
+export const DEFAULT_PAGE_SIZE = 20;
+
 /** 分页取数需要的外部输入：筛选条件不进这里，由调用方的 fetcher 闭包注入 */
 export interface PagedListOptions<T> {
   pageSize: number;

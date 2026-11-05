@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { describe, expect, it } from 'vitest';
 import { SESSION_PARAMETERS } from '../../mappers/knowledge/pg.js';
+import { SET_DOCUMENT_STATUS_SQL } from '../../mappers/knowledge/pgDocuments.js';
 import { PgVectorStore } from '../../mappers/knowledge/pgStore.js';
 
 const OPTIONS = {
@@ -79,32 +80,48 @@ function createStore(respond?: Respond): { pool: FakePool; store: PgVectorStore 
 }
 
 describe('PgVectorStore', () => {
-  it('检索走可见性过滤并按序传参', async () => {
+  it('检索按预解析库集合过滤并按序传参', async () => {
     const { pool, store } = createStore(
       responder([
         [
           'ORDER BY embedding',
-          [{ document_id: 'doc-1', title: '水果手册', content: '苹果', score: '0.87' }],
+          [
+            {
+              id: 'chunk-1',
+              document_id: 'doc-1',
+              title: '水果手册',
+              content: '苹果',
+              page: null,
+              score: '0.87',
+            },
+          ],
         ],
       ]),
     );
 
-    const hits = await store.searchChunks([1, 2, 3], { userId: 7, topK: 4 });
+    const hits = await store.searchChunks([1, 2, 3], { baseIds: ['kb-1', 'kb-2'], topK: 4 });
 
     expect(hits).toEqual([
-      { documentId: 'doc-1', title: '水果手册', content: '苹果', score: 0.87 },
+      {
+        documentId: 'doc-1',
+        chunkId: 'chunk-1',
+        title: '水果手册',
+        content: '苹果',
+        page: null,
+        score: 0.87,
+      },
     ]);
     const search = pool.client.calls.find((call) => call.text.includes('ORDER BY embedding'));
-    // 参数序：向量、用户 ID、条数；可见性谓词里用户 ID 退到 $2（向量占了 $1）
-    expect(search?.values).toEqual(['[1,2,3]', 7, 4]);
-    expect(search?.text).toContain("(scope = 'global' OR owner_user_id = $2)");
+    // 参数序：向量、库 id 清单、条数；过滤谓词按 ANY($2) 预解析集合（向量占了 $1）
+    expect(search?.values).toEqual(['[1,2,3]', ['kb-1', 'kb-2'], 4]);
+    expect(search?.text).toContain('knowledge_base_id = ANY($2)');
   });
 
   it('会话参数在每条连接上只装载一次', async () => {
     const { pool, store } = createStore();
 
-    await store.searchChunks([1, 2, 3], { userId: 1, topK: 1 });
-    await store.searchChunks([1, 2, 3], { userId: 1, topK: 1 });
+    await store.searchChunks([1, 2, 3], { baseIds: ['kb-1'], topK: 1 });
+    await store.searchChunks([1, 2, 3], { baseIds: ['kb-1'], topK: 1 });
 
     const prepared = pool.client.calls.filter((call) => call.text === SESSION_PARAMETERS);
     expect(prepared).toHaveLength(1);
@@ -113,19 +130,19 @@ describe('PgVectorStore', () => {
   it('未建表时读取路径按无数据返回，不抛错', async () => {
     const { store } = createStore(() => missingTable());
 
-    await expect(store.listDocuments(1)).resolves.toEqual([]);
+    await expect(store.listDocuments('kb-1')).resolves.toEqual([]);
     await expect(store.listAllDocuments()).resolves.toEqual([]);
     await expect(store.findDocument('doc-1')).resolves.toBeNull();
     await expect(store.countDocuments()).resolves.toBe(0);
     await expect(store.countChunks()).resolves.toBe(0);
     await expect(store.stitchChunks('doc-1')).resolves.toBe('');
-    await expect(store.searchChunks([1], { userId: 1, topK: 1 })).resolves.toEqual([]);
+    await expect(store.searchChunks([1], { baseIds: ['kb-1'], topK: 1 })).resolves.toEqual([]);
   });
 
   it('未建表以外的错误照常抛出', async () => {
     const { store } = createStore(() => pgError('08006'));
 
-    await expect(store.listDocuments(1)).rejects.toThrow('pg error 08006');
+    await expect(store.listDocuments('kb-1')).rejects.toThrow('pg error 08006');
   });
 
   it('COUNT 结果收敛成数字', async () => {
@@ -251,6 +268,41 @@ describe('PgVectorStore', () => {
     );
 
     await expect(store.assertCompatible(3)).rejects.toThrow('请清空知识库后重新导入');
+  });
+
+  it('解析结果回写：文档已删时回滚，且不写片段', async () => {
+    // UPDATE 返回空结果集，等价于 rowCount = 0：解析期间文档被删
+    const { pool, store } = createStore();
+
+    await expect(
+      store.writeDocumentContent('doc-1', { title: '标题', chunks: 0 }, []),
+    ).resolves.toBe(false);
+
+    const sqls = pool.client.calls.map((call) => call.text);
+    expect(sqls.at(-1)).toBe('ROLLBACK');
+    // 父行已不存在，写片段会撞外键，必须整体放弃
+    expect(sqls.some((sql) => sql.includes('DELETE FROM knowledge_chunks'))).toBe(false);
+  });
+
+  it('解析结果回写：行存在时更新文档、重建片段并提交', async () => {
+    const { pool, store } = createStore(
+      responder([['UPDATE knowledge_documents', [{ id: 'doc-1' }]]]),
+    );
+
+    await expect(
+      store.writeDocumentContent('doc-1', { title: '标题', chunks: 0 }, []),
+    ).resolves.toBe(true);
+    expect(pool.client.calls.map((call) => call.text)).toContain('COMMIT');
+  });
+
+  it('状态更新按 id 定位，失败原因随状态一并写入', async () => {
+    const { pool, store } = createStore(
+      responder([['UPDATE knowledge_documents SET status', [{ id: 'doc-1' }]]]),
+    );
+
+    await expect(store.setDocumentStatus('doc-1', 'failed', '解析失败')).resolves.toBe(true);
+    const update = pool.client.calls.find((call) => call.text === SET_DOCUMENT_STATUS_SQL);
+    expect(update?.values).toEqual(['doc-1', 'failed', '解析失败']);
   });
 
   it('close 连同连接池一并关闭', async () => {

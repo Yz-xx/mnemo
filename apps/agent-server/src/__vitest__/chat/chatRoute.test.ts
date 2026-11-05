@@ -9,21 +9,29 @@ import type {
   StoredMessage,
 } from '../../entities/conversation.js';
 import type { StoredFile } from '../../entities/file.js';
+import type { KnowledgeBase, KnowledgeDocument } from '../../entities/knowledge.js';
 import type { ConversationStore } from '../../mappers/conversation/conversations.js';
 import type { FileStore } from '../../mappers/file/fileStore.js';
+import type { KnowledgeBaseStore } from '../../mappers/knowledge/bases.js';
+import type { KnowledgeStore } from '../../services/knowledge/store.js';
 import type { AgentService } from '../../services/llm/agent.js';
 import type { Logger } from '@mnemo/logger';
-import type { AgentStreamEvent, ChatStreamEvent } from '@mnemo/reusable';
+import type { AgentStreamEvent, ChatStreamEvent, KnowledgeCitation } from '@mnemo/reusable';
 import type { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 import { SystemMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '@mnemo/logger';
-import { HTTP_STATUS } from '@mnemo/reusable';
+import { CHAT_ERROR_CODE, HTTP_STATUS } from '@mnemo/reusable';
 import { handleChatMessage } from '../../controllers/client/chat.js';
 import { ConversationBusyError } from '../../infrastructure/concurrency/lock.js';
 import { createMetrics } from '../../infrastructure/observability/index.js';
 import { createRoundRegistry } from '../../services/conversation/roundRegistry.js';
+
+/** 构造一条测试引用：本组只关心文档 ID 与标题，其余字段取固定值 */
+function cite(documentId: string, title: string): KnowledgeCitation {
+  return { documentId, chunkId: `${documentId}-c1`, title, page: null, snippet: '', score: 0.9 };
+}
 
 const USER_ID = 1;
 /** 合法轮次 ID（标准 UUID）：非法值会被路由自行生成，故用例必须给合规值才能命中幂等分支 */
@@ -64,6 +72,7 @@ class FakeConversations {
     content: string,
     meta: MessageMeta = {},
     _known?: ConversationHeader,
+    knowledgeBaseId?: string,
   ): Promise<AppendResult> {
     const now = new Date().toISOString();
     const conversation: Conversation = id
@@ -71,6 +80,8 @@ class FakeConversations {
       : {
           id: `c-${this.records.size + 1}`,
           title: '新对话',
+          // 绑定只在新建会话时写入，与真实存储一致
+          ...(knowledgeBaseId ? { knowledgeBaseId } : {}),
           createdAt: now,
           updatedAt: now,
           messages: [],
@@ -97,6 +108,7 @@ class FakeConversations {
       conversation: {
         id: conversation.id,
         title: conversation.title,
+        ...(conversation.knowledgeBaseId ? { knowledgeBaseId: conversation.knowledgeBaseId } : {}),
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
       },
@@ -196,10 +208,10 @@ class HeaderRecordingResponse extends FakeHttpResponse {
  */
 function fakeAgent(
   script: AgentStreamEvent[] | Error,
-  onOptions?: (options: { fileIds: string[] }) => void,
+  onOptions?: (options: { fileIds: string[]; knowledgeBaseId?: string }) => void,
 ): AgentService {
   return {
-    async *stream(_history: unknown, options: { fileIds: string[] }) {
+    async *stream(_history: unknown, options: { fileIds: string[]; knowledgeBaseId?: string }) {
       onOptions?.(options);
       if (script instanceof Error) throw script;
       for (const event of script) yield event;
@@ -251,13 +263,65 @@ const CONFIG = {
   },
 } as unknown as AppConfig;
 
+/** 测试用知识库 ID：绑定用例涉及两个库，统一在此命名，避免各处手抄 */
+const BASE_MAIN = '22222222-2222-4222-8222-222222222222';
+const BASE_OTHER = '33333333-3333-4333-8333-333333333333';
+
+/** 测试用知识库：默认归属当前用户的私有库，全局库由用例显式指定可见性 */
+function makeBase(
+  id: string,
+  visibility: 'global' | 'private' = 'private',
+  ownerUserId: number | null = USER_ID,
+): KnowledgeBase {
+  return {
+    id,
+    name: `库 ${id}`,
+    description: null,
+    visibility,
+    ownerUserId,
+    createdAt: '2026-11-05T00:00:00.000Z',
+    updatedAt: '2026-11-05T00:00:00.000Z',
+  };
+}
+
+/** 测试用文档：只保留路由层与检索范围校验用到的字段 */
+function makeDocument(id: string, knowledgeBaseId: string): KnowledgeDocument {
+  return {
+    id,
+    title: `文档 ${id}`,
+    knowledgeBaseId,
+    chunks: 3,
+    createdAt: '2026-11-05T00:00:00.000Z',
+    fileName: null,
+    fileSize: null,
+    mimeType: null,
+    status: 'ready',
+    failureReason: null,
+  };
+}
+
+/** 知识库替身：按 ID 命中返回库，未命中即不存在——与真实实现的「不可见按不存在」同义 */
+function fakeKnowledgeBases(bases: KnowledgeBase[] = []): KnowledgeBaseStore {
+  return {
+    find: async (id: string) => bases.find((base) => base.id === id) ?? null,
+  } as unknown as KnowledgeBaseStore;
+}
+
+/** 库内文档替身：按库 ID 过滤，未配置文档的库即视为空库 */
+function fakeKnowledge(documents: KnowledgeDocument[] = []): KnowledgeStore {
+  return {
+    list: async (baseId: string) =>
+      documents.filter((document) => document.knowledgeBaseId === baseId),
+  } as unknown as KnowledgeStore;
+}
+
 /** 会话锁替身：默认顺序执行任务（无并发的常态）；验证占用与超时时由用例注入专用替身 */
 const passthroughLock = {
   run: <T>(_conversationId: string, task: () => Promise<T>): Promise<T> => task(),
 };
 
 /**
- * 假依赖集合：会话存储、文件存储与智能体均为替身，用于隔离数据库与模型服务。
+ * 假依赖集合：会话存储、文件存储、知识库与智能体均为替身，用于隔离数据库与模型服务。
  * 轮次注册表按传入配置装配——单轮超时与日志保留都取自它，故改配置的用例须走此入口。
  */
 function fakeDeps(
@@ -265,6 +329,8 @@ function fakeDeps(
   agent: AgentService,
   files: FakeFiles = new FakeFiles(),
   config: AppConfig = CONFIG,
+  knowledge: KnowledgeStore = fakeKnowledge(),
+  knowledgeBases: KnowledgeBaseStore = fakeKnowledgeBases(),
 ): Parameters<typeof handleChatMessage>[0] {
   const metrics = createMetrics();
   const rounds = createRoundRegistry({
@@ -278,6 +344,8 @@ function fakeDeps(
   return {
     agent,
     conversations: conversations as unknown as ConversationStore,
+    knowledge,
+    knowledgeBases,
     files: files as unknown as FileStore,
     config,
     chatLock: passthroughLock,
@@ -290,6 +358,7 @@ function fakeRequest(body: {
   message: string;
   conversationId?: string;
   fileIds?: unknown;
+  knowledgeBaseId?: unknown;
   roundId?: string;
 }): Request {
   return { body } as unknown as Request;
@@ -385,7 +454,13 @@ describe('handleChatMessage', () => {
     const saved = await conversations.get(USER_ID, summary.id);
     expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     expect(saved?.messages.at(-1)?.content).toBe('正在');
-    expect(res.events).toContainEqual({ type: 'error', message: '本轮已停止生成' });
+    expect(res.events).toContainEqual({
+      type: 'error',
+      message: '本轮已停止生成',
+      code: CHAT_ERROR_CODE.INTERNAL_ERROR,
+      // 用户主动停止：内容已按用户意愿中断，重发只会重复同一轮
+      retryable: false,
+    });
   });
 
   it('回复为空但请求正常结束时保留会话', async () => {
@@ -448,13 +523,14 @@ describe('handleChatMessage', () => {
   it('检索来源既推给客户端，也随回复落库以便历史回看', async () => {
     const conversations = new FakeConversations();
     const res = new FakeHttpResponse();
+    const citation = cite('d1', '公共手册');
 
     await handleChatMessage(
       fakeDeps(
         conversations,
         fakeAgent([
           { type: 'tool', name: 'search_knowledge_base', status: 'end' },
-          { type: 'source', name: '公共手册' },
+          { type: 'source', citation },
           { type: 'token', content: '据知识库，苹果是……' },
         ]),
       ),
@@ -462,25 +538,26 @@ describe('handleChatMessage', () => {
       res as unknown as Response,
     );
 
-    // 来源事件原样转发给客户端，界面上据此渲染来源标签
-    expect(res.events).toContainEqual({ type: 'source', name: '公共手册' });
+    // 来源事件原样转发给客户端，界面上据此渲染引用卡片
+    expect(res.events).toContainEqual({ type: 'source', citation });
     const [summary] = await conversations.list();
     const saved = await conversations.get(USER_ID, summary.id);
-    expect(saved?.messages.at(-1)?.sources).toEqual(['公共手册']);
+    expect(saved?.messages.at(-1)?.sources).toEqual([citation]);
   });
 
   it('终局来源事件覆盖过程中累积的来源，落库只保留实际采用的文档', async () => {
     const conversations = new FakeConversations();
     const res = new FakeHttpResponse();
+    const used = cite('d1', '公共手册');
 
     await handleChatMessage(
       fakeDeps(
         conversations,
         fakeAgent([
-          { type: 'source', name: '公共手册' },
-          { type: 'source', name: '我的笔记' },
+          { type: 'source', citation: used },
+          { type: 'source', citation: cite('d2', '我的笔记') },
           { type: 'token', content: '据《公共手册》，苹果是水果。' },
-          { type: 'sources', names: ['公共手册'] },
+          { type: 'sources', citations: [used] },
         ]),
       ),
       fakeRequest({ message: '苹果是什么？' }),
@@ -488,10 +565,10 @@ describe('handleChatMessage', () => {
     );
 
     // 过程中两张标签都推过，终局清单覆盖为被引用的那一份
-    expect(res.events).toContainEqual({ type: 'sources', names: ['公共手册'] });
+    expect(res.events).toContainEqual({ type: 'sources', citations: [used] });
     const [summary] = await conversations.list();
     const saved = await conversations.get(USER_ID, summary.id);
-    expect(saved?.messages.at(-1)?.sources).toEqual(['公共手册']);
+    expect(saved?.messages.at(-1)?.sources).toEqual([used]);
   });
 
   it('推理链事件原样推给客户端，但不落库：历史只留正文，推理不进上下文预算', async () => {
@@ -723,8 +800,13 @@ describe('handleChatMessage', () => {
     const [summary] = await conversations.list();
     const saved = await conversations.get(USER_ID, summary.id);
     expect(saved?.messages.at(-1)?.content).toBe('已经开始了');
-    // 超时是被动中断，客户端需要知道本轮被截断
-    expect(res.events).toContainEqual({ type: 'error', message: '本轮对话超时，已中断' });
+    // 超时是被动中断，客户端需要知道本轮被截断，并据此给出可重试提示
+    expect(res.events).toContainEqual({
+      type: 'error',
+      message: '本轮对话超时，已中断',
+      code: CHAT_ERROR_CODE.MODEL_TIMEOUT,
+      retryable: true,
+    });
   });
 
   it('慢客户端写不下去时只退订本轮订阅，生成继续并正常落库', async () => {
@@ -757,5 +839,111 @@ describe('handleChatMessage', () => {
     expect(res.events).toEqual([]);
     // 本轮在有限时间内收尾，不会因为客户端不读而永久挂住
     expect(res.writableEnded).toBe(true);
+  });
+
+  it('指定不存在或不可见的知识库时返回 404，且不进入流式响应', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      // 可见库清单为空：等价于该库不存在或不属于当前用户
+      fakeDeps(conversations, fakeAgent([])),
+      fakeRequest({ message: '你好', knowledgeBaseId: BASE_MAIN }),
+      res as unknown as Response,
+    );
+
+    expect(res.statusCode).toBe(HTTP_STATUS.NOT_FOUND);
+    expect(res.body).toEqual({ message: '知识库不存在' });
+    await expect(conversations.list()).resolves.toEqual([]);
+  });
+
+  it('既有会话换库续发时返回 400：绑定在新建会话时确定', async () => {
+    const conversations = new FakeConversations();
+    const {
+      conversation: { id },
+    } = await conversations.append(
+      USER_ID,
+      undefined,
+      'user',
+      '先前的提问',
+      {},
+      undefined,
+      BASE_MAIN,
+    );
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      fakeDeps(
+        conversations,
+        fakeAgent([]),
+        new FakeFiles(),
+        CONFIG,
+        fakeKnowledge([makeDocument('d-1', BASE_MAIN), makeDocument('d-2', BASE_OTHER)]),
+        fakeKnowledgeBases([makeBase(BASE_MAIN), makeBase(BASE_OTHER)]),
+      ),
+      fakeRequest({ message: '再问一句', conversationId: id, knowledgeBaseId: BASE_OTHER }),
+      res as unknown as Response,
+    );
+
+    // 检索范围与界面展示必须一致，换库只能在新建会话时做
+    expect(res.statusCode).toBe(HTTP_STATUS.BAD_REQUEST);
+    expect(res.body).toEqual({
+      message: '会话已绑定其他知识库',
+    });
+  });
+
+  it('知识库暂无文档时返回 400，提示先上传而不是让用户拿到空答案', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+
+    await handleChatMessage(
+      fakeDeps(
+        conversations,
+        fakeAgent([]),
+        new FakeFiles(),
+        CONFIG,
+        // 库可见但没有任何可检索文档：等价于建了库还没上传
+        fakeKnowledge(),
+        fakeKnowledgeBases([makeBase(BASE_MAIN)]),
+      ),
+      fakeRequest({ message: '你好', knowledgeBaseId: BASE_MAIN }),
+      res as unknown as Response,
+    );
+
+    expect(res.statusCode).toBe(HTTP_STATUS.BAD_REQUEST);
+    // 与 SSE error 同一套 code：客户端据此提示「等解析完成」而非笼统报错
+    expect(res.body).toEqual({
+      message: '知识库暂无可用文档',
+      code: CHAT_ERROR_CODE.KB_NOT_READY,
+    });
+  });
+
+  it('新会话首轮绑定知识库：绑定随会话落库，并作为检索范围注入本轮', async () => {
+    const conversations = new FakeConversations();
+    const res = new FakeHttpResponse();
+    let received: string | undefined;
+    const agent = fakeAgent([{ type: 'token', content: '好的' }], (options) => {
+      received = options.knowledgeBaseId;
+    });
+
+    await handleChatMessage(
+      fakeDeps(
+        conversations,
+        agent,
+        new FakeFiles(),
+        CONFIG,
+        fakeKnowledge([makeDocument('d-1', BASE_MAIN)]),
+        fakeKnowledgeBases([makeBase(BASE_MAIN)]),
+      ),
+      fakeRequest({ message: '你好', knowledgeBaseId: BASE_MAIN }),
+      res as unknown as Response,
+    );
+
+    const [summary] = await conversations.list();
+    const saved = await conversations.get(USER_ID, summary.id);
+    // 绑定落在会话上：下次续发即便不传也按同一库检索
+    expect(saved?.knowledgeBaseId).toBe(BASE_MAIN);
+    // 本轮检索范围经会话绑定下传智能体
+    expect(received).toBe(BASE_MAIN);
   });
 });

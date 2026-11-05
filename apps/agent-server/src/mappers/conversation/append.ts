@@ -24,7 +24,7 @@ export async function readHeader(
 ): Promise<ConversationHeader | null> {
   if (!isUuid(id)) return null;
   const { rows } = await pool.query<ConversationHeaderRow>(
-    `SELECT id, title, created_at, updated_at
+    `SELECT id, title, knowledge_base_id, created_at, updated_at
        FROM conversations WHERE id = $1 AND user_id = $2 LIMIT 1`,
     [id, userId],
   );
@@ -33,24 +33,30 @@ export async function readHeader(
   return {
     id: row.id,
     title: row.title,
+    knowledgeBaseId: row.knowledge_base_id ?? undefined,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
 }
 
-/** 新建空会话：标题先落默认值，首条用户消息到达时再改写 */
-export async function createConversation(pool: DbPool, userId: number): Promise<Conversation> {
+/** 新建空会话：标题先落默认值，首条用户消息到达时再改写；绑定库由首轮请求决定 */
+export async function createConversation(
+  pool: DbPool,
+  userId: number,
+  knowledgeBaseId?: string,
+): Promise<Conversation> {
   const now = new Date();
   const conversation: Conversation = {
     id: randomUUID(),
     title: DEFAULT_TITLE,
+    ...(knowledgeBaseId ? { knowledgeBaseId } : {}),
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     messages: [],
   };
   await pool.query(
-    'INSERT INTO conversations (id, user_id, title, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)',
-    [conversation.id, userId, conversation.title, now, now],
+    'INSERT INTO conversations (id, user_id, title, knowledge_base_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)',
+    [conversation.id, userId, conversation.title, knowledgeBaseId ?? null, now, now],
   );
   return conversation;
 }
@@ -72,19 +78,21 @@ export async function appendMessage(input: {
   content: string;
   meta?: MessageMeta;
   known?: ConversationHeader;
+  /** 新会话首轮绑定的知识库：仅在真正新建会话时写入，既有会话的绑定以记录为准 */
+  knowledgeBaseId?: string;
 }): Promise<AppendResult> {
-  const { pool, metrics, userId, id, role, content, meta = {}, known } = input;
+  const { pool, metrics, userId, id, role, content, meta = {}, known, knowledgeBaseId } = input;
   const startedAt = Date.now();
   const { tools, attachments, sources } = meta;
   const header: ConversationHeader =
     known ??
     (id ? await readHeader(pool, userId, id) : null) ??
-    (await createConversation(pool, userId));
+    (await createConversation(pool, userId, knowledgeBaseId));
   const messageId = randomUUID();
   const now = new Date();
 
-  // 空数组写 null，避免没有元数据的消息也存一个空数组占位
-  const toJson = (value: string[] | undefined): string | null =>
+  // 空数组写 null，避免没有元数据的消息也存一个空数组占位；泛型兼容来源由字符串升级为引用对象
+  const toJson = <T>(value: T[] | undefined): string | null =>
     value && value.length > 0 ? JSON.stringify(value) : null;
 
   // 先入库再回填自增 seq：滚动摘要按 seq 定位截断点，缺了它未摘要段会被整段过滤掉。

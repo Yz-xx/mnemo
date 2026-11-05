@@ -43,7 +43,7 @@ export function describeUpdateFailure(error: unknown): string {
 
 /**
  * 文档入库编排：切分与向量化都在 KnowledgeStore 内完成，这里只负责计时与日志。
- * 归属范围由调用方（路由）按入口决定：客户端只能写私有，全局走管理入口。
+ * 目标库的归属校验由调用方（路由）先行完成，这里信任 input.knowledgeBaseId。
  * 失败时保留原始错误落日志后再抛出，状态码与对外文案由路由决定
  * （入库失败集中在向量化服务未启动与向量基准不符两类，必须留下原始错误才好定位）。
  */
@@ -58,17 +58,15 @@ export async function addDocument(
     logger.info('文档入库完成', {
       documentId: document.id,
       title: document.title,
-      scope: document.scope,
+      knowledgeBaseId: document.knowledgeBaseId,
       chunkCount: document.chunks,
       durationMs: Date.now() - startedAt,
-      userId: input.userId,
     });
     return document;
   } catch (error) {
     logger.error('文档入库失败', {
       title: input.title,
-      scope: input.scope,
-      userId: input.userId,
+      knowledgeBaseId: input.knowledgeBaseId,
       durationMs: Date.now() - startedAt,
       error,
     });

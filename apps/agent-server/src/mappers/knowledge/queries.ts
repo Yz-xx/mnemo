@@ -1,16 +1,13 @@
 import type { StoredChunkHit } from './vectorStore.js';
 import type { PoolClient } from 'pg';
+import { normalizeRow, toVectorParam } from './pg.js';
+import { COUNT_CHUNKS_SQL, SEARCH_CHUNKS_SQL, STITCH_CHUNKS_SQL } from './pgChunks.js';
 import {
-  COUNT_CHUNKS_SQL,
   COUNT_DOCUMENTS_SQL,
   FIND_DOCUMENT_SQL,
   LIST_ALL_DOCUMENTS_SQL,
   LIST_DOCUMENTS_SQL,
-  normalizeRow,
-  SEARCH_CHUNKS_SQL,
-  STITCH_CHUNKS_SQL,
-  toVectorParam,
-} from './pg.js';
+} from './pgDocuments.js';
 
 /** 连接租用器：取一条连接、保证会话参数就位后在其上执行任务（实现见 pgStore 的 run） */
 export type ClientRunner = <T>(task: (client: PoolClient) => Promise<T>) => Promise<T>;
@@ -43,13 +40,13 @@ export async function readDocument(
   }, null);
 }
 
-/** 取对指定用户可见的文档行：全局共享的 + 其本人的私有文档 */
-export async function readUserDocuments(
+/** 取指定库内的文档行：库的可见性由服务层校验，这里只按库过滤 */
+export async function readBaseDocuments(
   run: ClientRunner,
-  userId: number,
+  baseId: string,
 ): Promise<Record<string, unknown>[]> {
   return emptyWhenMissing(async () => {
-    const { rows } = await run((client) => client.query(LIST_DOCUMENTS_SQL, [userId]));
+    const { rows } = await run((client) => client.query(LIST_DOCUMENTS_SQL, [baseId]));
     return rows.map((row: Record<string, unknown>) => normalizeRow(row));
   }, []);
 }
@@ -82,26 +79,31 @@ export async function readStitchedContent(run: ClientRunner, documentId: string)
   }, '');
 }
 
-/** 近邻检索：按可见性预过滤后取相似度前 topK 条，分数不做阈值过滤 */
+/** 近邻检索：按库 id 清单预过滤后取相似度前 topK 条，分数不做阈值过滤 */
 export async function searchChunkHits(
   run: ClientRunner,
   vector: number[],
-  options: { userId: number; topK: number },
+  options: { baseIds: string[]; topK: number },
 ): Promise<StoredChunkHit[]> {
   return emptyWhenMissing(async () => {
     const { rows } = await run((client) =>
       client.query<{
+        id: string;
         document_id: string;
         title: string;
         content: string;
+        page: number | null;
         score: number;
-      }>(SEARCH_CHUNKS_SQL, [toVectorParam(vector), options.userId, options.topK]),
+      }>(SEARCH_CHUNKS_SQL, [toVectorParam(vector), options.baseIds, options.topK]),
     );
     // 阈值过滤留在检索层，与现状「先按 topK 取回再按 minScore 过滤」一致
     return rows.map((row) => ({
       documentId: row.document_id,
+      chunkId: row.id,
       title: row.title,
       content: row.content,
+      // int4 列可能按字符串读回（驱动版本差异），出口统一收敛；旧行无 page 列时按「无页码」处理
+      page: row.page == null ? null : Number(row.page),
       score: Number(row.score),
     }));
   }, []);

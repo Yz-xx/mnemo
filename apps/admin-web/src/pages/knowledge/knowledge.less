@@ -46,22 +46,101 @@
     font-size: 13px;
   }
 
-  // 范围徽标：深色语义字配浅底，两个组合对比度均在 4.5:1 以上
-  &__badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
+  // 库维度概览：横向卡片网格，一眼看到全部库的文档数与归属
+  &__bases {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__bases-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__bases-title {
+    color: var(--text);
+    font-size: 14px;
+    letter-spacing: var(--tracking-label);
+  }
+
+  &__bases-count {
+    color: var(--text-faint);
     font-size: 12px;
+  }
 
-    &--global {
-      background-color: var(--primary-soft);
-      color: var(--primary-strong);
-    }
+  &__bases-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
 
-    &--private {
-      background-color: var(--bg-active);
-      color: var(--text-muted);
-    }
+  &__base-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  &__base-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  &__base-name {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__base-tag {
+    flex: none;
+    padding: 1px 6px;
+    background-color: var(--bg-panel);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  &__base-desc {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  &__base-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  &__base-meta {
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+
+  // 库名列：名称可能较长，截断后以 title 提示完整名称
+  &__base {
+    display: block;
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__owner--none {

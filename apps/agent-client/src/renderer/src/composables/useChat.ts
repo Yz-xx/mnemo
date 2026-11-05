@@ -1,10 +1,10 @@
 export type { ConnectionState } from './useChatConnection';
 
-import type { ChatMessage } from '../types';
+import type { ChatMessage, KnowledgeBaseView } from '../types';
 import { reactive, ref } from 'vue';
 import { readSettings } from '../api/bridge';
 import { isUnauthorized, SESSION_EXPIRED_MESSAGE, toErrorMessage } from '../api/client';
-import { backendUrl, setBackendUrl } from '../api/session';
+import { agentApi, backendUrl, setBackendUrl } from '../api/session';
 import { useAuth } from './useAuth';
 import { useChatAttachments } from './useChatAttachments';
 import { useChatConnection } from './useChatConnection';
@@ -13,8 +13,8 @@ import { useChatSession } from './useChatSession';
 
 /**
  * 桌面端会话状态与流式对话逻辑。
- * 出口按关注点收敛成 backend / session / chat / attachments / lifecycle 五组：
- * 连接、会话列表、对话收发、附件各自成子 hook，消息列表、当前会话与错误位
+ * 出口按关注点收敛成 backend / session / chat / attachments / knowledge / lifecycle 六组：
+ * 连接、会话列表、对话收发、附件与知识库各自成子 hook，消息列表、当前会话与错误位
  * 被其中几组共同改写，故由本层创建后经参数注入。
  */
 export function useChat() {
@@ -25,6 +25,10 @@ export function useChat() {
   const streaming = ref(false);
   const activeId = ref<string | null>(null);
   const errorMessage = ref('');
+
+  // 知识库选择：新会话首轮绑定的库；null 表示不限库（沿旧行为）
+  const knowledgeBases = ref<KnowledgeBaseView[]>([]);
+  const selectedKnowledgeBaseId = ref<string | null>(null);
 
   /**
    * 令牌失效的统一处理：清空登录态把界面交还登录页，并把失效原因留在登录页。
@@ -75,11 +79,22 @@ export function useChat() {
     isOnline: () => conn.connection.value === 'online',
     refreshConversations: () => refreshConversations(),
     takeReadyAttachments: attachments.takeReadyAttachments,
+    selectedKnowledgeBaseId,
     handleError,
   });
 
   refreshConversations = session.refreshConversations;
   abortStream = chat.stopStreaming;
+
+  /** 可见知识库清单：选库器与会话条目的库名共用；失败不阻塞对话，仅清空清单 */
+  async function loadKnowledgeBases(): Promise<void> {
+    try {
+      knowledgeBases.value = await agentApi.listKnowledgeBases();
+    } catch (error) {
+      knowledgeBases.value = [];
+      if (isUnauthorized(error)) await handleUnauthorized();
+    }
+  }
 
   /** 退出登录或令牌失效时清空本地会话数据，避免上一个账号的内容残留在界面上 */
   function reset(): void {
@@ -87,6 +102,8 @@ export function useChat() {
     messages.value = [];
     session.clearSession();
     attachments.clearAttachments();
+    knowledgeBases.value = [];
+    selectedKnowledgeBaseId.value = null;
     errorMessage.value = '';
     conn.resetConnection();
   }
@@ -96,7 +113,7 @@ export function useChat() {
     const settings = await readSettings();
     setBackendUrl(settings.backendUrl);
     await conn.refreshHealth();
-    await session.refreshConversations();
+    await Promise.all([loadKnowledgeBases(), session.refreshConversations()]);
   }
 
   // 分组包一层 reactive：嵌套在普通对象里的 ref 在模板中不会被解包，包过 reactive 才会
@@ -111,10 +128,12 @@ export function useChat() {
     session: reactive({
       conversations: session.conversations,
       activeId,
+      activeKnowledgeBaseId: session.activeKnowledgeBaseId,
       loading: session.loading,
       startNewConversation: session.startNewConversation,
       selectConversation: session.selectConversation,
       removeConversation: session.removeConversation,
+      renameConversation: session.renameConversation,
     }),
     chat: reactive({
       messages,
@@ -129,6 +148,14 @@ export function useChat() {
       list: attachments.attachments,
       add: attachments.addAttachment,
       remove: attachments.removeAttachment,
+    }),
+    knowledge: reactive({
+      bases: knowledgeBases,
+      selectedId: selectedKnowledgeBaseId,
+      selectBase: (id: string | null) => {
+        selectedKnowledgeBaseId.value = id;
+      },
+      reload: loadKnowledgeBases,
     }),
     lifecycle: reactive({ init, reset }),
   };

@@ -3,7 +3,7 @@ import type { ToolBudget } from './context/index.js';
 import type { AgentTool, GeneratedFileRef } from './tools/index.js';
 import type { BaseMessageChunk } from '@langchain/core/messages';
 import type { Logger } from '@mnemo/logger';
-import type { AgentStreamEvent } from '@mnemo/reusable';
+import type { AgentStreamEvent, KnowledgeCitation } from '@mnemo/reusable';
 import { AIMessageChunk, ToolMessage } from '@langchain/core/messages';
 import { extractReasoning, extractText } from './messageContent.js';
 import { ToolTrace } from './toolTrace.js';
@@ -22,8 +22,8 @@ export async function* bridgeAgentStream(input: {
   tools: AgentTool[];
   /** 本轮生成的导出文件：工具负责产出，推给客户端要等流读完再统一做 */
   exported: GeneratedFileRef[];
-  /** 本轮实际注入上下文的文档名：工具负责追加，每次工具结束就推增量 */
-  sources: string[];
+  /** 本轮实际注入上下文的引用：工具负责追加，每次工具结束就推增量 */
+  sources: KnowledgeCitation[];
   /** 本轮来源登记器：与检索工具共用一份状态，流末尾据此判定实际被标注的文档 */
   citations: Citations;
   /** 本轮工具结果额度：检索与读取共用，跨同轮多次调用累计 */
@@ -36,7 +36,7 @@ export async function* bridgeAgentStream(input: {
     input;
   const toolTrace = new ToolTrace(tools);
   // 已推给客户端的来源：同一文档被多次检索命中时只出一个标签
-  const pushedSources = new Set<string>();
+  const pushedDocuments = new Set<string>();
   // 本轮正文累积：终局来源判定必须发生在完整回答之后，不能边流边判
   let answer = '';
 
@@ -51,10 +51,10 @@ export async function* bridgeAgentStream(input: {
       yield { type: 'tool', name: toolName, status: 'end' };
       // 工具刚结束就推出新增来源，与工具标签前后脚出现；
       // 本轮随后被停止也不会丢掉已经检索到的出处
-      for (const name of sources) {
-        if (pushedSources.has(name)) continue;
-        pushedSources.add(name);
-        yield { type: 'source', name };
+      for (const citation of sources) {
+        if (pushedDocuments.has(citation.documentId)) continue;
+        pushedDocuments.add(citation.documentId);
+        yield { type: 'source', citation };
       }
       continue;
     }
@@ -79,14 +79,14 @@ export async function* bridgeAgentStream(input: {
 
   // 终局来源：正文标了哪些文档就只保留哪些。检索命中但正文没采用的文档在这里被剔除——
   // 以「已注入」为底会让「召回了无关资料」也挂上出处，因此无标注时下发空清单
-  const names = citations.resolve(answer);
+  const resolved = citations.resolve(answer);
   logger?.debug('检索来源判定', {
-    cited: names.length > 0,
+    cited: resolved.length > 0,
     // 无来源时不写空串，避免日志里出现一个恒空字段
-    sources: names.length > 0 ? names.join('、') : undefined,
+    sources: resolved.length > 0 ? resolved.map((item) => item.title).join('、') : undefined,
   });
   // 有候选来源才推终局清单（哪怕是空数组）：它负责清掉过程中已推给客户端的增量标签
-  if (citations.size() > 0) yield { type: 'sources', names };
+  if (citations.size() > 0) yield { type: 'sources', citations: resolved };
 
   // 导出文件在流末尾统一推送：正文的增量渲染不受影响，客户端收到即可给出下载入口
   for (const file of exported) {
@@ -98,6 +98,6 @@ export async function* bridgeAgentStream(input: {
     // 字段名避开 token 子串：日志脱敏按字段名子串匹配，含 token 会被整段打成 ***
     usedBudget: toolBudget.usedTokens,
     budgetLimit: toolBudgetTokens,
-    deliveredDocuments: toolBudget.deliveredDocuments.size,
+    deliveredChunks: toolBudget.deliveredChunks.size,
   });
 }

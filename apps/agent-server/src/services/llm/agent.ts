@@ -1,12 +1,12 @@
-import type { AppConfig } from '../../configuration/config/index.js';
-import type { MetricsRegistry } from '../../infrastructure/observability/index.js';
 import type { KnowledgeStore } from '../knowledge/index.js';
 import type { Summarizer } from './context/index.js';
 import type { AgentTool, FileSource, GeneratedFileRef, ToolDescriptor } from './tools/index.js';
 import type { VisionReader } from './vision.js';
+import type { AppConfig } from '../../configuration/config/index.js';
+import type { MetricsRegistry } from '../../infrastructure/observability/index.js';
 import type { BaseMessage } from '@langchain/core/messages';
 import type { Logger } from '@mnemo/logger';
-import type { AgentStreamEvent } from '@mnemo/reusable';
+import type { AgentStreamEvent, KnowledgeCitation } from '@mnemo/reusable';
 import { createAgent } from 'langchain';
 import { describeConnectionError } from '../../common/errors.js';
 import { describeChatEndpoint, describeChatModel } from '../../configuration/config/index.js';
@@ -18,6 +18,7 @@ import { createToolBudget } from './context/index.js';
 import { extractText } from './messageContent.js';
 import { createChatModel } from './model.js';
 import { ModelGovernance } from './modelGovernance.js';
+import { prefetchKnowledge } from './prefetch.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 import { bridgeAgentStream } from './streamBridge.js';
 import { createTools, describeTools } from './tools/index.js';
@@ -32,6 +33,8 @@ export class AgentService implements Summarizer {
   private readonly tools: AgentTool[];
   /** 附件存储：预读本轮附件时需要按 ID 取回元数据与字节 */
   private readonly files: FileSource;
+  /** 知识库检索：模型调用前先做一次后端预检索，避免其跳过工具直接作答 */
+  private readonly knowledge: KnowledgeStore;
   /** 视觉读取器：图片附件由它转述成文字；经构造参数注入，便于测试用替身隔离模型服务 */
   private readonly vision: VisionReader;
   /** 模型侧治理：闸门与熔断的申请 / 归还 / 回报口径都收在它内部（见 docs/adr/0010 决策 9、10、16） */
@@ -54,6 +57,7 @@ export class AgentService implements Summarizer {
     metrics?: MetricsRegistry,
   ) {
     this.files = files;
+    this.knowledge = knowledge;
     this.vision = vision;
     this.metrics = metrics;
     // 解析闸门先建：工具与附件预读都要经它约束解析（解析发生在对话轮，不在上传请求内）
@@ -106,7 +110,14 @@ export class AgentService implements Summarizer {
    */
   async *stream(
     messages: BaseMessage[],
-    options: { userId: number; fileIds: string[]; signal?: AbortSignal; logger?: Logger },
+    options: {
+      userId: number;
+      fileIds: string[];
+      /** 会话绑定的知识库：限定检索范围；未绑定为 undefined，检索按用户全部可见库 */
+      knowledgeBaseId?: string;
+      signal?: AbortSignal;
+      logger?: Logger;
+    },
   ): AsyncGenerator<AgentStreamEvent> {
     await this.governance.enterRound(options.signal);
     // 单轮模型侧耗时从入闸成功算起：排队等待另行观测，避免把过载等待算进生成耗时
@@ -114,8 +125,8 @@ export class AgentService implements Summarizer {
 
     // 本轮生成的导出文件：工具负责产出，推给客户端要等流读完再统一做
     const exported: GeneratedFileRef[] = [];
-    // 本轮检索命中的文档名：工具负责追加，每次工具结束就推增量
-    const sources: string[] = [];
+    // 本轮检索命中的引用：工具负责追加，每次工具结束就推增量
+    const sources: KnowledgeCitation[] = [];
     // 本轮工具结果额度：检索与读取共用，跨同轮多次调用累计（阶段 2 的上下文治理）
     const toolBudget = createToolBudget(this.toolBudgetTokens);
     // 本轮来源登记器：检索工具注入片段时登记，流结束后据此从正文判定实际采用
@@ -135,6 +146,18 @@ export class AgentService implements Summarizer {
         logger: options.logger,
       });
 
+      // 本地模型的工具调用遵循度不稳定，可能跳过检索直接作答；
+      // 调用模型前先检一次并注入命中片段，工具仍可追加检索补充
+      await prefetchKnowledge(this.knowledge, {
+        messages: injected,
+        userId: options.userId,
+        knowledgeBaseId: options.knowledgeBaseId,
+        budget: toolBudget,
+        citations,
+        sources,
+        logger: options.logger,
+      });
+
       const stream = await this.agent.stream(
         { messages: injected },
         {
@@ -142,6 +165,8 @@ export class AgentService implements Summarizer {
           signal: options.signal,
           configurable: {
             userId: options.userId,
+            // 会话绑定的知识库：检索工具据此限定范围（缺失即不限库，docs/adr/0018 决策 5）
+            knowledgeBaseId: options.knowledgeBaseId,
             fileIds: options.fileIds,
             logger: options.logger,
             exported,

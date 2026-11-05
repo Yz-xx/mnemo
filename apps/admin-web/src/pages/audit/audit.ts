@@ -3,12 +3,10 @@
 import type { AuditLogItem } from '@/api/types';
 import { onMounted, reactive } from 'vue';
 import { listAuditLogs } from '@/api';
-import { usePagedList } from '@/composables/usePagedList';
+import { DEFAULT_PAGE_SIZE, usePagedList } from '@/composables/usePagedList';
+import { statusKindOf } from '@/utils/statusKind';
 import { useAuditDetail } from './useAuditDetail';
 import { useAuditFilter } from './useAuditFilter';
-
-/** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
-const PAGE_SIZE = 20;
 
 const columns = [
   { key: 'createdAt', label: '时间', width: '170px' },
@@ -18,13 +16,6 @@ const columns = [
   { key: 'status', label: '结果', width: '80px' },
   { key: 'actions', label: '详情', width: '70px', align: 'right' as const },
 ];
-
-/** 状态色调：2xx 成功、4xx 客户端错误、5xx 服务端错误 */
-function statusKindOf(status: number): 'ok' | 'client' | 'server' {
-  if (status >= 500) return 'server';
-  if (status >= 400) return 'client';
-  return 'ok';
-}
 
 /** 操作人展示：超级令牌入口无账号 ID，账号被删后也只剩 ID */
 function actorLabel(row: AuditLogItem): string {
@@ -43,7 +34,7 @@ export function useAuditPage() {
   const filter = useAuditFilter({ search: () => runSearch() });
 
   const { rows, total, loading, errorMsg, paging } = usePagedList<AuditLogItem>({
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     fetcher: ({ page, pageSize }) =>
       listAuditLogs({ keyword: filter.keyword.value.trim(), page, pageSize }),
     errorFallback: '加载操作审计失败',
@@ -58,7 +49,7 @@ export function useAuditPage() {
   return {
     filter: reactive({ keyword: filter.keyword, handleSearch: filter.handleSearch }),
     table: reactive({
-      PAGE_SIZE,
+      pageSize: DEFAULT_PAGE_SIZE,
       columns,
       rows,
       page: paging.page,

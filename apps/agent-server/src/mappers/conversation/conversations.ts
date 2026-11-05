@@ -31,7 +31,7 @@ export class ConversationStore {
   /** 按最近更新时间倒序列出该用户的会话摘要 */
   async list(userId: number): Promise<ConversationSummary[]> {
     const { rows } = await this.pool.query<ConversationRow>(
-      `SELECT c.id, c.title, c.updated_at,
+      `SELECT c.id, c.title, c.knowledge_base_id, c.updated_at,
               (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
          FROM conversations c
         WHERE c.user_id = $1
@@ -41,6 +41,8 @@ export class ConversationStore {
     return rows.map((row) => ({
       id: row.id,
       title: row.title,
+      // 空列不带字段：与详情接口一致，调用方以「有没有值」判断是否绑定库
+      ...(row.knowledge_base_id ? { knowledgeBaseId: row.knowledge_base_id } : {}),
       updatedAt: row.updated_at.toISOString(),
       messageCount: Number(row.message_count ?? 0),
     }));
@@ -51,7 +53,7 @@ export class ConversationStore {
     // 非法 ID 不可能命中记录，直接判为不存在，也避免 uuid 列比较时抛类型错误
     if (!isUuid(id)) return null;
     const { rows } = await this.pool.query<ConversationDetailRow>(
-      `SELECT id, title, created_at, updated_at, summary, summary_upto_seq
+      `SELECT id, title, knowledge_base_id, created_at, updated_at, summary, summary_upto_seq
          FROM conversations WHERE id = $1 AND user_id = $2 LIMIT 1`,
       [id, userId],
     );
@@ -63,6 +65,7 @@ export class ConversationStore {
     return {
       id: row.id,
       title: row.title,
+      ...(row.knowledge_base_id ? { knowledgeBaseId: row.knowledge_base_id } : {}),
       // 空列不带字段：调用方以「有没有值」判断是否已有摘要，无需再比对 null
       ...(row.summary ? { summary: row.summary } : {}),
       ...(row.summary_upto_seq === null ? {} : { summaryUptoSeq: Number(row.summary_upto_seq) }),
@@ -78,13 +81,14 @@ export class ConversationStore {
   }
 
   /** 新建空会话：实现见 append.ts；保留同名方法，维持路由依赖的单一入口形态 */
-  create(userId: number): Promise<Conversation> {
-    return createConversation(this.pool, userId);
+  create(userId: number, knowledgeBaseId?: string): Promise<Conversation> {
+    return createConversation(this.pool, userId, knowledgeBaseId);
   }
 
   /**
    * 追加一条消息并同步会话标题与更新时间（实现见 append.ts）。
    * 调用方已读入的会话经 known 传入即零查询；未传时只读会话头，使单轮成本不随消息数增长。
+   * knowledgeBaseId 仅在真正新建会话时写入绑定，既有会话以记录为准。
    */
   append(
     userId: number,
@@ -93,6 +97,7 @@ export class ConversationStore {
     content: string,
     meta: MessageMeta = {},
     known?: ConversationHeader,
+    knowledgeBaseId?: string,
   ): Promise<AppendResult> {
     return appendMessage({
       pool: this.pool,
@@ -103,7 +108,21 @@ export class ConversationStore {
       content,
       meta,
       known,
+      knowledgeBaseId,
     });
+  }
+
+  /**
+   * 重命名会话：只改标题，不动 updated_at。
+   * 改标题不算对话活动，不该把旧会话顶到列表最前（列表按 updated_at 倒序）。
+   */
+  async rename(userId: number, id: string, title: string): Promise<boolean> {
+    if (!isUuid(id)) return false;
+    const { rowCount } = await this.pool.query(
+      'UPDATE conversations SET title = $3 WHERE id = $1 AND user_id = $2',
+      [id, userId, title],
+    );
+    return (rowCount ?? 0) > 0;
   }
 
   /** 删除会话；消息通过外键级联删除 */

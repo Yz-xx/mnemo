@@ -2,11 +2,13 @@ import type { QueryResultRow } from 'pg';
 import { truncate } from '@mnemo/shared';
 
 export const DEFAULT_TITLE = '新对话';
-const TITLE_MAX_LENGTH = 24;
+/** 会话标题长度上限：自动生成时截断，手动重命名时超限直接 400，两处共用同一口径 */
+export const TITLE_MAX_LENGTH = 24;
 
 interface ConversationRow extends QueryResultRow {
   id: string;
   title: string;
+  knowledge_base_id: string | null;
   created_at: Date;
   updated_at: Date;
   message_count: number;
@@ -16,6 +18,8 @@ interface ConversationRow extends QueryResultRow {
 interface ConversationDetailRow extends QueryResultRow {
   id: string;
   title: string;
+  /** 首轮绑定的知识库：可空，存量会话与「不限库」会话为 null */
+  knowledge_base_id: string | null;
   created_at: Date;
   updated_at: Date;
   summary: string | null;
@@ -23,10 +27,11 @@ interface ConversationDetailRow extends QueryResultRow {
   summary_upto_seq: number | string | null;
 }
 
-/** 会话头行：只取标识、标题与时间，供轻量追加路径使用（不读摘要列，故不复用详情行类型） */
+/** 会话头行：只取标识、标题、绑定与时间，供轻量追加路径使用（不读摘要列，故不复用详情行类型） */
 export interface ConversationHeaderRow extends QueryResultRow {
   id: string;
   title: string;
+  knowledge_base_id: string | null;
   created_at: Date;
   updated_at: Date;
 }

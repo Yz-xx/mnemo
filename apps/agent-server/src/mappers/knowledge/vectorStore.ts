@@ -8,6 +8,8 @@
  * 向量化（embedDocuments / embedQuery）属向量服务、与存储无关，不进本接口。
  */
 
+import type { DocumentStatus } from '../../entities/knowledge.js';
+
 export interface KnowledgeStoreOptions {
   chunkSize: number;
   chunkOverlap: number;
@@ -24,8 +26,12 @@ export interface KnowledgeStoreOptions {
 export interface StoredChunkHit {
   /** 所属文档 ID：同一文档可能命中多个片段，去重与来源标签都以它为准 */
   documentId: string;
+  /** 片段 ID：引用协议据此定位预览与高亮 */
+  chunkId: string;
   title: string;
   content: string;
+  /** 片段所在原始文件页码；文本来源或旧数据无定位信息时为 null */
+  page: number | null;
   /** 相似度（1 - 余弦距离）；是否达标由检索层判定 */
   score: number;
 }
@@ -49,12 +55,27 @@ export interface KnowledgeVectorStore {
     document: Record<string, unknown>,
     chunks: Record<string, unknown>[],
   ): Promise<void>;
+  /** 更新解析状态与失败原因；文档已被删除时返回 false */
+  setDocumentStatus(
+    id: string,
+    status: DocumentStatus,
+    failureReason: string | null,
+  ): Promise<boolean>;
+  /**
+   * 回写解析结果并重建片段：只更新已存在的文档行，
+   * 解析期间文档被删则返回 false 且不写片段，避免把已删文档写回来
+   */
+  writeDocumentContent(
+    id: string,
+    document: Record<string, unknown>,
+    chunks: Record<string, unknown>[],
+  ): Promise<boolean>;
   /** 删除文档及其全部片段 */
   removeDocument(id: string): Promise<void>;
   /** 按 id 取文档行，不存在返回 null */
   findDocument(id: string): Promise<Record<string, unknown> | null>;
-  /** 取对指定用户可见的文档行：全局共享的 + 其本人的私有文档 */
-  listDocuments(userId: number): Promise<Record<string, unknown>[]>;
+  /** 取指定库内的文档行：库的可见性由服务层校验，这里只按库过滤 */
+  listDocuments(baseId: string): Promise<Record<string, unknown>[]>;
   /** 取全部文档行，不做可见性过滤（管理端用） */
   listAllDocuments(): Promise<Record<string, unknown>[]>;
   /** 文档总数 */
@@ -63,10 +84,10 @@ export interface KnowledgeVectorStore {
   countChunks(): Promise<number>;
   /** 按分片顺序拼出文档正文：旧文档未存原文时的兜底还原 */
   stitchChunks(documentId: string): Promise<string>;
-  /** 近邻检索：按可见性预过滤后取相似度前 topK 条，分数不做阈值过滤 */
+  /** 近邻检索：按预解析的库 id 清单预过滤后取相似度前 topK 条，分数不做阈值过滤 */
   searchChunks(
     vector: number[],
-    options: { userId: number; topK: number },
+    options: { baseIds: string[]; topK: number },
   ): Promise<StoredChunkHit[]>;
   /** 校验向量维度与模型基准：换模型或换维度时抛错，避免新旧向量混算 */
   assertCompatible(dim: number): Promise<void>;

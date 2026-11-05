@@ -1,4 +1,4 @@
-import type { ChatRound, RoundAbortReason } from './round.js';
+import type { ChatRound } from './round.js';
 import type { ContextConfig } from '../../configuration/config/index.js';
 import type {
   Conversation,
@@ -8,28 +8,22 @@ import type {
 import type { ConversationStore } from '../../mappers/conversation/conversations.js';
 import type { AgentService } from '../llm/agent.js';
 import type { Logger } from '@mnemo/logger';
+import type { KnowledgeCitation } from '@mnemo/reusable';
 import { preview } from '@mnemo/logger';
+import { CHAT_ERROR_CODE } from '@mnemo/reusable';
 import { toErrorMessage } from '@mnemo/shared';
 import { ModelOverloadedError } from '../llm/modelGovernance.js';
 import { governContext } from './contextGovernance.js';
+import {
+  ABORT_ERROR,
+  ABORT_MESSAGE,
+  isContextTooLong,
+  toOptionalCitations,
+  toOptionalList,
+} from './roundAbort.js';
 
 /** 出参摘要保留的回复开头长度：足以判断回答是否切题，又不至于把整篇回答写进日志 */
 const ANSWER_PREVIEW = 200;
-
-/**
- * 中止原因对应的对外文案：中止一律推 error、绝不推 done（见 docs/adr/0015 决策 14）。
- * 只有自然完成才 done —— 客户端据此区分「读完了」与「被中途掐断，可重连补齐」。
- */
-const ABORT_MESSAGE: Record<RoundAbortReason, string> = {
-  user: '本轮已停止生成',
-  timeout: '本轮对话超时，已中断',
-  shutdown: '服务正在重启，本轮已中断',
-  'detached-limit': '本轮已超出后台续生成上限，已中断',
-};
-
-/** 集合转数组：空集合给 undefined 而非空数组（落库写 NULL、日志不出现空串） */
-const toOptionalList = (values: Set<string>): string[] | undefined =>
-  values.size > 0 ? [...values] : undefined;
 
 /** 轮次任务的输入：会话与提问已由编排层落库，这里只负责生成、落库回复与收尾 */
 export interface ChatRoundTaskInput {
@@ -81,9 +75,10 @@ export async function runChatRoundTask(input: ChatRoundTaskInput): Promise<void>
   // 正文是否已落库：正常收尾与中止路径都会尝试落库，用标志避免写重复
   let answerSaved = false;
   const usedTools = new Set<string>();
-  const usedSources = new Set<string>();
+  // 引用按文档 ID 去重：同轮多次检索命中同一文档只留一条，过程中的增量与终局清单共用它
+  const usedSources = new Map<string, KnowledgeCitation>();
 
-  /** 仅在有正文时落库，避免保存空回复；工具轨迹与检索来源一并落库，历史回看时还原标签 */
+  /** 仅在有正文时落库，避免保存空回复；工具轨迹与检索引用一并落库，历史回看时还原卡片 */
   const persistAnswer = async (): Promise<void> => {
     if (answerSaved || !answer.trim()) return;
     await conversations.append(
@@ -91,7 +86,7 @@ export async function runChatRoundTask(input: ChatRoundTaskInput): Promise<void>
       conversation.id,
       'assistant',
       answer,
-      { tools: toOptionalList(usedTools), sources: toOptionalList(usedSources) },
+      { tools: toOptionalList(usedTools), sources: toOptionalCitations(usedSources) },
       // 透传已知会话头：助手消息不改标题，无需再读一次
       conversation,
     );
@@ -116,6 +111,8 @@ export async function runChatRoundTask(input: ChatRoundTaskInput): Promise<void>
     for await (const event of agent.stream(governed.messages, {
       userId,
       fileIds,
+      // 会话首轮绑定的知识库随会话头流转：未绑定即不限库检索
+      knowledgeBaseId: conversation.knowledgeBaseId,
       // 用轮次信号：客户端断开不再触发它，只有停止 / 超时 / 停机 / 超限才会
       signal: round.signal,
       logger: log,
@@ -141,12 +138,16 @@ export async function runChatRoundTask(input: ChatRoundTaskInput): Promise<void>
         usedTools.add(event.name);
         log.debug('工具调用', { tool: event.name, status: event.status });
       }
-      // 检索来源随回复一起落库：切换历史会话时由服务端回读，标签不会凭空消失
-      if (event.type === 'source') usedSources.add(event.name);
+      // 检索引用随回复一起落库：切换历史会话时由服务端回读，引用卡片不会凭空消失
+      if (event.type === 'source') {
+        usedSources.set(event.citation.documentId, event.citation);
+      }
       // 终局清单覆盖过程中的召回结果：正文实际采用的文档才是这条回复的出处
       if (event.type === 'sources') {
         usedSources.clear();
-        for (const name of event.names) usedSources.add(name);
+        for (const citation of event.citations) {
+          usedSources.set(citation.documentId, citation);
+        }
       }
       round.publish(event);
     }
@@ -158,7 +159,9 @@ export async function runChatRoundTask(input: ChatRoundTaskInput): Promise<void>
       // SSE 不走 res.json，出参摘要须在此记录，否则流式接口的回复内容无从追溯
       answerPreview: answer.length > 0 ? preview(answer, ANSWER_PREVIEW) : undefined,
       tools: toOptionalList(usedTools)?.join(','),
-      sources: toOptionalList(usedSources)?.join(','),
+      sources: toOptionalCitations(usedSources)
+        ?.map((item) => item.title)
+        .join(','),
       // 上下文取舍：估算量与生效预算对照，可判断本轮是否触发裁剪、裁掉了多少条。
       // 字段名避开 token 子串：日志脱敏按字段名子串匹配，含 token 会被整段打成 ***
       estimatedContextSize: governed.estimatedTokens,
@@ -179,21 +182,38 @@ export async function runChatRoundTask(input: ChatRoundTaskInput): Promise<void>
       log.warn('部分回复落库失败', { error: saveError });
     }
     if (round.abortReason) {
-      // 中止原因决定文案：客户端据此知道本轮为什么停（而不是以为读完了）
+      // 中止原因决定文案与 code：客户端据此知道本轮为什么停（而不是以为读完了）
       log.warn('本轮被中止', {
         reason: round.abortReason,
         durationMs: Date.now() - startedAt,
         answerLength: answer.length,
         ...round.stats(),
       });
-      round.publish({ type: 'error', message: ABORT_MESSAGE[round.abortReason] });
+      round.publish({
+        type: 'error',
+        message: ABORT_MESSAGE[round.abortReason],
+        ...ABORT_ERROR[round.abortReason],
+      });
     } else if (error instanceof ModelOverloadedError) {
       // 过载拒绝是可重试的临时态：按警告记录，不混进错误率口径（见 docs/adr/0010 决策 17）
       log.warn('模型闸门过载，本轮被拒绝', { durationMs: Date.now() - startedAt });
-      round.publish({ type: 'error', message: toErrorMessage(error) });
+      round.publish({
+        type: 'error',
+        message: toErrorMessage(error),
+        code: CHAT_ERROR_CODE.RATE_LIMITED,
+        retryable: true,
+      });
     } else {
       log.error('本轮对话失败', { durationMs: Date.now() - startedAt, error });
-      round.publish({ type: 'error', message: toErrorMessage(error) });
+      round.publish({
+        type: 'error',
+        message: toErrorMessage(error),
+        // 上下文超限不是服务故障：不可重试，客户端据此提示用户缩短对话或新建会话
+        code: isContextTooLong(error)
+          ? CHAT_ERROR_CODE.CONTEXT_TOO_LONG
+          : CHAT_ERROR_CODE.INTERNAL_ERROR,
+        retryable: false,
+      });
     }
   } finally {
     // 收尾一律走 finish：正常完成与中止都在此关闭轮次，订阅者据此结束重放

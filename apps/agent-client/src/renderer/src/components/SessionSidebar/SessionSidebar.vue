@@ -6,7 +6,20 @@ const props = defineProps<SessionSidebarProps>();
 
 const emit = defineEmits<SessionSidebarEmits>();
 
-const { theme, toggleTheme, avatarText, formatTime, CONNECTION_TEXT } = useSessionSidebar(props);
+const {
+  theme,
+  toggleTheme,
+  avatarText,
+  formatTime,
+  baseName,
+  editingId,
+  draftTitle,
+  startRename,
+  submitRename,
+  cancelRename,
+  finishRename,
+  CONNECTION_TEXT,
+} = useSessionSidebar(props, emit);
 </script>
 
 <template>
@@ -16,6 +29,12 @@ const { theme, toggleTheme, avatarText, formatTime, CONNECTION_TEXT } = useSessi
       <button class="icon-btn" title="新建对话" @click="emit('create')">＋</button>
     </div>
 
+    <!-- 知识库入口：管理库与文档的一等入口，不再只藏在设置抽屉里 -->
+    <button class="sidebar__knowledge" type="button" @click="emit('knowledge')">
+      <span>知识库管理</span>
+      <span class="sidebar__knowledge-arrow">→</span>
+    </button>
+
     <ul class="session-list">
       <li
         v-for="item in conversations"
@@ -24,10 +43,33 @@ const { theme, toggleTheme, avatarText, formatTime, CONNECTION_TEXT } = useSessi
         :class="{ 'session--active': item.id === activeId }"
         @click="emit('select', item.id)"
       >
-        <div class="session__title">{{ item.title }}</div>
-        <div class="session__meta">
+        <!-- 重命名就地编辑：避免弹窗打断浏览，Enter 提交、Esc 取消、失焦收尾 -->
+        <input
+          v-if="editingId === item.id"
+          v-model="draftTitle"
+          class="session__rename"
+          :maxlength="24"
+          @click.stop
+          @keydown.enter.prevent="submitRename"
+          @keydown.esc.prevent="cancelRename"
+          @blur="finishRename"
+        />
+        <div v-else class="session__title">{{ item.title }}</div>
+        <div v-if="item.knowledgeBaseId" class="session__meta">
+          <span class="session__base">{{ baseName(item.knowledgeBaseId) }}</span>
+          <span>· {{ formatTime(item.updatedAt) }} · {{ item.messageCount }} 条</span>
+        </div>
+        <div v-else class="session__meta">
           {{ formatTime(item.updatedAt) }} · {{ item.messageCount }} 条
         </div>
+        <button
+          v-if="editingId !== item.id"
+          class="session__action"
+          title="重命名会话"
+          @click.stop="startRename(item)"
+        >
+          ✎
+        </button>
         <button class="session__remove" title="删除会话" @click.stop="emit('remove', item.id)">
           ×
         </button>

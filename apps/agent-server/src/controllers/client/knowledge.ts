@@ -1,94 +1,106 @@
-import type { AppDependencies } from '../../configuration/dependencies.js';
-import type { KnowledgeScope } from '../../entities/knowledge.js';
-import type { KnowledgeStore } from '../../services/knowledge/index.js';
-import type { Request, Response } from 'express';
+import type { KnowledgeDependencies } from './knowledgeSupport.js';
 import { Router } from 'express';
 import { HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { currentUserId } from '../../middleware/auth.js';
 import { requestLogger } from '../../middleware/requestLog.js';
 import {
-  addDocument,
-  describeAddFailure,
-  parseDocumentInput,
+  createBase,
+  findVisibleBase,
+  listBases,
+  parseBaseInput,
+  parseBasePatch,
+  removeBase,
+  updateBase,
 } from '../../services/knowledge/index.js';
-
-/** 新增文档入口：只做入参校验（400）与状态码，入库编排交给服务层 */
-async function createDocument(
-  req: Request,
-  res: Response,
-  knowledge: KnowledgeStore,
-  target: { scope: KnowledgeScope; userId: number },
-): Promise<void> {
-  // 校验与默认标题收在服务层：管理端全局入口共用同一套口径，避免两处各写一份
-  const parsed = parseDocumentInput(req.body);
-  if (!parsed.ok) {
-    res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
-    return;
-  }
-
-  try {
-    const document = await addDocument(knowledge, requestLogger(res), {
-      ...parsed.value,
-      scope: target.scope,
-      userId: target.userId,
-    });
-    res.status(HTTP_STATUS.CREATED).json(document);
-  } catch (error) {
-    // 同类失败对外只有 500 一种状态码（backend-design 第 3 章）
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: describeAddFailure(error) });
-  }
-}
+import { createKnowledgeDocumentRouter } from './knowledgeDocuments.js';
+import { readParam } from './knowledgeSupport.js';
 
 /**
- * 知识库接口：文档入库会同步完成切分与向量化。
- * 客户端只能上传与删除自己的私有文档；全局共享文档由管理令牌校验的接口写入。
+ * 客户端知识库接口：库 CRUD 与文档相关路由（/api/knowledge）。
+ * 库可见性：global 全员可读、private 仅归属者；维护权（建 / 改 / 删 / 上传）只属于私有库归属者，
+ * global 库（共享库）只能由管理令牌写入（见 docs/adr/0018 决策 7）。
  */
-export function createKnowledgeRouter({
-  knowledge,
-  config,
-}: Pick<AppDependencies, 'knowledge' | 'config'>): Router {
+export function createKnowledgeRouter(deps: KnowledgeDependencies): Router {
   const router = Router();
-  const adminToken = config.knowledge.adminToken;
 
-  /** 管理令牌未配置时视为不开放全局文档写入 */
-  const isAdmin = (req: Request): boolean =>
-    adminToken !== '' && req.get('x-admin-token') === adminToken;
-
-  router.get('/documents', async (_req, res) => {
-    res.json(await knowledge.list(currentUserId(res)));
+  /** 库列表：当前用户可见的库 + 每库文档数 */
+  router.get('/bases', async (_req, res) => {
+    res.json(await listBases(deps.knowledgeBases, currentUserId(res)));
   });
 
-  router.post('/documents', async (req, res) => {
-    await createDocument(req, res, knowledge, { scope: 'private', userId: currentUserId(res) });
+  /** 新建私有库：客户端不可建 global 库，visibility 由服务层固定 */
+  router.post('/bases', async (req, res) => {
+    const parsed = parseBaseInput(req.body);
+    if (!parsed.ok) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
+      return;
+    }
+    const base = await createBase(
+      deps.knowledgeBases,
+      requestLogger(res),
+      currentUserId(res),
+      parsed.value,
+    );
+    res.status(HTTP_STATUS.CREATED).json(base);
   });
 
-  router.post('/global/documents', async (req, res) => {
-    if (!isAdmin(req)) {
-      // 权限不足按“不存在”处理（backend-design 第 4 章），不暴露该接口的存在
+  /** 库详情：不可见（含不存在）一律 404，不泄漏他人库是否存在 */
+  router.get('/bases/:id', async (req, res) => {
+    const base = await findVisibleBase(
+      deps.knowledgeBases,
+      currentUserId(res),
+      readParam(req, 'id'),
+    );
+    if (!base) {
       res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.NOT_FOUND });
       return;
     }
-    await createDocument(req, res, knowledge, { scope: 'global', userId: currentUserId(res) });
+    res.json(base);
   });
 
-  router.delete('/documents/:id', async (req, res) => {
-    const userId = currentUserId(res);
-    // 权限判定只算一次：删除与随后的日志都要用，避免同一次请求里重复比对令牌
-    const admin = isAdmin(req);
-    const removed = await knowledge.remove(req.params.id, { userId, isAdmin: admin });
-    if (!removed) {
-      res.status(HTTP_STATUS.NOT_FOUND).json({ message: '文档不存在或无权删除' });
+  /** 编辑库：改名 / 改描述，仅归属者；global 库不可编辑（按不存在处理） */
+  router.patch('/bases/:id', async (req, res) => {
+    const id = readParam(req, 'id');
+    // PATCH 语义：只校验并写入出现过的字段，未出现的保持原值
+    const parsed = parseBasePatch(req.body);
+    if (!parsed.ok) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
       return;
     }
-    // 删除不可逆，留一条业务记录便于回溯是谁操作了全局文档
-    requestLogger(res).info('文档已删除', {
-      documentId: req.params.id,
-      userId,
-      isAdmin: admin,
-    });
+    const updated = await updateBase(
+      deps.knowledgeBases,
+      requestLogger(res),
+      currentUserId(res),
+      id,
+      parsed.value,
+    );
+    if (!updated) {
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.NOT_FOUND });
+      return;
+    }
+    res.json(updated);
+  });
+
+  /** 删除库：仅归属者可删私有库；库内文档随之级联删除，二次确认由客户端承担 */
+  router.delete('/bases/:id', async (req, res) => {
+    const removed = await removeBase(
+      deps.knowledgeBases,
+      deps.knowledge,
+      deps.knowledgeIngest,
+      requestLogger(res),
+      currentUserId(res),
+      readParam(req, 'id'),
+    );
+    if (!removed) {
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.NOT_FOUND });
+      return;
+    }
     res.status(HTTP_STATUS.NO_CONTENT).end();
   });
+
+  // 文档相关路由独立成模块：单文件行数达标，对外入口保持不变
+  router.use(createKnowledgeDocumentRouter(deps));
 
   return router;
 }

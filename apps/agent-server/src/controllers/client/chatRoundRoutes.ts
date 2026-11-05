@@ -5,6 +5,7 @@ import { ERROR_MESSAGE } from '../../common/messages.js';
 import { METRIC } from '../../infrastructure/observability/index.js';
 import { currentUserId } from '../../middleware/auth.js';
 import { pipeRoundFrames } from '../../services/conversation/roundPipe.js';
+import { pathParam } from '../../utils/request.js';
 
 /** 续传与停止接口需要的依赖 */
 type RoundRouteDependencies = Pick<AppDependencies, 'rounds' | 'config' | 'metrics'>;
@@ -26,10 +27,7 @@ export async function handleRoundResume(
   res: Response,
 ): Promise<void> {
   // 路径参数在 Express 类型下可能是数组，非字符串一律按空串（随后按 404 处理）
-  const round = rounds.get(
-    currentUserId(res),
-    typeof req.params.roundId === 'string' ? req.params.roundId : '',
-  );
+  const round = rounds.get(currentUserId(res), pathParam(req.params.roundId));
   if (!round) {
     // 轮次不存在 / 已过期 / 不属于当前用户：一律 404，不区分原因
     metrics.increment(METRIC.SSE_RESUME_FAILED);
@@ -53,10 +51,7 @@ export function handleRoundStop(
   res: Response,
 ): void {
   // 路径参数在 Express 类型下可能是数组，非字符串一律按空串（随后按 404 处理）
-  const round = rounds.get(
-    currentUserId(res),
-    typeof req.params.roundId === 'string' ? req.params.roundId : '',
-  );
+  const round = rounds.get(currentUserId(res), pathParam(req.params.roundId));
   if (!round) {
     res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.ROUND_NOT_FOUND });
     return;

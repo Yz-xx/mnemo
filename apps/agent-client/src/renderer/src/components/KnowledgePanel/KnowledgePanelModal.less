@@ -1,0 +1,58 @@
+// 知识库面板的确认弹窗：命名 / 删除等二次确认共用同一套浮层。
+
+// 对话框：居中浮层，遮罩点击等同取消
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal__mask {
+  position: absolute;
+  inset: 0;
+  background: var(--mask);
+}
+
+.modal__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(420px, calc(100% - 48px));
+  padding: 22px;
+  border: 1px solid var(--gold-line-strong);
+  border-radius: @radius;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.modal__title {
+  margin: 0;
+  font-family: @font-display;
+  font-size: 16px;
+  letter-spacing: @tracking-display;
+}
+
+.modal__text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.modal__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

@@ -70,11 +70,11 @@ describe('createToolBudget', () => {
     expect(budget.admit(wide(10))).toBeNull();
   });
 
-  it('交付过的文档可登记并查得，供检索去重', () => {
+  it('交付过的片段可登记并查得，供检索去重', () => {
     const budget = createToolBudget(100);
 
-    expect(budget.deliveredDocuments.has('doc-1')).toBe(false);
-    budget.deliveredDocuments.add('doc-1');
-    expect(budget.deliveredDocuments.has('doc-1')).toBe(true);
+    expect(budget.deliveredChunks.has('chunk-1')).toBe(false);
+    budget.deliveredChunks.add('chunk-1');
+    expect(budget.deliveredChunks.has('chunk-1')).toBe(true);
   });
 });

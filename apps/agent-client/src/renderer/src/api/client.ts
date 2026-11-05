@@ -3,12 +3,21 @@ import type {
   AuthUser,
   Conversation,
   ConversationSummary,
+  KnowledgeBase,
+  KnowledgeBaseView,
   KnowledgeDocument,
 } from '../types';
-import type { ChatStreamEvent, ChatStreamFrame } from '@mnemo/reusable';
+import type { KnowledgeUploadOptions } from './knowledgeUpload';
+import type {
+  ChatErrorCode,
+  ChatStreamEvent,
+  ChatStreamFrame,
+  KnowledgeCitation,
+} from '@mnemo/reusable';
 import type { BaseUrlLike, HttpClient } from '@mnemo/shared';
 import { encryptPassword, isNotFound, isUnauthorized, parseSSEStream } from '@mnemo/reusable';
 import { createHttpClient } from '@mnemo/shared';
+import { uploadKnowledgeFile } from './knowledgeUpload';
 
 // 渲染进程只有本模块依赖 @mnemo/*（见 desktop-design 第 2 章）：其余模块要用共享能力
 // 也经此处转发，避免第二个模块直接引包，让产物里多带无关代码
@@ -17,7 +26,8 @@ export { SESSION_EXPIRED_MESSAGE } from '@mnemo/reusable';
 export { toErrorMessage } from '@mnemo/shared';
 
 // 共享能力统一从本模块转发，调用方不直接引 @mnemo/*
-export type { ChatStreamEvent, ChatStreamFrame };
+export type { ChatErrorCode, ChatStreamEvent, ChatStreamFrame, KnowledgeCitation };
+export { CHAT_ERROR_CODE } from '@mnemo/reusable';
 export { isUnauthorized, isNotFound };
 
 export interface SendChatPayload {
@@ -27,6 +37,8 @@ export interface SendChatPayload {
   fileIds?: string[];
   /** 客户端生成的轮次 ID：既作本轮的幂等键，也是断线后重连续传的定位锚 */
   roundId?: string;
+  /** 新会话首轮绑定的知识库：限定检索范围；不传即不限库（沿旧行为） */
+  knowledgeBaseId?: string;
 }
 
 /** 服务端健康信息，用于界面展示当前模型与知识库状态 */
@@ -47,6 +59,10 @@ export interface UploadedFileInfo {
   createdAt: string;
 }
 
+/** 文档预览：文本类返回解析后全文，二进制类返回原始文件字节 */
+export type DocumentPreview =
+  { kind: 'text'; content: string; document: KnowledgeDocument } | { kind: 'file'; blob: Blob };
+
 /**
  * 后端智能体服务的 HTTP 客户端：薄外壳，构造时基于 createHttpClient 创建实例，
  * 业务方法转发到通用客户端。
@@ -58,11 +74,16 @@ export interface UploadedFileInfo {
  */
 export class AgentApi {
   private readonly api: HttpClient;
+  /** XHR 上传要自己拼完整地址：通用客户端不外露 baseURL，构造时留一份取值器 */
+  private readonly baseUrl: BaseUrlLike;
+  private readonly getToken: () => string;
 
   constructor(baseUrl: BaseUrlLike, token: string | (() => string) = '') {
+    this.baseUrl = baseUrl;
+    this.getToken = () => (typeof token === 'function' ? token() : token);
     this.api = createHttpClient({
       baseURL: baseUrl,
-      getToken: () => (typeof token === 'function' ? token() : token),
+      getToken: this.getToken,
     });
   }
 
@@ -120,20 +141,92 @@ export class AgentApi {
     return this.api.get<Conversation>(`/api/conversations/${id}`);
   }
 
+  /** 重命名会话：标题非空且限长（服务端同口径校验），不属于当前用户按不存在处理 */
+  renameConversation(id: string, title: string): Promise<{ id: string; title: string }> {
+    return this.api.patch<{ id: string; title: string }>(`/api/conversations/${id}`, { title });
+  }
+
   deleteConversation(id: string): Promise<void> {
     return this.api.delete<void>(`/api/conversations/${id}`);
   }
 
-  listDocuments(): Promise<KnowledgeDocument[]> {
-    return this.api.get<KnowledgeDocument[]>('/api/knowledge/documents');
+  /** 当前用户可见的知识库列表（全局共享 + 自己的私有库），附每库文档数 */
+  listKnowledgeBases(): Promise<KnowledgeBaseView[]> {
+    return this.api.get<KnowledgeBaseView[]>('/api/knowledge/bases');
   }
 
-  addDocument(input: { title: string; content: string }): Promise<KnowledgeDocument> {
-    return this.api.post<KnowledgeDocument>('/api/knowledge/documents', input);
+  /** 新建私有库：客户端不可建 global 库 */
+  createKnowledgeBase(input: { name: string; description?: string }): Promise<KnowledgeBase> {
+    return this.api.post<KnowledgeBase>('/api/knowledge/bases', input);
+  }
+
+  /** 编辑库：改名或改描述，仅归属者可用 */
+  updateKnowledgeBase(
+    id: string,
+    input: { name?: string; description?: string | null },
+  ): Promise<KnowledgeBase> {
+    return this.api.patch<KnowledgeBase>(`/api/knowledge/bases/${id}`, input);
+  }
+
+  /** 删除库：库内文档与片段随之级联删除 */
+  deleteKnowledgeBase(id: string): Promise<void> {
+    return this.api.delete<void>(`/api/knowledge/bases/${id}`);
+  }
+
+  listDocuments(knowledgeBaseId: string): Promise<KnowledgeDocument[]> {
+    return this.api.get<KnowledgeDocument[]>(`/api/knowledge/bases/${knowledgeBaseId}/documents`);
+  }
+
+  addDocument(
+    knowledgeBaseId: string,
+    input: { title: string; content: string },
+  ): Promise<KnowledgeDocument> {
+    return this.api.post<KnowledgeDocument>(
+      `/api/knowledge/bases/${knowledgeBaseId}/documents`,
+      input,
+    );
+  }
+
+  /**
+   * 知识库文件上传：独立 XHR 模块拿进度与取消能力（fetch 没有上传进度事件）。
+   * 返回时只代表文件已落盘，解析状态要轮询文档列表。
+   */
+  uploadKnowledgeFile(
+    knowledgeBaseId: string,
+    file: File,
+    options: KnowledgeUploadOptions = {},
+  ): Promise<KnowledgeDocument> {
+    const raw = typeof this.baseUrl === 'function' ? this.baseUrl() : this.baseUrl;
+    return uploadKnowledgeFile({
+      baseUrl: raw.replace(/\/$/, ''),
+      token: this.getToken(),
+      knowledgeBaseId,
+      file,
+      options,
+    });
+  }
+
+  /** 重试解析：仅 failed 文档可用，服务端重置 processing 后重新入队 */
+  retryDocument(id: string): Promise<KnowledgeDocument> {
+    return this.api.post<KnowledgeDocument>(`/api/knowledge/documents/${id}/retry`);
   }
 
   deleteDocument(id: string): Promise<void> {
     return this.api.delete<void>(`/api/knowledge/documents/${id}`);
+  }
+
+  /**
+   * 取文档预览：文本类返回解析后全文，二进制类返回原始文件字节。
+   * 同一个接口按文档类型给出不同内容，这里按响应类型分派，调用方不必再判类型。
+   */
+  async previewDocument(id: string): Promise<DocumentPreview> {
+    const blob = await this.api.get<Blob>(`/api/knowledge/documents/${id}/preview`, {
+      responseType: 'blob',
+    });
+    if (blob.type.includes('json')) {
+      return JSON.parse(await blob.text()) as DocumentPreview;
+    }
+    return { kind: 'file', blob };
   }
 
   /** 逐块读取 SSE 响应，解析为带序号的帧流（序号供断线续传定位断点） */

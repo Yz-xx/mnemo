@@ -1,0 +1,85 @@
+// 消息流：滚动容器、虚拟列表定位、空状态与行内错误提示。
+
+.chat__list {
+  .content-gutter();
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  // 消息间距由虚拟列表的偏移表统一计入（windowing.ts 的 MESSAGE_GAP），这里不再设 gap：
+  // 虚拟项是绝对定位的，gap 对它们不生效
+  overflow-y: auto;
+  padding-top: 44px;
+  padding-bottom: 44px;
+  // 稳定滚动条会固定占用 10px，右内边距相应减少，正文右边界才能与顶栏、输入条对齐
+  padding-right: ~'max(14px, calc((100% - @{content-max}) / 2 - 10px))';
+  // flex 子项默认 min-height:auto 会拒绝收缩，导致滚动条落到 body 上
+  min-height: 0;
+  // 滚动到两端时避免子元素被卡片边缘裁切
+  scrollbar-gutter: stable;
+  // 书写面底纹：金色点阵极淡地铺在对话区，暗示这是一块“可书写的面”
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+// 虚拟列表内层：高度等于全部消息的累计高度，用来撑起滚动条；消息本身脱离文档流按偏移摆放。
+// 必须写 flex: none，否则作为 flex 子项会被容器高度压缩，滚动条随之失效
+.chat__virtual {
+  position: relative;
+  flex: none;
+  width: 100%;
+}
+
+// 一条已挂载的消息：绝对定位到累计偏移上，translate 不触发布局，滚动时只补挂进出窗口的条目
+.chat__slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+// 空状态：衬线标题配一行说明，像一张空白文档的开头
+.chat__placeholder {
+  .enter();
+  margin: auto;
+  max-width: 440px;
+  text-align: center;
+
+  // 标题上方一道短金线，是“开卷”的装帧暗示
+  &::before {
+    content: '';
+    display: block;
+    width: 34px;
+    height: @hairline;
+    margin: 0 auto 22px;
+    background-image: var(--hairline);
+    .draw-rule(180ms);
+  }
+}
+
+.chat__placeholder-title {
+  margin: 0 0 12px;
+  font-family: @font-display;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: @tracking-display;
+}
+
+.chat__placeholder-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+// 错误提示：左侧细色条代替整块圆角底，与其他“行内提示”区分
+.chat__error {
+  .content-gutter(margin);
+  padding: 9px 14px;
+  border-left: 2px solid var(--danger);
+  border-radius: 0 @radius-sm @radius-sm 0;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+}

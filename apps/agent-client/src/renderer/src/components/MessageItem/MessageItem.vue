@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import type { ChatMessage, ChatStep, GeneratedFileInfo } from '../../types';
+import type { ChatCitation, ChatMessage, GeneratedFileInfo } from '../../types';
 import { computed, onBeforeUpdate, onUpdated, ref, watch } from 'vue';
 import { beginDomUpdate, measureRender } from '../../perf/renderMetrics';
+import { contextHint, stepLabel } from './labels';
 import { renderBlocks } from './markdown';
-
-/** 工具标签文案：有 detail 时用后端给的人话，缺省（历史回看）时退回工具名 */
-function stepLabel(step: ChatStep): string {
-  if (!step.detail) return step.running ? `调用工具 ${step.name}` : `完成 ${step.name}`;
-  return step.running ? `正在${step.detail}` : `已完成 ${step.detail}`;
-}
+import SourceChips from './SourceChips.vue';
 
 const props = defineProps<{ message: ChatMessage }>();
 
-/** 生成的文件由上层负责取字节并落盘，本组件只上报点击 */
-const emit = defineEmits<{ download: [file: GeneratedFileInfo] }>();
+/** 生成的文件由上层负责取字节并落盘，本组件只上报点击；引用同理，抽屉由上层渲染 */
+const emit = defineEmits<{
+  download: [file: GeneratedFileInfo];
+  preview: [citation: ChatCitation];
+}>();
 
 // 去掉首尾空白，规避模型首个 token 为换行时出现的顶部空行
 const content = computed(() => props.message.content.trim());
@@ -42,15 +41,6 @@ watch(
     if (hasContent) thinkingExpanded.value = false;
   },
 );
-
-// 上下文治理提示：服务端只在真的裁掉历史时下发，历史回看时缺省。
-// 摘要版与直接丢弃版分开说，用户才知道那段历史是被压缩还是被丢掉
-const contextHint = computed(() => {
-  const context = props.message.context;
-  if (!context) return '';
-  const count = `${context.trimmedMessages} 条更早的对话`;
-  return context.summarized ? `已将 ${count}压缩为摘要` : `已丢弃 ${count}`;
-});
 
 // 复制反馈：按钮自身临时变成对勾，1.5 秒后回落到常态，不弹提示打断阅读
 const copied = ref(false);
@@ -115,20 +105,24 @@ async function copyContent() {
       <!-- 按顶层块逐块渲染：内容未变的块 HTML 字符串相同，Vue 依赖 key 复用其 DOM，
            流式增量只重建最后一块，不再整篇重排 -->
       <div v-else class="message__content markdown">
+        <!-- 正文是 markdown-it 的渲染产物，且实例按 html: false 构造（见 markdown.ts），
+             原始 HTML 已转义为文本；此处的 v-html 只注入这份受控结果，故对下方元素关闭该规则 -->
+        <!-- eslint-disable vue/no-v-html -->
         <div
           v-for="(block, index) in renderedBlocks"
           :key="index"
           class="markdown__block"
           v-html="block"
         />
+        <!-- eslint-enable vue/no-v-html -->
       </div>
       <!-- 本轮提问附带的文件：回看这条消息时能看出回答是基于哪些文件 -->
       <div v-if="message.attachments?.length" class="message__files">
         <span v-for="name in message.attachments" :key="name" class="chip">{{ name }}</span>
       </div>
       <!-- 上下文治理痕迹：只在服务端真的裁掉历史时渲染（历史回看时不还原） -->
-      <div v-if="isAssistant && contextHint" class="message__context">
-        <span class="chip chip--context">{{ contextHint }}</span>
+      <div v-if="isAssistant && contextHint(message.context)" class="message__context">
+        <span class="chip chip--context">{{ contextHint(message.context) }}</span>
       </div>
       <!-- 工具调用记录属于“过程信息”，排在正文之后，避免正文首行被顶下去 -->
       <div v-if="message.steps?.length" class="message__steps">
@@ -143,13 +137,12 @@ async function copyContent() {
           {{ stepLabel(step) }}
         </span>
       </div>
-      <!-- 本轮实际采用的来源文档：工具结束后先推已注入的文档，流末尾再由服务端按正文标注覆盖；
-           正文一处都没标注时终局清单为空，检索到但没采用的文档不显示出处 -->
-      <div v-if="message.sources?.length" class="message__sources">
-        <span v-for="name in message.sources" :key="name" class="chip chip--source">
-          来源《{{ name }}》
-        </span>
-      </div>
+      <!-- 本轮采用的引用：来源卡片由子组件统一渲染，点击向上冒泡，抽屉由对话区负责 -->
+      <SourceChips
+        v-if="message.sources?.length"
+        :sources="message.sources"
+        @preview="emit('preview', $event)"
+      />
       <!-- 智能体生成的导出文件：点一下就能存到本地，是这条回复的“交付物” -->
       <div v-if="message.files?.length" class="message__files">
         <button

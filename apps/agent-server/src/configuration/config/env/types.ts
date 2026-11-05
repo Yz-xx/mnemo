@@ -73,6 +73,8 @@ export interface ConcurrencyConfig {
   chat: GateConfig;
   /** 上传解析档：CPU 密集，单独配额 */
   upload: GateConfig;
+  /** 知识库解析档：文件解析 + 向量化是长任务，与上传请求分开计量，防止大文件解析挤占上传额度 */
+  ingest: GateConfig;
   /** 普通读写档：会话 / 文件 / 知识库 / 管理端，配额较宽 */
   crud: GateConfig;
   /** 单轮对话最长时长（毫秒）：到点中断并按已产出收尾，防止半死连接永久占住额度 */

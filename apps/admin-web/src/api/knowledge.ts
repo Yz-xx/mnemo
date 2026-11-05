@@ -1,6 +1,11 @@
 // 知识库文档管理接口：列表、新增、内容读取、编辑、删除与批量删除。
 // 统一经 adminApi 发请求，鉴权由请求头里的 Bearer 令牌承担，此处不再重复拼装。
-import type { AdminKnowledgeContent, AdminKnowledgeDocument, PageResult } from './types';
+import type {
+  AdminKnowledgeBase,
+  AdminKnowledgeContent,
+  AdminKnowledgeDocument,
+  PageResult,
+} from './types';
 import { adminApi } from './client';
 
 /** 知识库文档查询条件：keyword 按标题包含匹配 */
@@ -8,6 +13,16 @@ export interface KnowledgeQuery {
   keyword: string;
   page: number;
   pageSize: number;
+}
+
+/** 知识库列表：全部库（含各用户私有库）+ 每库文档数与归属账号名 */
+export function listKnowledgeBases(): Promise<AdminKnowledgeBase[]> {
+  return adminApi.get<AdminKnowledgeBase[]>('/api/admin/knowledge/bases');
+}
+
+/** 删除知识库：库内文档与片段级联清除，管理端可删任意库 */
+export function deleteKnowledgeBase(id: string): Promise<void> {
+  return adminApi.delete<void>(`/api/admin/knowledge/bases/${id}`);
 }
 
 /** 知识库文档列表：管理视角，含各用户的私有文档与归属账号名 */

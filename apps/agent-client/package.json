@@ -27,6 +27,7 @@
   "dependencies": {
     "@mnemo/reusable": "workspace:*",
     "@mnemo/shared": "workspace:*",
-    "markdown-it": "^15.0.2"
+    "markdown-it": "^15.0.2",
+    "pdfjs-dist": "^6.3.289"
   }
 }

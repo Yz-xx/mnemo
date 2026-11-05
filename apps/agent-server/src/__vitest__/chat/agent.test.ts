@@ -143,16 +143,13 @@ async function runStream(
   vision: VisionReader = FAKE_VISION,
   /** 覆盖上下文配置：用于把单轮额度压到 0，验证超额度时的表现 */
   context?: Partial<AppConfig['llm']['context']>,
+  /** 知识库替身：默认不带 search，走「预检索失败不阻断」路径 */
+  knowledge: KnowledgeStore = {} as unknown as KnowledgeStore,
 ): Promise<BaseMessage[]> {
   const config: AppConfig = context
     ? { ...CONFIG, llm: { ...CONFIG.llm, context: { ...CONFIG.llm.context, ...context } } }
     : CONFIG;
-  const service = new AgentService(
-    config,
-    {} as unknown as KnowledgeStore,
-    files as unknown as FileStore,
-    vision,
-  );
+  const service = new AgentService(config, knowledge, files as unknown as FileStore, vision);
   // 组装已上提到 chatStream 层，这里直接给组装好的消息
   const messages: BaseMessage[] = [new HumanMessage('这张图里是什么？')];
 
@@ -224,6 +221,55 @@ describe('AgentService 附件预读注入', () => {
     expect(hint).toContain('预算上限');
     // 视觉模型转述的正文没有进来
     expect(hint).not.toContain('7');
+  });
+});
+
+describe('AgentService 知识库预检索', () => {
+  beforeEach(() => {
+    captured.rounds.length = 0;
+  });
+
+  /** 一条命中片段：模型即使不调用检索工具，也应在本轮上下文里读到它 */
+  const HIT = {
+    documentId: 'd-1',
+    chunkId: 'c-1',
+    title: 'JS面试题.txt',
+    page: 22,
+    content: '86. 说说 JavaScript 闭包的实现原理？答：闭包的根源是词法作用域。',
+    score: 0.63,
+  };
+
+  it('模型未调用检索工具时，命中片段仍被注入上下文并带上来源标题', async () => {
+    const service = new AgentService(
+      CONFIG,
+      { search: async () => [HIT] } as unknown as KnowledgeStore,
+      new FakeFiles() as unknown as FileStore,
+      FAKE_VISION,
+    );
+    const messages: BaseMessage[] = [new HumanMessage('给我找十道常见的 JS 面试题')];
+    // 替身 agent 没有正文，预检索命中后会多出一条「终局来源为空」的事件
+    for await (const event of service.stream(messages, { userId: 1, fileIds: [] })) {
+      expect(event.type).toBe('sources');
+    }
+
+    // 预检索结果作为系统补充追加在用户消息之后，模型必须据此作答
+    const injected = captured.rounds.at(-1)?.messages ?? [];
+    expect(injected.at(-1)).toBeInstanceOf(SystemMessage);
+    const hint = String(findHint(injected)?.content);
+    expect(hint).toContain('JS面试题.txt');
+    expect(hint).toContain('闭包');
+    expect(hint).toContain('标注来源');
+  });
+
+  it('知识库检索抛错时不阻断本轮，原消息保持不变', async () => {
+    const messages = await runStream([], new FakeFiles(), FAKE_VISION, undefined, {
+      search: async () => {
+        throw new Error('db down');
+      },
+    } as unknown as KnowledgeStore);
+
+    expect(findHint(messages)).toBeUndefined();
+    expect(messages).toHaveLength(1);
   });
 });
 

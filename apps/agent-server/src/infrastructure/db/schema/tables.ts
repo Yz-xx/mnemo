@@ -31,12 +31,29 @@ const CREATE_TABLES = [
     expires_at timestamptz(3) NOT NULL
   )`,
 
+  // 知识库先建：conversations 与 knowledge_documents 都要按外键引用它。
+  // 可见性的配对约束在表上兜底：global 库无归属、private 库必有归属（见 docs/adr/0018）
+  `CREATE TABLE IF NOT EXISTS knowledge_bases (
+    id uuid PRIMARY KEY,
+    name varchar(128) NOT NULL,
+    description text NULL,
+    visibility varchar(16) NOT NULL,
+    owner_user_id bigint NULL CHECK (owner_user_id >= 0),
+    created_at timestamptz(3) NOT NULL,
+    updated_at timestamptz(3) NOT NULL,
+    CONSTRAINT ck_knowledge_bases_visibility CHECK (
+      (visibility = 'global' AND owner_user_id IS NULL)
+      OR (visibility = 'private' AND owner_user_id IS NOT NULL)
+    )
+  )`,
+
   `CREATE TABLE IF NOT EXISTS conversations (
     id uuid PRIMARY KEY,
     user_id bigint NOT NULL CHECK (user_id >= 0),
     title varchar(128) NOT NULL,
     summary text NULL,
     summary_upto_seq bigint NULL CHECK (summary_upto_seq >= 0),
+    knowledge_base_id uuid NULL REFERENCES knowledge_bases (id) ON DELETE SET NULL,
     created_at timestamptz(3) NOT NULL,
     updated_at timestamptz(3) NOT NULL
   )`,
@@ -93,6 +110,8 @@ const CREATE_TABLES = [
 /** 常规索引：IF NOT EXISTS 幂等 */
 const CREATE_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions (user_id)',
+  // 列表与检索都要按归属过滤可见库，走这条索引
+  'CREATE INDEX IF NOT EXISTS idx_knowledge_bases_owner ON knowledge_bases (owner_user_id)',
   'CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations (user_id, updated_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages (conversation_id, seq)',
   'CREATE INDEX IF NOT EXISTS idx_files_user ON files (user_id, created_at)',

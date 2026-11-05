@@ -1,0 +1,66 @@
+@import (reference) '../../styles/variables.less';
+@import (reference) '../../styles/mixins.less';
+@import (reference) '../../styles/motion.less';
+
+// 检索来源卡片：与「执行过程」的普通标签分开，它交代的是答案的出处
+.message__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chip--source {
+  display: inline-flex;
+  align-items: center;
+  border-color: var(--gold-line-strong);
+  background: var(--accent-soft);
+  // 文字取 accent-strong 而非 accent：亮色下 accent 叠软金底不足 4.5:1（11px 小字的下限），
+  // accent-strong 在两套主题下都有余量。此处刻意不写具体比值——底色随消息所处的容器背景变化，写死必然失准
+  color: var(--accent-strong);
+  // 文档名长短不可控，要允许标签内折行：用 anywhere 而非 break-word，
+  // 只有前者会把 min-content 一并压小，作为 flex 子项的标签才真折得动
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color @ease-quick,
+    color @ease-quick;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+// 旧版来源只有文档名：保留标签外观，但不给可点击的暗示
+.chip--source-static {
+  cursor: default;
+  opacity: 0.85;
+}
+
+// 序号角标：与来源卡片一起回答「回答里的第几条出处」
+.chip__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  padding: 0 3px;
+  border-radius: @radius-sm;
+  background: var(--gold-line);
+  color: var(--accent-strong);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.chip__page {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: 10px;
+}

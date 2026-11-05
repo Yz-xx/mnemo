@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { Router } from 'express';
 import { listAuditLogs } from '../../services/logging/auditLogs.js';
 import { parsePaging } from '../../utils/pagination.js';
+import { keywordParam } from '../../utils/request.js';
 
 /**
  * 管理端操作审计：只读，记录由审计中间件在管理端写操作结束时自动写入。
@@ -17,7 +18,7 @@ export function createAdminAuditRouter({
   /** 审计列表：按路径包含匹配 + 分页，操作账号名一次批量还原 */
   router.get('/', async (req: Request, res: Response) => {
     const { page, pageSize } = parsePaging(req.query);
-    const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
+    const keyword = keywordParam(req.query.keyword);
 
     const query = { keyword, page, pageSize };
     const result = await listAuditLogs({ auditLogs, users }, query);

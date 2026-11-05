@@ -52,6 +52,8 @@
   --scrollbar: #322c24;
   --scrollbar-hover: #4d4335;
   --mask: rgba(6, 5, 4, 0.68);
+  // PDF 纸面：不随主题变暗——原文本身就是白纸，强行反色会让高亮与版式失真
+  --pdf-page: #fdfcf9;
   // 对话区背景的金色点阵
   --grid-dot: rgba(211, 174, 107, 0.075);
 }
@@ -97,6 +99,8 @@
   --scrollbar: #d5c9b0;
   --scrollbar-hover: #b9a781;
   --mask: rgba(27, 25, 21, 0.32);
+  // PDF 纸面：与深色主题同样保持纸白，不做主题反色
+  --pdf-page: #ffffff;
   --grid-dot: rgba(138, 106, 47, 0.1);
 }
 
@@ -127,7 +131,7 @@
 // 深/亮互换时前景色与背景色若同时插值，亮度必然在中途交叉，文字会短暂失去
 // 对比度；对全部元素（*）做颜色过渡还会让每个文本片段反复重算字体抗锯齿，
 // 两者都会表现为“字闪一下”。
-@theme-surfaces: ~'body, .sidebar, .chat, .chat__error, .composer, .message__avatar, .message__content, .markdown pre, .markdown code, .drawer__panel, .drawer__mask, .field__input, .doc, .session, .tab--active, .btn, .icon-btn, .chip, .auth__card, .auth__endpoint';
+@theme-surfaces: ~'body, .sidebar, .chat, .chat__error, .composer, .message__avatar, .message__content, .markdown pre, .markdown code, .drawer__panel, .drawer__mask, .field__input, .doc, .session, .tab--active, .btn, .icon-btn, .chip, .auth__card, .auth__endpoint, .kb-card, .kb-drop, .modal__panel';
 
 // 主题切换时的临时过渡：由 useTheme 在切换瞬间挂到根节点，动画结束即移除。
 .theme-transition {

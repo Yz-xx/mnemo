@@ -1,4 +1,5 @@
 // 渲染进程与服务端共享的数据契约
+import type { KnowledgeCitation } from './api/client';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -35,14 +36,24 @@ export interface ChatMessage {
    */
   attachments?: string[];
   /**
-   * 助手本轮实际采用的来源文档名：流式对话中先由 SSE source 事件累积「已注入上下文」的文档，
+   * 助手本轮实际采用的来源文档：流式对话中先由 SSE source 事件累积「已注入上下文」的引用，
    * 流末尾再由 sources 事件按正文标注覆盖；随回复落库，回看时从服务端返回。
    * 正文一处都没标注时终局清单为空，检索到但没采用的文档不显示出处。
    */
-  sources?: string[];
+  sources?: MessageSource[];
   /** 智能体本轮生成的导出文件，随 `file` 流事件下发，点击即可保存到本地 */
   files?: GeneratedFileInfo[];
 }
+
+/**
+ * 助手本轮采用的引用：结构直接取共享协议，避免两端手抄后漂移。
+ * 这里只是类型引入（编译期擦除，不产生运行时依赖），也经 api/client 的转发口，
+ * 渲染进程对 @mnemo/* 的运行时依赖仍只有 client.ts 一处。
+ */
+export type ChatCitation = KnowledgeCitation;
+
+/** 来源可能是可定位引用，也可能是旧版存档的文档名 */
+export type MessageSource = ChatCitation | string;
 
 /** 本轮上下文治理痕迹：仅在服务端真的裁掉历史时才有值 */
 export interface ChatContext {
@@ -76,6 +87,8 @@ export interface GeneratedFileInfo {
 export interface ConversationSummary {
   id: string;
   title: string;
+  /** 首轮绑定的知识库：条目据此显示绑定库；「不限库」会话缺省 */
+  knowledgeBaseId?: string;
   updatedAt: string;
   messageCount: number;
 }
@@ -97,12 +110,42 @@ export interface AuthSession {
   user: AuthUser;
 }
 
-/** 知识库文档摘要 */
+/** 知识库可见性：global 全员可读，private 仅归属者可见 */
+export type KnowledgeVisibility = 'global' | 'private';
+
+/** 知识库：文档的归属容器，检索范围与会话绑定都以库为单元 */
+export interface KnowledgeBase {
+  id: string;
+  name: string;
+  description: string | null;
+  visibility: KnowledgeVisibility;
+  ownerUserId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 库列表项：在库字段之上附文档数 */
+export interface KnowledgeBaseView extends KnowledgeBase {
+  documentCount: number;
+}
+
+/** 文档解析状态：上传即 processing，解析成功转 ready，失败落 failed 并带原因 */
+export type KnowledgeDocumentStatus = 'processing' | 'ready' | 'failed';
+
+/** 知识库文档摘要：归属由所属库表达 */
 export interface KnowledgeDocument {
   id: string;
   title: string;
+  knowledgeBaseId: string;
   chunks: number;
   createdAt: string;
+  /** 上传文件的原名、大小与类型：粘贴文本入库的文档三项均为 null */
+  fileName: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  status: KnowledgeDocumentStatus;
+  /** 解析失败的中文原因：仅 status 为 failed 时有值，供列表展示与重试判断 */
+  failureReason: string | null;
 }
 
 /** 待发送的附件：选中后立即上传，拿到服务端 ID 才能在发送消息时引用 */

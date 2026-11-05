@@ -1,0 +1,190 @@
+@import (reference) '../../styles/variables.less';
+@import (reference) '../../styles/mixins.less';
+@import (reference) '../../styles/motion.less';
+
+// 引用抽屉：从右侧滑出，展示引用命中的原文。
+// 比设置抽屉更宽：PDF 页面按宽度缩放，过窄会把整页压得看不清
+.citation {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  z-index: 3;
+}
+
+.citation__mask {
+  position: absolute;
+  inset: 0;
+  background: var(--mask);
+  animation: fade 0.18s ease-out backwards;
+}
+
+.citation__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 520px;
+  max-width: 92vw;
+  border-left: 1px solid var(--gold-line-strong);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-panel);
+  animation: citation-slide 0.28s @enter-ease backwards;
+}
+
+@keyframes citation-slide {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.citation__head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 14px 20px;
+
+  &::after {
+    .hairline();
+  }
+}
+
+.citation__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.citation__title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.citation__position {
+  margin: 4px 0 0;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.citation__close {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: @radius-sm;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color @ease-quick,
+    color @ease-quick;
+
+  &:hover {
+    background: var(--bg-elevated);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    .focus-ring();
+  }
+}
+
+.citation__state {
+  padding: 24px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+
+  &--error {
+    color: var(--danger);
+  }
+}
+
+// 文本全文：保留换行与原始空白，整篇可滚动阅读
+.citation__text {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  mark {
+    padding: 0 2px;
+    border-radius: @radius-sm;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+}
+
+.citation__pdf {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.citation__pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--gold-line);
+  color: var(--text-muted);
+  font-size: 12px;
+
+  button {
+    padding: 4px 10px;
+    border: 1px solid var(--gold-line);
+    border-radius: @radius-pill;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      border-color @ease-quick,
+      color @ease-quick;
+
+    &:hover:not(:disabled) {
+      border-color: var(--gold-line-strong);
+      color: var(--accent);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    &:focus-visible {
+      .focus-ring();
+    }
+  }
+}
+
+// 画布容器只负责滚动与留白，尺寸由 pdf.ts 按容器宽度算好后写回 canvas
+.citation__canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg-elevated);
+}
+
+.citation__canvas {
+  display: block;
+  margin: 0 auto;
+  border-radius: @radius-sm;
+  background: var(--pdf-page);
+  box-shadow: var(--shadow-panel);
+}

@@ -3,7 +3,7 @@ import type { ChatRound } from '../../services/conversation/round.js';
 import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
-import { HTTP_STATUS } from '@mnemo/reusable';
+import { CHAT_ERROR_CODE, HTTP_STATUS } from '@mnemo/reusable';
 import { ERROR_MESSAGE } from '../../common/messages.js';
 import { retryAfterSeconds } from '../../infrastructure/concurrency/gate.js';
 import { ConversationBusyError } from '../../infrastructure/concurrency/lock.js';
@@ -13,12 +13,21 @@ import { startChatRound } from '../../services/conversation/chatStream.js';
 import { getOwnConversation } from '../../services/conversation/conversations.js';
 import { pipeRoundFrames } from '../../services/conversation/roundPipe.js';
 import { listOwnFiles } from '../../services/files.js';
+import { findVisibleBase } from '../../services/knowledge/index.js';
 import { mountChatRoundRoutes } from './chatRoundRoutes.js';
 
 /** 本轮对话需要的依赖：只取用到的几项，便于单独编排与测试 */
 type ChatDependencies = Pick<
   AppDependencies,
-  'agent' | 'conversations' | 'files' | 'config' | 'chatLock' | 'rounds' | 'metrics'
+  | 'agent'
+  | 'conversations'
+  | 'knowledge'
+  | 'knowledgeBases'
+  | 'files'
+  | 'config'
+  | 'chatLock'
+  | 'rounds'
+  | 'metrics'
 >;
 
 /** 合法轮次 ID 的形状：客户端生成的标准 UUID */
@@ -52,7 +61,17 @@ function resolveRoundId(value: unknown): string {
  * 响应先不打开 SSE，直到轮次建好才订阅——排队超时与建轮次失败都要能按普通 JSON 返回。
  */
 export async function handleChatMessage(
-  { agent, conversations, files, config, chatLock, rounds, metrics }: ChatDependencies,
+  {
+    agent,
+    conversations,
+    knowledge,
+    knowledgeBases,
+    files,
+    config,
+    chatLock,
+    rounds,
+    metrics,
+  }: ChatDependencies,
   req: Request,
   res: Response,
 ): Promise<void> {
@@ -62,6 +81,7 @@ export async function handleChatMessage(
     message?: string;
     fileIds?: unknown;
     roundId?: unknown;
+    knowledgeBaseId?: unknown;
   };
   const content = typeof body.message === 'string' ? body.message.trim() : '';
   if (!content) {
@@ -88,6 +108,39 @@ export async function handleChatMessage(
     res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.CONVERSATION_NOT_FOUND });
     return;
   }
+
+  // 知识库绑定：仅新建会话时写入；绑定校验三步——库可见、与会话既有绑定一致、库内有可检索文档
+  const knowledgeBaseId =
+    typeof body.knowledgeBaseId === 'string' && body.knowledgeBaseId.trim() !== ''
+      ? body.knowledgeBaseId.trim()
+      : undefined;
+  if (knowledgeBaseId) {
+    const base = await findVisibleBase(knowledgeBases, userId, knowledgeBaseId);
+    if (!base) {
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: ERROR_MESSAGE.KNOWLEDGE_BASE_NOT_FOUND });
+      return;
+    }
+    // 绑定在新建会话时确定：既有会话（含存量未绑定会话）不允许本轮再换库，防止检索范围与界面展示不一致
+    if (history && history.knowledgeBaseId !== knowledgeBaseId) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({
+        message: ERROR_MESSAGE.KNOWLEDGE_BASE_CONFLICT,
+      });
+      return;
+    }
+    // 空库直接挡下：解析中 / 解析失败的文档尚不可检索，只有 ready 才算可用内容；
+    // 让用户先等解析完成或补传文档，而不是问完得到「知识库没有相关内容」
+    const usable = (await knowledge.list(base.id)).filter(
+      (document) => document.status === 'ready',
+    );
+    if (usable.length === 0) {
+      // 与 SSE error 同一套 code：客户端按 KB_NOT_READY 提示等待解析完成，而不是笼统报错
+      res
+        .status(HTTP_STATUS.BAD_REQUEST)
+        .json({ message: ERROR_MESSAGE.KNOWLEDGE_BASE_EMPTY, code: CHAT_ERROR_CODE.KB_NOT_READY });
+      return;
+    }
+  }
+
   // 附件同样先验归属：有不存在的就报错，否则模型拿到空清单后会答成“没有附件”，让人以为是上传失败
   const fileIds = parseFileIds(body.fileIds);
   const storedFiles = fileIds.length > 0 ? await listOwnFiles(files, userId, fileIds) : [];
@@ -117,6 +170,7 @@ export async function handleChatMessage(
         conversationId: body.conversationId,
         history: history ?? undefined,
         content,
+        knowledgeBaseId,
         fileIds,
         // 附件名随提问一起落库：历史回看时还原附件标签
         attachmentNames: storedFiles.map((file) => file.name),

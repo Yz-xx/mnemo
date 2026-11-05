@@ -95,26 +95,28 @@ async function embedQuery(
   }
 }
 
-/** 检索主体：先按可见性预过滤，再按余弦距离取前 topK 条 */
+/** 检索主体：库过滤集由服务层预解析（见 docs/adr/0018 决策 4），这里只按余弦距离取前 topK 条 */
 async function searchChunks(input: {
   store: KnowledgeVectorStore;
   embeddings: Embeddings;
   options: KnowledgeStoreOptions;
   governance?: RetrievalGovernance;
   query: string;
-  userId: number;
+  baseIds: string[];
   topK?: number;
 }): Promise<KnowledgeSearchResult[]> {
-  const { store, embeddings, options, governance, query, userId, topK } = input;
+  const { store, embeddings, options, governance, query, baseIds, topK } = input;
   // 空库直接返回：省一次向量化，也避免把「库为空」报成向量服务故障
   if ((await store.countChunks()) === 0) return [];
+  // 可见库为空同样短路：ANY($2) 传空数组虽语义等价，省掉向量化调用更直接
+  if (baseIds.length === 0) return [];
 
   const vector = await callEmbedding(governance, () =>
     embedQuery(embeddings, query, options.embeddingEndpoint),
   );
   await store.assertCompatible(vector.length);
 
-  const hits = await store.searchChunks(vector, { userId, topK: topK ?? options.topK });
+  const hits = await store.searchChunks(vector, { baseIds, topK: topK ?? options.topK });
   // 低于相似度下限的片段属于噪声，直接丢弃；过滤后条数可能少于 topK
   const kept = hits.filter((hit) => hit.score >= options.minScore);
   // 召回条数：与耗时同属治理上下文，用于回答「答非所问是知识库没命中还是模型没用上」
@@ -132,7 +134,7 @@ export async function retrieveChunks(input: {
   options: KnowledgeStoreOptions;
   governance?: RetrievalGovernance;
   query: string;
-  userId: number;
+  baseIds: string[];
   topK?: number;
 }): Promise<KnowledgeSearchResult[]> {
   return (await runRetrieval(input.governance, () => searchChunks(input))) ?? [];

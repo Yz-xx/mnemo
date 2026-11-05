@@ -81,7 +81,7 @@ const { filter, table, selection, dialog, cells } = useFilesPage();
 
     <PageBar
       :page="table.page"
-      :page-size="table.PAGE_SIZE"
+      :page-size="table.pageSize"
       :total="table.total"
       :disabled="table.loading"
       @update:page="table.handlePage"

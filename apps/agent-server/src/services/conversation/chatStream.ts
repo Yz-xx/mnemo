@@ -22,6 +22,8 @@ export interface StartChatRoundInput {
   /** 路由层已读入的会话历史（含摘要）；新建会话时为 undefined */
   history: Conversation | undefined;
   content: string;
+  /** 新会话首轮绑定的知识库：路由层已校验可见；既有会话忽略（绑定以记录为准） */
+  knowledgeBaseId: string | undefined;
   /** 本轮附带的文件 ID：已由路由校验归属 */
   fileIds: string[];
   /** 本轮附带的文件名：随提问一起落库，历史回看时还原附件标签 */
@@ -54,8 +56,12 @@ export async function startChatRound(input: StartChatRoundInput): Promise<Starte
       input.conversationId,
       'user',
       input.content,
-      { attachments: input.attachmentNames.length > 0 ? input.attachmentNames : undefined },
+      {
+        attachments: input.attachmentNames.length > 0 ? input.attachmentNames : undefined,
+      },
       input.history,
+      // 绑定只在新建会话时真正写入（append 内部：既有会话直接用会话头的绑定）
+      input.knowledgeBaseId,
     );
   } catch (error) {
     // 已占号但没落库成功：本轮不会有任何产出了，直接收尾，避免订阅者永久等待

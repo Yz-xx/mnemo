@@ -6,6 +6,8 @@ import KnowledgePanel from '../KnowledgePanel';
 const props = defineProps<{
   backendUrl: string;
   health: HealthInfo | null;
+  /** 打开时的分页：设置入口进连接页，知识库入口直接进知识库页 */
+  initialTab?: 'connection' | 'knowledge';
 }>();
 
 const emit = defineEmits<{
@@ -13,7 +15,7 @@ const emit = defineEmits<{
   save: [url: string];
 }>();
 
-const tab = ref<'connection' | 'knowledge'>('connection');
+const tab = ref<'connection' | 'knowledge'>(props.initialTab ?? 'connection');
 const urlDraft = ref(props.backendUrl);
 </script>
 

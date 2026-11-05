@@ -71,10 +71,8 @@ export class FakeVectorStore implements KnowledgeVectorStore {
     return this.documents.get(id) ?? null;
   }
 
-  async listDocuments(userId: number): Promise<Record<string, unknown>[]> {
-    return [...this.documents.values()].filter(
-      (row) => row.scope === 'global' || row.owner_user_id === userId,
-    );
+  async listDocuments(baseId: string): Promise<Record<string, unknown>[]> {
+    return [...this.documents.values()].filter((row) => String(row.knowledge_base_id) === baseId);
   }
 
   async listAllDocuments(): Promise<Record<string, unknown>[]> {
@@ -97,13 +95,14 @@ export class FakeVectorStore implements KnowledgeVectorStore {
       .join('\n\n');
   }
 
-  /** 近邻检索：可见性预过滤 → 余弦相似度降序 → 取前 topK，分数不做阈值过滤 */
+  /** 近邻检索：库集合预过滤 → 余弦相似度降序 → 取前 topK，分数不做阈值过滤 */
   async searchChunks(
     vector: number[],
-    options: { userId: number; topK: number },
+    options: { baseIds: string[]; topK: number },
   ): Promise<StoredChunkHit[]> {
+    const allowed = new Set(options.baseIds);
     return this.chunks
-      .filter((chunk) => chunk.scope === 'global' || chunk.owner_user_id === options.userId)
+      .filter((chunk) => allowed.has(String(chunk.knowledge_base_id)))
       .map((chunk) => ({ chunk, score: cosine(vector, chunk.vector as number[]) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, options.topK)

@@ -1,5 +1,6 @@
-import type { MessageRole, StoredMessage } from '../../entities/conversation.js';
+import type { MessageRole, StoredCitation, StoredMessage } from '../../entities/conversation.js';
 import type { DbPool } from '../../infrastructure/db/pool.js';
+import type { KnowledgeCitation } from '@mnemo/reusable';
 import type { QueryResultRow } from 'pg';
 
 interface MessageRow extends QueryResultRow {
@@ -12,8 +13,8 @@ interface MessageRow extends QueryResultRow {
   tools: string[] | null;
   /** 同 tools，无附件时为 null */
   attachments: string[] | null;
-  /** 同 tools；无检索来源时为 null */
-  sources: string[] | null;
+  /** 同 tools；无检索来源时为 null。历史数据可能仍是旧版 string[]，渲染层兼容两种形状 */
+  sources: KnowledgeCitation[] | string[] | null;
   created_at: Date;
 }
 
@@ -23,7 +24,7 @@ interface MessageRow extends QueryResultRow {
  * 写入侧已把空数组写成 null，但历史或人工补的数据可能留下空数组，
  * 统一按「没有值」处理，调用方才能只判有无。
  */
-export function toArray(raw: string[] | null): string[] | undefined {
+export function toArray<T>(raw: T[] | null): T[] | undefined {
   return raw && raw.length > 0 ? raw : undefined;
 }
 
@@ -36,7 +37,9 @@ export function toStoredMessage(row: MessageRow): StoredMessage {
     content: row.content,
     tools: toArray(row.tools),
     attachments: toArray(row.attachments),
-    sources: toArray(row.sources),
+    // 旧版来源是 string[]（文档名），新版是 citation 对象数组；读回原样，由消费端按形状兼容。
+    // 显式指定泛型：jsonb 列可能读回两种数组，不指定时 T 无法从联合类型中推断
+    sources: toArray<StoredCitation>(row.sources),
     createdAt: row.created_at.toISOString(),
   };
 }

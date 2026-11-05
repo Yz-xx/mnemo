@@ -1,4 +1,9 @@
-import type { ChatAttachment, ChatMessage, GeneratedFileInfo } from '../../types';
+import type {
+  ChatAttachment,
+  ChatMessage,
+  GeneratedFileInfo,
+  KnowledgeBaseView,
+} from '../../types';
 import type { Ref } from 'vue';
 import { onBeforeUnmount, ref } from 'vue';
 
@@ -12,9 +17,15 @@ export interface ChatWindowProps {
   provider: string;
   /** 待发送附件；为空表示本轮不带文件 */
   attachments: ChatAttachment[];
+  /** 可绑定的知识库：新会话可选，默认「不限库」沿旧行为 */
+  knowledgeBases: KnowledgeBaseView[];
+  /** 新会话将绑定的库：null 表示不限库 */
+  selectedKnowledgeBaseId: string | null;
+  /** 已打开会话的绑定库：有值时只读展示，不再允许改绑 */
+  boundKnowledgeBaseId: string | null;
 }
 
-/** ChatWindow 的上抛事件：发送文本、停止流式与附件增删 */
+/** ChatWindow 的上抛事件：发送文本、停止流式、附件增删与选择知识库 */
 export interface ChatWindowEmits {
   send: [text: string];
   stop: [];
@@ -24,6 +35,8 @@ export interface ChatWindowEmits {
   removeAttachment: [key: string];
   /** 保存智能体生成的导出文件到本地 */
   download: [file: GeneratedFileInfo];
+  /** 选择新会话的知识库：null 表示不限库 */
+  selectKnowledgeBase: [id: string | null];
 }
 
 /**
@@ -44,15 +57,18 @@ interface ChatWindowControls {
   copyAll: () => Promise<void>;
   submit: () => void;
   onKeydown: (event: KeyboardEvent) => void;
+  /** 绑定库的展示名：库被删除时给出明确文案 */
+  baseName: (id: string) => string;
+  onBaseChange: (event: Event) => void;
 }
 
 /**
- * 输入条与整段复制：草稿、发送动作与「复制全部对话」都属于本组件的交互细节。
+ * 输入条、整段复制与知识库选择：草稿、发送动作都属于本组件的交互细节。
  * 滚动与窗口化在 `useVirtualMessages`，这里只在上抛发送后请求回到底部。
  */
 export function useChatWindow(
   props: ChatWindowProps,
-  emit: (event: 'send', text: string) => void,
+  emit: <K extends keyof ChatWindowEmits>(event: K, ...args: ChatWindowEmits[K]) => void,
   followToBottom: () => void,
 ): ChatWindowControls {
   const draft = ref('');
@@ -103,5 +119,15 @@ export function useChatWindow(
     submit();
   }
 
-  return { draft, copied, copyAll, submit, onKeydown };
+  function baseName(id: string): string {
+    return props.knowledgeBases.find((base) => base.id === id)?.name ?? '已删除的知识库';
+  }
+
+  /** 下拉选择：空值即「不限库」，与不传 knowledgeBaseId 的服务端语义一致 */
+  function onBaseChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    emit('selectKnowledgeBase', value || null);
+  }
+
+  return { draft, copied, copyAll, submit, onKeydown, baseName, onBaseChange };
 }

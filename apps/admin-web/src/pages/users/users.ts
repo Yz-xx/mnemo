@@ -1,13 +1,10 @@
 import type { AdminUser, RoleOption, UserRole, UserStatus } from '@/api/types';
 import { computed, onMounted, reactive, ref } from 'vue';
-import { listUsers, updateUser } from '@/api';
-import { usePagedList } from '@/composables/usePagedList';
+import { batchUpdateUserStatus, listUsers, updateUser } from '@/api';
+import { DEFAULT_PAGE_SIZE, usePagedList } from '@/composables/usePagedList';
+import { useNumberTableSelection } from '@/composables/useTableSelection';
 import { useAuthStore } from '@/stores/auth';
 import { useUsersDialog } from './useUsersDialog';
-import { useUsersSelection } from './useUsersSelection';
-
-/** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
-const PAGE_SIZE = 20;
 
 const ROLE_LABEL: Record<UserRole, string> = {
   super_admin: '超级管理员',
@@ -55,7 +52,7 @@ export function useUsersPage() {
   // 故先用占位函数间接引用，建好后再指向真正的 clearSelection
   let onRowsReload = (): void => {};
   const { rows, total, loading, errorMsg, paging } = usePagedList<AdminUser>({
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     fetcher: ({ page, pageSize }) => listUsers({ keyword: keyword.value.trim(), page, pageSize }),
     errorFallback: '加载用户列表失败',
     onReset: () => onRowsReload(),
@@ -78,8 +75,16 @@ export function useUsersPage() {
     }
   }
 
-  const selection = useUsersSelection({ mutate });
+  const selection = useNumberTableSelection();
   onRowsReload = selection.clearSelection;
+
+  /** 批量停用 / 启用：可逆操作不弹确认，整批规则由服务端判定 */
+  function batchStatus(status: UserStatus): void {
+    void mutate(
+      () => batchUpdateUserStatus(selection.selectedIds.value, status),
+      '批量变更状态失败',
+    );
+  }
 
   const dialog = useUsersDialog({
     search: paging.search,
@@ -109,7 +114,7 @@ export function useUsersPage() {
   return {
     filter: reactive({ keyword, handleSearch: paging.search }),
     table: reactive({
-      PAGE_SIZE,
+      pageSize: DEFAULT_PAGE_SIZE,
       columns,
       rows,
       page: paging.page,
@@ -121,7 +126,7 @@ export function useUsersPage() {
     selection: reactive({
       selectedKeys: selection.selectedKeys,
       clearSelection: selection.clearSelection,
-      batchStatus: selection.batchStatus,
+      batchStatus,
       openBatchDelete: dialog.openBatchDelete,
       mutating,
     }),

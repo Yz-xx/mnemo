@@ -17,6 +17,7 @@ import { KnowledgeStore } from '../../services/knowledge/index.js';
 import { createToolBudget } from '../../services/llm/context/index.js';
 import { createTools } from '../../services/llm/tools/index.js';
 import { DISABLED_VISION, VISION_DISABLED_MESSAGE } from '../../services/llm/vision.js';
+import { createFakeBases, makeBase } from '../helpers/fakeBases.js';
 import { FakeEmbeddings } from '../helpers/fakeEmbeddings.js';
 import { PASSTHROUGH_PARSE } from '../helpers/fakeParse.js';
 import { FakeVectorStore } from '../helpers/fakeVectorStore.js';
@@ -32,19 +33,26 @@ const OPTIONS = {
 
 let store: KnowledgeStore;
 
+// 库场景：一座共享库（global）+ 用户 1 的私有库，检索隔离按库可见性判定（docs/adr/0018）
+const SHARED = '00000000-0000-4000-8000-000000000001';
+const MINE = '10000000-0000-4000-8000-000000000001';
+
 beforeEach(async () => {
-  store = new KnowledgeStore(new FakeEmbeddings(), OPTIONS, new FakeVectorStore(OPTIONS));
+  store = new KnowledgeStore(
+    new FakeEmbeddings(),
+    OPTIONS,
+    new FakeVectorStore(OPTIONS),
+    createFakeBases([makeBase(SHARED, 'global', null), makeBase(MINE, 'private', 1)]),
+  );
   await store.add({
     title: '公共手册',
     content: '苹果和香蕉都是全局共享资料。',
-    scope: 'global',
-    userId: 1,
+    knowledgeBaseId: SHARED,
   });
   await store.add({
     title: '我的笔记',
     content: '香蕉是我的私有资料。',
-    scope: 'private',
-    userId: 1,
+    knowledgeBaseId: MINE,
   });
 });
 
@@ -84,7 +92,7 @@ describe('search_knowledge_base 工具', () => {
   });
 
   it('命中的文档名登记到来源收集器，供 Agent 推给客户端', async () => {
-    const sources: string[] = [];
+    const sources: { title: string }[] = [];
 
     await buildAgent().invoke(
       { messages: [{ role: 'user', content: '香蕉在哪个文档里？' }] },
@@ -92,11 +100,11 @@ describe('search_knowledge_base 工具', () => {
     );
 
     // 来源由检索工具直接登记，不依赖模型在正文里标注出处
-    expect(sources).toContain('公共手册');
+    expect(sources.map((item) => item.title)).toContain('公共手册');
   });
 
   it('检索结果被预算挡下时，不登记来源：标签只反映真正进入上下文的文档', async () => {
-    const sources: string[] = [];
+    const sources: { title: string }[] = [];
     const model = fakeModel()
       .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
       .respond((messages: BaseMessage[]) => new AIMessage(String(messages.at(-1)?.content ?? '')));
@@ -111,7 +119,7 @@ describe('search_knowledge_base 工具', () => {
   });
 
   it('同一文档重复命中时不重复登记来源', async () => {
-    const sources: string[] = [];
+    const sources: { title: string }[] = [];
     const model = fakeModel()
       .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
       .respondWithTools([{ name: 'search_knowledge_base', args: { query: '香蕉' } }])
@@ -123,7 +131,7 @@ describe('search_knowledge_base 工具', () => {
     );
 
     // 两次命中同一批文档：来源只在第一次真正注入时登记，第二次不再追加
-    expect(sources).toEqual(['我的笔记', '公共手册']);
+    expect(sources.map((item) => item.title)).toEqual(['我的笔记', '公共手册']);
   });
 
   it('检索日志记录命中数与最高分，并带上注入的请求上下文', async () => {

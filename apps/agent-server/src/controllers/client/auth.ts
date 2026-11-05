@@ -7,7 +7,8 @@ import { parseCredentials } from '../../infrastructure/auth/credentials.js';
 import { toSessionUser } from '../../infrastructure/auth/sessionUser.js';
 import { createRequireAuth, currentToken, currentUserId } from '../../middleware/auth.js';
 import { requestLogger } from '../../middleware/requestLog.js';
-import { findUser, login, logout, registerClientAccount } from '../../services/auth.js';
+import { findUser, logout, registerClientAccount } from '../../services/auth.js';
+import { createLoginRoute } from '../loginRoute.js';
 
 /**
  * 客户端账号接口：注册与登录公开，登出与登录态查询需要携带令牌。
@@ -21,6 +22,9 @@ export function createAuthRouter({
 }: Pick<AppDependencies, 'users' | 'sessions' | 'passwordCipher'>): Router {
   const router = Router();
   const requireAuth = createRequireAuth(sessions);
+
+  // 登录流程本身与后台共用，差别只在端与措辞（见 controllers/loginRoute.ts）
+  router.use(createLoginRoute({ users, sessions, passwordCipher }, 'client'));
 
   /** 口令传输公钥：客户端在登录/注册前取回，用它加密密码字段后再提交（两端共用同一份） */
   router.get('/public-key', (_req: Request, res: Response) => {
@@ -53,52 +57,6 @@ export function createAuthRouter({
       role: registered.user.role,
     });
     res.status(HTTP_STATUS.CREATED).json(registered.session);
-  });
-
-  router.post('/login', async (req: Request, res: Response) => {
-    const log = requestLogger(res);
-    const parsed = parseCredentials(req.body, passwordCipher);
-    if (!parsed.ok) {
-      res.status(HTTP_STATUS.BAD_REQUEST).json({ message: parsed.message });
-      return;
-    }
-    const outcome = await login(
-      { users, sessions },
-      parsed.value.username,
-      parsed.value.password,
-      'client',
-    );
-    // 用户不存在与密码错误使用同一提示，避免暴露账号是否已注册
-    if (outcome.status === 'bad-credentials') {
-      // 登录失败要留痕，便于识别异常尝试；密码本身不写入日志
-      log.warn('登录失败：用户名或密码错误', { username: parsed.value.username });
-      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: ERROR_MESSAGE.BAD_CREDENTIALS });
-      return;
-    }
-    // 口令已通过才提示端不匹配：此时对方已证明自己持有该账号，含糊会被误读成密码错误
-    if (outcome.status === 'wrong-side') {
-      log.warn('登录被拒绝：账号不属于客户端', {
-        userId: outcome.user.id,
-        username: outcome.user.username,
-      });
-      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: ERROR_MESSAGE.CLIENT_ONLY });
-      return;
-    }
-    // 停用账号与密码错误分开提示：被停用的人需要知道该找管理员，而不是反复试密码
-    if (outcome.status === 'banned') {
-      log.warn('登录被拒绝：账号已停用', {
-        userId: outcome.user.id,
-        username: outcome.user.username,
-      });
-      res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: ERROR_MESSAGE.ACCOUNT_BANNED });
-      return;
-    }
-    log.info('登录成功', {
-      userId: outcome.user.id,
-      username: outcome.user.username,
-      role: outcome.user.role,
-    });
-    res.json(outcome.session);
   });
 
   router.post('/logout', requireAuth, async (_req: Request, res: Response) => {

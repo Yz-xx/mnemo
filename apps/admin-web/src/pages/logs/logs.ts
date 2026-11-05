@@ -4,11 +4,9 @@
 import type { ApiLogItem, ApiLogStatusKind } from '@/api/types';
 import { onMounted, reactive, ref } from 'vue';
 import { listApiLogs } from '@/api';
-import { usePagedList } from '@/composables/usePagedList';
+import { DEFAULT_PAGE_SIZE, usePagedList } from '@/composables/usePagedList';
+import { statusKindOf } from '@/utils/statusKind';
 import { useLogsDetail } from './useLogsDetail';
-
-/** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
-const PAGE_SIZE = 20;
 
 /** 与后端 METHODS 白名单取齐：下拉以外的取值服务端会按「不限」处理 */
 const METHOD_OPTIONS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'];
@@ -29,13 +27,6 @@ const columns = [
   { key: 'actions', label: '详情', width: '70px', align: 'right' as const },
 ];
 
-/** 状态色调：2xx 成功、4xx 客户端错误、5xx 服务端错误 */
-function statusKindOf(status: number): 'ok' | 'client' | 'server' {
-  if (status >= 500) return 'server';
-  if (status >= 400) return 'client';
-  return 'ok';
-}
-
 /**
  * API 日志页的入口：按关注点收成 filter / table / detail / cells 四组，模板按组取用。
  * 详情弹窗的状态与字段进子 hook，本入口只负责建筛选与列表状态。
@@ -46,7 +37,7 @@ export function useLogsPage() {
   const statusKind = ref<ApiLogStatusKind>('all');
 
   const { rows, total, loading, errorMsg, paging } = usePagedList<ApiLogItem>({
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     fetcher: ({ page, pageSize }) =>
       listApiLogs({
         keyword: keyword.value.trim(),
@@ -73,7 +64,7 @@ export function useLogsPage() {
       STATUS_OPTIONS,
     }),
     table: reactive({
-      PAGE_SIZE,
+      pageSize: DEFAULT_PAGE_SIZE,
       columns,
       rows,
       page: paging.page,

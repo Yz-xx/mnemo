@@ -17,6 +17,7 @@ import {
 import { createAccount } from '../../services/auth.js';
 import { parseNumberIds } from '../../utils/batchIds.js';
 import { parsePaging } from '../../utils/pagination.js';
+import { keywordParam } from '../../utils/request.js';
 import { assignableRoles, parseRole, parseStatus, respondIfFailed, toUserId } from './userInput.js';
 
 /**
@@ -38,7 +39,7 @@ export function createAdminUsersRouter({
   /** 用户列表：按用户名包含匹配 + 分页；普通管理员的列表里不出现后台账号 */
   router.get('/', async (req: Request, res: Response) => {
     const { page, pageSize } = parsePaging(req.query);
-    const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
+    const keyword = keywordParam(req.query.keyword);
     // 可见性也是权限：后台账号不进普通管理员的列表，否则会诱导操作并泄露后台账号数量
     const scope = isSuperAdmin(currentAdmin(res)) ? 'all' : 'client';
     const query = { keyword, page, pageSize };

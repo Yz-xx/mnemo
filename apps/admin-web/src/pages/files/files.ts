@@ -4,12 +4,9 @@ import type { AdminFileItem } from '@/api/types';
 import { onMounted, reactive, ref } from 'vue';
 import { formatBytes } from '@mnemo/shared';
 import { listAdminFiles } from '@/api';
-import { usePagedList } from '@/composables/usePagedList';
+import { DEFAULT_PAGE_SIZE, usePagedList } from '@/composables/usePagedList';
+import { useStringTableSelection } from '@/composables/useTableSelection';
 import { useFilesDelete } from './useFilesDelete';
-import { useFilesSelection } from './useFilesSelection';
-
-/** 每页条数：与后端 DEFAULT_PAGE_SIZE 取齐 */
-const PAGE_SIZE = 20;
 
 const columns = [
   { key: 'name', label: '文件名' },
@@ -28,10 +25,10 @@ export function useFilesPage() {
   const keyword = ref('');
 
   // 勾选先建：paged 的 onReset 要用它的清空出口，故必须先于 usePagedList 存在
-  const selection = useFilesSelection();
+  const selection = useStringTableSelection();
 
   const { rows, total, loading, errorMsg, paging } = usePagedList<AdminFileItem>({
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     fetcher: ({ page, pageSize }) =>
       listAdminFiles({ keyword: keyword.value.trim(), page, pageSize }),
     errorFallback: '加载文件列表失败',
@@ -51,7 +48,7 @@ export function useFilesPage() {
   return {
     filter: reactive({ keyword, handleSearch: paging.search }),
     table: reactive({
-      PAGE_SIZE,
+      pageSize: DEFAULT_PAGE_SIZE,
       columns,
       rows,
       page: paging.page,
